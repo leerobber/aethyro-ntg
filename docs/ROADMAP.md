@@ -76,12 +76,36 @@ starts.
       structure (no panic, >1 node, zero Execution nodes in the
       fence-free ADRs, ≥1 in DESIGN.md's one fenced diagram) — not
       recursive self-awareness, just dogfooding, CI-enforced
-- [ ] Path parser: filesystem paths -> the same typed graph (directory
-      segments as `Content` nodes, files as leaves) — not yet implemented,
-      docparse.rs only handles document text so far
-- [ ] Actual "forward pass" compute over the graph (docparse.rs only
-      builds structure; nothing executes yet) — needed before this phase
-      can claim to do anything beyond parsing
+- [x] Path parser (`pathparse.rs`): filesystem paths -> the same typed
+      graph (directory segments as `Content` nodes, leaf typed
+      `Execution`/`Content` by extension — `.rs`/`.py`/`.sh`/`.js`/`.ts`
+      count as executable, everything else is content); shared
+      directory prefixes reuse existing nodes instead of duplicating
+      them; tested including a pure lookup-only `find_path`
+- [x] Fs-event -> graph mutation (`fsevents.rs`): `Created`/`Removed`/
+      `Renamed` translated into real `add_node`/`remove_node` calls,
+      tested including the no-op-on-missing-path case. **This is not a
+      real filesystem watcher** — it's the pure, deterministic
+      translation layer only. Wiring it to actual OS filesystem events
+      needs an external crate (e.g. `notify`) — a new dependency
+      decision, deliberately not made in this pass. Do not describe this
+      as "watching the filesystem" until that wiring exists.
+- [x] Leaf signal extractor (`leafsignal.rs`): real per-character
+      case/punctuation/whitespace counts, every character accounted for
+      (tested: total always equals input length, nothing dropped). This
+      is **not** the PIXEL-lite glyph-geometry fingerprint ADR 0003
+      describes — that needs an actual trained visual feature
+      extractor, which doesn't exist here. This is a plain, honest count,
+      not a learned representation. It is not yet wired onto graph leaf
+      nodes as an attached field — that's the next increment.
+- [ ] Ledger module — **deliberately not built this pass.** ADR 0001
+      already decided to reuse GH05T3's ChronosLedger rather than
+      reinvent one; that code hasn't been examined/ported into this repo
+      yet. Building a simplified stand-in now would violate that
+      decision. This stays blocked on an actual port, tracked in Phase 3.
+- [ ] Actual "forward pass" compute over the graph (docparse.rs/
+      pathparse.rs only build structure; nothing executes yet) — needed
+      before this phase can claim to do anything beyond parsing
 - [ ] Property tests: same topology + same input -> same output, every
       time, across repeated runs, once a forward pass exists
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)

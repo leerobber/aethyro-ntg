@@ -1,18 +1,23 @@
 //! Aethyro NTG (Neural Ternary Graph) Engine -- kernel.
 //!
 //! Phase 1.1 (ternary scalar reference) and Phase 1.2 (bit-packed
-//! storage) are implemented. Phase 2 (graph structure + ADR 0003's doc
-//! structure parser) has started. See docs/DESIGN.md and
-//! docs/architecture/ for the full architecture, and docs/ROADMAP.md for
-//! current phase status -- don't assume this comment is up to date,
-//! check ROADMAP.md.
+//! storage) are implemented. Phase 2 (graph structure + ADR 0003's
+//! docs/paths/glyph-signal front-end) is in progress: document
+//! structure parsing, filesystem path parsing, pure fs-event mutation,
+//! and a leaf case/punctuation signal extractor are implemented. See
+//! docs/DESIGN.md and docs/architecture/ for the full architecture, and
+//! docs/ROADMAP.md for current phase status and what's explicitly still
+//! not done -- don't assume this comment is up to date, check ROADMAP.md.
 
 pub mod ntg;
 
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
+pub use ntg::fsevents::{apply_event, FsEvent};
 pub use ntg::graph::{Graph, NodeKind};
+pub use ntg::leafsignal::{extract_leaf_signal, LeafSignal};
 pub use ntg::packed::PackedTernary;
+pub use ntg::pathparse::{find_path, parse_path_into};
 pub use ntg::ternary::{encode, matmul_scalar, Ternary};
 
 /// Reports whether this build has a working ternary compute path.
@@ -27,6 +32,8 @@ pub struct TernaryCapability {
     pub scalar_supported: bool,
     pub packed_supported: bool,
     pub simd_supported: bool,
+    pub graph_supported: bool,
+    pub doc_path_parsing_supported: bool,
     pub version: u32,
 }
 
@@ -35,7 +42,9 @@ pub fn ternary_capability() -> TernaryCapability {
         scalar_supported: true,
         packed_supported: true,
         simd_supported: false,
-        version: 2,
+        graph_supported: true,
+        doc_path_parsing_supported: true,
+        version: 3,
     }
 }
 
@@ -50,6 +59,8 @@ mod tests {
         assert!(cap.scalar_supported);
         assert!(cap.packed_supported);
         assert!(!cap.simd_supported);
-        assert_eq!(cap.version, 2);
+        assert!(cap.graph_supported);
+        assert!(cap.doc_path_parsing_supported);
+        assert_eq!(cap.version, 3);
     }
 }

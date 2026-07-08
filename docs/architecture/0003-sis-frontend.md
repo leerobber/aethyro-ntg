@@ -1,9 +1,12 @@
 # 0003: SIS front-end — parsing documents, paths, and glyphs into the NTG graph
 
-**Status:** Accepted (design). Not yet implemented — this ADR defines the
-architecture Phase 2 (see ROADMAP.md) should build toward for document/
-path ingestion specifically, alongside the graph-structure work already
-scoped there.
+**Status:** Partially implemented (2026-07-08). Docs parsing
+(`docparse.rs`), path parsing (`pathparse.rs`), pure fs-event mutation
+(`fsevents.rs`), and a leaf case/punctuation signal counter
+(`leafsignal.rs`) are real and tested. Lazy byte-exact leaf resolution,
+the actual PIXEL-lite glyph-geometry fingerprint, real OS filesystem
+watching, and ledger wiring remain design-only — see the progress note
+at the end of this ADR and ROADMAP.md for the exact, current split.
 
 ## Context
 
@@ -106,3 +109,32 @@ alternatives:
 ## Sources
 
 See [LITERATURE.md](../LITERATURE.md) for the dated, verified source list.
+
+## Progress note (2026-07-08)
+
+What "docs + paths + glyphs" means concretely, right now, stated
+precisely rather than as a tagline:
+
+**Real and tested:**
+- Docs → graph: `docparse.rs` (headings, lists, fenced code → typed nodes).
+- Paths → graph: `pathparse.rs` (directory segments → `Content` nodes,
+  leaf typed by extension, shared prefixes deduplicated).
+- Path mutation → graph mutation: `fsevents.rs` (`Created`/`Removed`/
+  `Renamed` → `add_node`/`remove_node`), pure and deterministic.
+- Case/punctuation preserved as signal: `leafsignal.rs` (real per-
+  character counts; every character accounted for, none dropped).
+
+**Explicitly not real yet — do not describe these as done:**
+- No real OS filesystem watching. `fsevents.rs` only translates an
+  already-known event into a graph mutation; nothing observes an actual
+  directory yet. Adding that needs a new external dependency (e.g.
+  `notify`), a decision not yet made.
+- No PIXEL-lite visual glyph fingerprint. `leafsignal.rs` counts
+  characters by category; it does not render or encode glyph shape.
+  That needs an actual trained visual feature extractor.
+- No lazy byte-exact leaf resolution as originally scoped in decision 2
+  above — `docparse.rs` stores leaf content as a plain, eagerly-built
+  `String` today.
+- No ledger. ADR 0001 already decided to reuse GH05T3's ChronosLedger;
+  it hasn't been ported into this repo. A stand-in was deliberately not
+  built here to avoid contradicting that decision.
