@@ -70,6 +70,12 @@ starts.
       level), bullets, numbered items, fenced code blocks (->
       `Execution` nodes) — GraphMD-style structural parsing, tested
       (including nested-heading reparenting)
+- [x] Self-parse test (`kernel/tests/self_parse.rs`): the real, buildable
+      version of "self-referential kernel" — this repo's own ADRs and
+      DESIGN.md are parsed by its own parser and checked for sane
+      structure (no panic, >1 node, zero Execution nodes in the
+      fence-free ADRs, ≥1 in DESIGN.md's one fenced diagram) — not
+      recursive self-awareness, just dogfooding, CI-enforced
 - [ ] Path parser: filesystem paths -> the same typed graph (directory
       segments as `Content` nodes, files as leaves) — not yet implemented,
       docparse.rs only handles document text so far
