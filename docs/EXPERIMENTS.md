@@ -125,3 +125,65 @@ real, if crude, working similarity signal, not just "no longer broken."
 `edge_interaction_score` (`kernel/src/ntg/interaction.rs`), both tested
 against the exact properties measured here (opposite-string negative
 score, self-score-beats-edited-score, determinism).
+
+## 2026-07-08: does edge_interaction_score say anything real about this repo's actual document structure?
+
+**Hypothesis:** now that the score is fixed and interpretable on small
+synthetic examples, does it capture anything meaningful about *real*
+parent-child relationships (heading → its content, section → its
+bullets) across this repo's actual ADRs, DESIGN.md, and ROADMAP.md?
+
+**Method:** reimplemented `docparse.rs`'s parsing logic in Python
+(headings/bullets/numbered items/fenced code, exactly matching the
+Rust), parsed all 5 real docs into one combined graph (491 nodes, 486
+real parent-child edges), computed `edge_interaction_score` for every
+real edge, and compared against a same-sized sample of random
+(non-adjacent) node pairs from the same corpus as a control.
+
+**Result — real, and it corrects an initial over-read:**
+
+Raw scores looked different at first glance (real edges: mean 4.48,
+std 5.43; random pairs: mean 6.29, std 7.13) — but checking *why*
+mattered. Correlation between raw score and `min(len_a, len_b)` across
+the real edges: **0.563** (0.595 using `|score|`). Over half the
+apparent "real vs. random" difference is explained by string length
+alone (a direct consequence of the zero-padding: positions beyond the
+shorter string's length always contribute zero, so the score is really
+"agreement over the first `min(len)` bytes," which is dominated by how
+big that overlap even is) -- not by any relationship between a heading
+and its content.
+
+After removing that confound (`normalized_edge_interaction_score` =
+raw / `min(len_a, len_b)`):
+
+| | mean | std |
+|---|---|---|
+| Real parent-child edges | 0.155 | 0.207 |
+| Random node pairs | 0.132 | 0.159 |
+
+These are close relative to their spread — **not a clear separation.**
+
+**Honest conclusion:** on this repo's real documents, neither the raw
+nor the length-normalized `edge_interaction_score` reliably
+distinguishes a genuine heading→content relationship from an arbitrary
+unrelated pair. The self-similarity/edit-sensitivity properties from
+the prior experiment are still true (they were tested directly and
+still hold) -- this is a different, additional finding: those
+properties do not generalize to "tells you which nodes are related" on
+real, structurally diverse text. A working mechanism is not the same
+as a working application of it, and this is a case of the former
+without (yet) the latter.
+
+**What was kept anyway:** `normalized_edge_interaction_score` was
+shipped despite the negative headline result, because removing a real,
+diagnosed confound (length) is correct regardless of whether the
+underlying signal turns out to be useful -- and the self-similarity/
+edit-detection properties remain real, tested, and potentially useful
+for a narrower purpose (e.g. near-duplicate detection) than "structural
+relatedness."
+
+**What this suggests for a follow-up, not yet tried:** a genuine
+relatedness signal probably needs actual learned weights (a real
+Phase 4 training step), not a fixed, untrained byte-correlation --
+which is itself a useful, concrete thing to have ruled out cheaply
+before investing in that larger feature.

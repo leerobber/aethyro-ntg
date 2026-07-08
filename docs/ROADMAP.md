@@ -140,7 +140,16 @@ starts.
       opposite-byte strings score negatively, self-similarity beats a
       one-character edit. Honestly scoped as a byte-position
       correlation, not semantic similarity, and sensitive to positional
-      shifts. Full experiment trail in
+      shifts. **Tested against this repo's real 486-edge ADR/doc graph:
+      does not reliably distinguish a real heading→content edge from a
+      random pair** — raw score correlates 0.56-0.60 with string length
+      (confound); `normalized_edge_interaction_score` removes that
+      confound but the real-vs-random gap mostly disappears with it
+      (0.155 vs. 0.132 mean, within one std). Kept in the codebase for
+      its narrower, still-true properties (self-similarity, edit
+      sensitivity); **not evidence this generalizes to structural
+      relatedness** — that likely needs actual learned weights (Phase 4),
+      not a fixed untrained encoding. Full experiment trail in
       [docs/EXPERIMENTS.md](EXPERIMENTS.md).
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly

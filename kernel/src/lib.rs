@@ -15,7 +15,7 @@ pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
 pub use ntg::fsevents::{apply_event, FsEvent};
 pub use ntg::graph::{Graph, NodeKind};
-pub use ntg::interaction::edge_interaction_score;
+pub use ntg::interaction::{edge_interaction_score, normalized_edge_interaction_score};
 pub use ntg::leafsignal::{extract_leaf_signal, LeafSignal};
 pub use ntg::packed::PackedTernary;
 pub use ntg::pathparse::{find_path, parse_path_into};
