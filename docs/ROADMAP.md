@@ -54,9 +54,14 @@ exists for it.
       requirement demands. Revisit once there's a local dev environment
       to verify `unsafe` code safely and a multi-arch CI matrix for NEON.
 - [x] Benchmark vs. scalar baseline: `kernel/examples/bench_matmul.rs`,
-      run in release mode via CI (`.github/workflows/ci.yml`) — real
-      measured result recorded in [docs/EXPERIMENTS.md](EXPERIMENTS.md),
-      not assumed.
+      run in release mode via CI (`.github/workflows/ci.yml`). **Real
+      measured result: `matmul_fast` is ~10% *slower* than
+      `matmul_scalar`** (0.909x, 64×512 @ 512×64, 200 iters) — a real
+      negative result, not a win, recorded honestly in
+      [docs/EXPERIMENTS.md](EXPERIMENTS.md). Do not claim this fast-path
+      is a performance improvement anywhere in this repo; it's correct
+      and tested, not fast. Strengthens the case for real AVX2/NEON
+      intrinsics being the actual path to a speed win, not a safe rewrite.
 
 ### 1.3 FFI + observability
 - [ ] `#[no_mangle] extern "C"` surface for orchestrator integration

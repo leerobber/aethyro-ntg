@@ -23,12 +23,15 @@
 //! luck), restructured with iterator-based inner-loop access instead of
 //! manual indexing -- what actually gives LLVM's auto-vectorizer the
 //! best chance in release builds (removing bounds-check noise the
-//! optimizer doesn't always already elide). Measured against the
-//! scalar reference in release mode via CI (see docs/EXPERIMENTS.md) --
-//! reported honestly whether or not it's actually faster. Real
-//! hand-written intrinsics remain explicitly deferred until there's a
-//! local dev environment to verify `unsafe` code safely and a
-//! multi-arch CI matrix for NEON.
+//! optimizer doesn't always already elide). **Measured result (real,
+//! release-mode, via CI): this is currently ~10% *slower* than
+//! `matmul_scalar`, not faster** (see docs/EXPERIMENTS.md for the full
+//! numbers) -- the iterator restructuring didn't unlock a measurable
+//! auto-vectorization win here. Kept for its correctness/error-handling
+//! improvements over the original example this was based on, not
+//! claimed as a performance win. Real hand-written intrinsics remain
+//! explicitly deferred until there's a local dev environment to verify
+//! `unsafe` code safely and a multi-arch CI matrix for NEON.
 
 use super::error::NtgError;
 

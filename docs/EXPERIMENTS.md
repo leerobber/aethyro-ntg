@@ -8,6 +8,48 @@ sits next to a real measured 11% bits-per-character win, both kept).
 An experiment that didn't pan out and is documented here is more
 valuable than one that was quietly dropped.
 
+## 2026-07-08: does a safe, portable rewrite of matmul_scalar actually go faster?
+
+**Hypothesis:** `matmul_fast` (`kernel/src/ntg/simd.rs`) restructures
+`matmul_scalar`'s inner loop to use iterator-based slice access instead
+of manual indexing, on the theory that this removes bounds-check
+overhead and gives LLVM's auto-vectorizer a better shot, in release
+mode, without any `unsafe` arch-specific intrinsics.
+
+**Method:** `kernel/examples/bench_matmul.rs`, run via
+`cargo run --release --example bench_matmul` in CI (a real x86_64
+GitHub Actions runner, not a local guess) — 64×512 @ 512×64 matmul,
+200 iterations each.
+
+**Result — real, and negative:**
+
+```
+shape: 64x512 @ 512x64, iters: 200
+matmul_scalar: 437.606698ms total, 2.188033ms/iter
+matmul_fast:   481.199265ms total, 2.405996ms/iter
+speedup ratio (scalar/fast): 0.909x
+correctness: outputs are bit-identical, as required
+```
+
+`matmul_fast` is correct (bit-identical to `matmul_scalar`, as
+required) but **about 10% slower**, not faster. The iterator
+restructuring did not give LLVM's auto-vectorizer a measurable win here
+— if anything, constructing the `a_row` sub-slice per outer-loop
+iteration plus the `.enumerate()` combinator likely added overhead the
+simple indexed loop didn't have, without a compensating vectorization
+gain materializing.
+
+**Conclusion:** kept in the codebase (it's correct and tested, and
+`Result`-based error handling is itself a real improvement over the
+original pasted `assert_eq!`-based example from much earlier in this
+project's history), but **not currently a performance win** — do not
+claim otherwise anywhere in this repo. This makes the case for real
+hand-written AVX2 intrinsics stronger, not weaker: safe, portable
+rewrites alone don't appear to unlock the ternary format's actual
+memory-density advantage as measurable speed here. Real intrinsics
+remain deliberately deferred (see ROADMAP.md Phase 1.2) until there's a
+local dev environment to verify `unsafe` code safely.
+
 ## 2026-07-08: is ChronosLedger actually the "tamper-evident, hash-chained ledger" ADR 0001/0002 assumed it was?
 
 **Why this check happened:** before merging the first substantial batch
