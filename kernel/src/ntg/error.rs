@@ -7,6 +7,10 @@ pub enum NtgError {
     IndexOutOfBounds { index: usize, len: usize },
     EdgeNotFound { from: usize, to: usize },
     CycleDetected,
+    // Phase 3 ledger errors
+    LedgerTampering(String),
+    InvalidInput(String),
+    ChainBroken(usize), // index where chain broke
 }
 
 impl fmt::Display for NtgError {
@@ -26,6 +30,15 @@ impl fmt::Display for NtgError {
             }
             NtgError::CycleDetected => {
                 write!(f, "cycle detected: graph has no valid topological order")
+            }
+            NtgError::LedgerTampering(msg) => {
+                write!(f, "ledger tampering detected: {msg}")
+            }
+            NtgError::InvalidInput(msg) => {
+                write!(f, "invalid input: {msg}")
+            }
+            NtgError::ChainBroken(idx) => {
+                write!(f, "hash chain broken at entry {idx}")
             }
         }
     }
