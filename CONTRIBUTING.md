@@ -41,6 +41,15 @@ from skipping that step.
    ships through aethyro.com or anywhere else ahead of the tested code
    that makes it true — same standard as rule 1, applied to the business
    side (see Firmament ADR 0003 for the precedent this follows).
+10. **New external dependencies are a deliberate decision, flagged, not
+    incidental.** Prefer `std`-only implementations by default (see
+    `Graph::fingerprint`, `chain.rs`'s `ChainLog`). Add a dependency only
+    when a `std`-only substitute would be actively wrong for the specific
+    claim being made — e.g. `sha2` in `ledger.rs`, because a
+    non-cryptographic hash would undercut this project's actual
+    "tamper-evident" security claim, unlike `ChainLog`'s change-detection
+    use case where it was honestly fine. Say so in the commit and in the
+    relevant doc, don't let it slide in quietly.
 
 ## Adding an ADR
 

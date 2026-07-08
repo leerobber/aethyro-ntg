@@ -1,8 +1,12 @@
 # 0002: Safety rails for self-modifying graph topology
 
-**Status:** Accepted. Not yet implemented — this ADR defines the
-requirements the self-modification engine (Phase 3, see ROADMAP.md) must
-meet before it ships enabled, at all.
+**Status:** Accepted. Rule 5 (the ledger) is now real —
+`kernel/src/ntg/ledger.rs` implements a SHA256-chained `Ledger` with
+`LedgerEvent` variants matching this rule exactly. Rules 1-4 (off by
+default, bounded budget, automatic rollback, deterministic replay) are
+not yet implemented — this ADR defines the requirements the
+self-modification engine itself (Phase 3, see ROADMAP.md) must meet
+before it ships enabled, at all.
 
 ## Context
 

@@ -113,15 +113,20 @@ the actual source found that's only half true — ChronosLedger really is
 a 32-byte mmap format, but it is a real-time **mutable** agent-state
 store (slots overwritten in place), with no hashing and no
 tamper-evidence at all. The real ledger combines three pieces:
-ChronosLedger's state-slot model (fast state, `parent_offset` lineage),
-`LexGenSeal`'s per-record SHA256 signing approach
+ChronosLedger's state-slot model (fast state, `parent_offset` lineage —
+not yet ported, a performance/scale concern for later, not required for
+correctness today), `LexGenSeal`'s per-record SHA256 signing approach
 (`backend/oss/core/seal.py` — real, but not chained across records),
-and `kernel/src/ntg/chain.rs`'s `ChainLog` (the chaining/sequence-
-integrity piece that didn't exist anywhere until it was built here).
-Every accepted or rejected modification, with its fitness score and
-resource cost, becomes a ledger entry once Phase 3 wires these three
-together — not a new format invented from scratch, but not a drop-in
-port of ChronosLedger alone either.
+and a genuine chaining mechanism. **The signing + chaining half is now
+implemented**: `kernel/src/ntg/ledger.rs`'s `Ledger` uses real SHA256
+(via the `sha2` crate — this repo's first external dependency) to chain
+`LedgerEvent` records (`MutationAccepted`/`MutationRejected` with
+fitness score and resource cost, `NodeExecuted` for ADR 0003's execution
+nodes), self-contained `verify()` with no external transcript needed.
+This is separate from — and stricter than — `chain.rs`'s `ChainLog`,
+which deliberately stayed non-cryptographic (`std`'s `DefaultHasher`)
+because it was scoped only for `Graph::fingerprint`'s change-detection
+use case, not for a real security claim.
 
 ## FFI / Observability (Phase 1.3+)
 

@@ -24,6 +24,14 @@ jobs:
         working-directory: kernel
         run: cargo test
 
+      - name: cargo test --release
+        working-directory: kernel
+        run: cargo test --release
+
       - name: cargo clippy
         working-directory: kernel
         run: cargo clippy -- -D warnings
+
+      - name: bench_matmul (real, release-mode timing -- see docs/EXPERIMENTS.md)
+        working-directory: kernel
+        run: cargo run --release --example bench_matmul

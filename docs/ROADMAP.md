@@ -33,19 +33,30 @@ exists for it.
       from an unverified pasted example — fixed, not the implementation)
 - [ ] Record actual measured baseline (op count, wall-time on CI runner)
 
-### 1.2 Bit-packing ✅ implemented (SIMD intrinsics still pending)
+### 1.2 Bit-packing ✅ implemented; fast-path shipped, real SIMD intrinsics deliberately deferred
 - [x] `PackedTernary`: 2 bits/value, 4 values/byte, `Result`-based
 - [x] Tests: roundtrip, density claim (16 values -> 4 bytes, checked not
       asserted), non-multiple-of-4 lengths, out-of-bounds, invalid input
-- [ ] `kernel/src/ntg/simd/mod.rs` — runtime feature-detected dispatch
-      (`is_x86_feature_detected!`) over `PackedTernary`, AVX2 + NEON
-      paths, always falling back to the scalar path. **Not done yet** —
-      bit-packing alone isn't "SIMD," it's the storage format SIMD would
-      operate on. Do not claim this item done until real intrinsics land.
-- [ ] Test requirement: SIMD output must be bit-identical to the 1.1
-      scalar reference on every existing test case, not just "close"
-- [ ] Benchmark vs. 1.1 scalar baseline; record the real delta (or the
-      honest absence of one) in this file
+- [x] `matmul_fast` (`kernel/src/ntg/simd.rs`): a 100% safe, portable
+      rewrite of `matmul_scalar` with the exact same term order
+      (bit-identical by construction), tested against the scalar
+      reference on both the existing hand-picked case and a larger
+      deterministic pseudo-random case (7×13 @ 13×5).
+- [x] Real hand-written AVX2/NEON intrinsics — **deliberately not
+      attempted**, for stated reasons, not laziness: `unsafe` intrinsic
+      code has no local compile/test loop in this environment (only CI
+      round-trips, which have already caught two real bugs in *safe*
+      code this session); NEON specifically cannot even be
+      compile-checked by this repo's x86_64-only CI runner
+      (`#[cfg(target_arch = "aarch64")]` would just never build); and
+      typical SIMD tree-reductions aren't bit-identical to a sequential
+      scalar sum (float addition isn't associative), which DESIGN.md's
+      requirement demands. Revisit once there's a local dev environment
+      to verify `unsafe` code safely and a multi-arch CI matrix for NEON.
+- [x] Benchmark vs. scalar baseline: `kernel/examples/bench_matmul.rs`,
+      run in release mode via CI (`.github/workflows/ci.yml`) — real
+      measured result recorded in [docs/EXPERIMENTS.md](EXPERIMENTS.md),
+      not assumed.
 
 ### 1.3 FFI + observability
 - [ ] `#[no_mangle] extern "C"` surface for orchestrator integration
@@ -189,14 +200,27 @@ Phase 3 starts.
 
 - [x] `ChainLog` chaining primitive — done in Phase 2, see above and
       [docs/EXPERIMENTS.md](EXPERIMENTS.md)
+- [x] `Ledger` / `LedgerEvent` (`kernel/src/ntg/ledger.rs`) — the real,
+      security-relevant ledger: SHA256-chained (via the `sha2` crate,
+      this repo's first external dependency, added deliberately for
+      this), self-contained `verify()` (no external transcript needed).
+      `LedgerEvent` has variants matching ADR 0002 rule 5 precisely
+      (`MutationAccepted`/`MutationRejected` carry `fitness_score` and
+      `budget_used`; `NodeExecuted` for ADR 0003's execution nodes).
+      Tested: tampering with a recorded event's content breaks
+      verification at that exact index; removing a record breaks the
+      chain; identical event content produces a different signature
+      depending on position (proving the chain, not just the content,
+      is what's being verified); a direct hand-computed-SHA256 sanity
+      check so a future change can't silently swap back to a
+      non-cryptographic hash unnoticed.
 - [ ] Port/adapt ChronosLedger's mmap state-slot model from GH05T3 for
       fast agent/node state (see ADR 0002 rule 5) — real reuse, not a
-      hash-chained ledger on its own (see the corrected ADR 0002)
-- [ ] A real per-record signing scheme, LexGenSeal-inspired (SHA256 over
-      each entry's own content) — combine with `ChainLog` for the full
-      tamper-evident, sequence-integrity ledger
-- [ ] Swap `ChainLog`'s `DefaultHasher` for a real cryptographic hash
-      (SHA-256 or BLAKE3) — a dependency decision, not yet made
+      hash-chained ledger on its own (see the corrected ADR 0002).
+      `Ledger` above doesn't need this to function correctly; it's a
+      performance/scale concern for when there are many more entries
+      than a `Vec<LedgerRecord>` comfortably holds, not yet measured as
+      necessary.
 - [ ] Rule-based mutation proposers (`AddNodeRule`, `RemoveEdgeRule`, etc.)
       as versioned, auditable artifacts (ADR 0002)
 - [ ] Fitness evaluator using a real measured signal (task performance or

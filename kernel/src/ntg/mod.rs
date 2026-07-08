@@ -5,6 +5,8 @@ pub mod fsevents;
 pub mod graph;
 pub mod interaction;
 pub mod leafsignal;
+pub mod ledger;
 pub mod packed;
 pub mod pathparse;
+pub mod simd;
 pub mod ternary;

@@ -6,3 +6,11 @@ edition = "2021"
 [lib]
 name = "ntg_kernel"
 crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# First external dependency in this repo (2026-07-08) -- deliberate,
+# not incidental. See docs/ROADMAP.md and docs/EXPERIMENTS.md: the real
+# audit ledger needs actual cryptographic signing to mean anything
+# against a real adversary. sha2 is RustCrypto's pure-Rust, widely used
+# SHA-2 implementation.
+sha2 = "0.10"
