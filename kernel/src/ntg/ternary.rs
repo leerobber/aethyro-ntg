@@ -126,10 +126,15 @@ mod tests {
 
     #[test]
     fn matmul_matches_hand_computed_reference() {
+        // a = [[1,-1],[0,1]], b = [[1,0],[-1,1]]
+        // c[0][0] = 1*1 + (-1)*(-1) = 2
+        // c[0][1] = 1*0 + (-1)*1   = -1
+        // c[1][0] = 0*1 + 1*(-1)   = -1
+        // c[1][1] = 0*0 + 1*1     = 1
         let a = vec![1i8, -1, 0, 1];
         let b = vec![1i8, 0, -1, 1];
         let out = matmul_scalar(&a, &b, 2, 2, 2).unwrap();
-        assert_eq!(out, vec![1.0, 1.0, -1.0, 1.0]);
+        assert_eq!(out, vec![2.0, -1.0, -1.0, 1.0]);
     }
 
     #[test]
