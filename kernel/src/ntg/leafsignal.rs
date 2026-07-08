@@ -10,7 +10,7 @@
 //! (Phase 3/4) can consume. Nothing here hard-codes what a symbol
 //! "means"; it only counts what's there.
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LeafSignal {
     pub uppercase_count: usize,
     pub lowercase_count: usize,

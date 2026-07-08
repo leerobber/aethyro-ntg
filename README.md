@@ -47,6 +47,9 @@ inference yet; no product or go-to-market decision has been made.
 - `docs/ROADMAP.md` — phased build plan with gates and to-do checklists.
 - `docs/LITERATURE.md` — sourced grounding for every novelty claim made
   anywhere in this repo.
+- `docs/EXPERIMENTS.md` — real, measured experiments, wins and
+  non-wins alike (e.g. why a naive ternary-matmul "edge interaction
+  score" doesn't work, diagnosed, not just abandoned).
 
 ## Engineering principles
 

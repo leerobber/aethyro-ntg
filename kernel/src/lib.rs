@@ -35,6 +35,7 @@ pub struct TernaryCapability {
     pub graph_supported: bool,
     pub doc_path_parsing_supported: bool,
     pub forward_pass_supported: bool,
+    pub fingerprint_supported: bool,
     pub version: u32,
 }
 
@@ -46,7 +47,8 @@ pub fn ternary_capability() -> TernaryCapability {
         graph_supported: true,
         doc_path_parsing_supported: true,
         forward_pass_supported: true,
-        version: 4,
+        fingerprint_supported: true,
+        version: 5,
     }
 }
 
@@ -64,6 +66,7 @@ mod tests {
         assert!(cap.graph_supported);
         assert!(cap.doc_path_parsing_supported);
         assert!(cap.forward_pass_supported);
-        assert_eq!(cap.version, 4);
+        assert!(cap.fingerprint_supported);
+        assert_eq!(cap.version, 5);
     }
 }

@@ -122,6 +122,22 @@ starts.
       is a separate, larger feature, not yet started.
 - [x] Property tests: same topology + same input -> same output, across
       repeated `forward_pass` runs — proven, not assumed
+- [x] `Graph::fingerprint`: deterministic std-hash (SipHash via
+      `DefaultHasher`, not cryptographic) over dataflow-ordered
+      `(kind, label, signal, child_count)` — for Phase 3's ledger to
+      skip logging a "change" when nothing actually changed. Tested:
+      identical content -> identical fingerprint; a changed label or a
+      changed structural shape -> a different one; stable across
+      repeated calls. **Not a substitute for the real ledger's
+      tamper-evidence hash** (needs SHA-256/BLAKE3, an external
+      dependency decision, not made here) — this is change detection only.
+- [x] Experiment: real ternary matmul between adjacent nodes' encoded
+      labels as an "edge interaction score" — **tried, real numbers
+      collected, does not work, root cause diagnosed** (per-string
+      absmean normalization erases cross-string byte differences; see
+      [docs/EXPERIMENTS.md](EXPERIMENTS.md)). Not shipped as code.
+      A global/fixed-threshold variant is a plausible follow-up,
+      untried.
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly
 - [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph

@@ -7,12 +7,15 @@
 //! insertion order, deliberately, so `children()` is deterministic --
 //! ADR 0002's replay guarantee starts at this layer.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use super::error::NtgError;
 use super::leafsignal::{extract_leaf_signal, LeafSignal};
 
 pub type NodeId = usize;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     /// Plain content -- data, not something the engine runs.
     Content,
@@ -163,6 +166,34 @@ impl Graph {
         }
         Ok(total)
     }
+
+    /// A deterministic content fingerprint: hashes every node's
+    /// `(kind, label, signal, child_count)` in dataflow order. Two
+    /// graphs built from identical content produce the same
+    /// fingerprint; changing any label, kind, or structural shape
+    /// changes it. Intended use: Phase 3's ledger can skip logging a
+    /// "change" event when the fingerprint didn't actually move.
+    ///
+    /// **This is not a cryptographic hash.** It uses `std`'s
+    /// `DefaultHasher` (SipHash with fixed keys), which is reproducible
+    /// run-to-run on a given Rust version but is neither collision-
+    /// resistant against an adversary nor guaranteed stable across
+    /// standard-library versions forever. It is a change-detection
+    /// tool, not the tamper-evidence primitive the real audit ledger
+    /// needs -- that still requires a real cryptographic hash
+    /// (SHA-256/BLAKE3), a dependency decision not made here.
+    pub fn fingerprint(&self) -> Result<u64, NtgError> {
+        let order = self.topological_order()?;
+        let mut hasher = DefaultHasher::new();
+        for id in order {
+            let node = self.node(id)?;
+            node.kind.hash(&mut hasher);
+            node.label.hash(&mut hasher);
+            node.signal.hash(&mut hasher);
+            self.children(id).len().hash(&mut hasher);
+        }
+        Ok(hasher.finish())
+    }
 }
 
 #[cfg(test)]
@@ -272,5 +303,39 @@ mod tests {
         let mut g = Graph::new();
         docparse::parse_into(&mut g, "doc", "# A\n- hi\n- Bye!\n");
         assert_eq!(g.forward_pass().unwrap(), g.forward_pass().unwrap());
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic_for_identical_content() {
+        let mut g1 = Graph::new();
+        let mut g2 = Graph::new();
+        docparse::parse_into(&mut g1, "doc", "# A\n- hi\n- Bye!\n");
+        docparse::parse_into(&mut g2, "doc", "# A\n- hi\n- Bye!\n");
+        assert_eq!(g1.fingerprint().unwrap(), g2.fingerprint().unwrap());
+    }
+
+    #[test]
+    fn fingerprint_is_stable_across_repeated_calls() {
+        let mut g = Graph::new();
+        docparse::parse_into(&mut g, "doc", "# A\n- hi\n");
+        assert_eq!(g.fingerprint().unwrap(), g.fingerprint().unwrap());
+    }
+
+    #[test]
+    fn fingerprint_changes_when_a_label_changes() {
+        let mut g1 = Graph::new();
+        let mut g2 = Graph::new();
+        docparse::parse_into(&mut g1, "doc", "# A\n- hi\n");
+        docparse::parse_into(&mut g2, "doc", "# A\n- bye\n");
+        assert_ne!(g1.fingerprint().unwrap(), g2.fingerprint().unwrap());
+    }
+
+    #[test]
+    fn fingerprint_changes_when_structure_changes() {
+        let mut g1 = Graph::new();
+        let mut g2 = Graph::new();
+        docparse::parse_into(&mut g1, "doc", "# A\n- hi\n");
+        docparse::parse_into(&mut g2, "doc", "# A\n- hi\n- extra\n");
+        assert_ne!(g1.fingerprint().unwrap(), g2.fingerprint().unwrap());
     }
 }
