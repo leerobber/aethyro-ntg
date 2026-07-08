@@ -22,22 +22,26 @@ exists for it.
 
 ## Phase 1 — Ternary Tensor Core
 
-### 1.1 Scalar reference ✅ implemented, pending CI verification
+### 1.1 Scalar reference ✅ done — green on CI (PR #1)
 - [x] `Ternary` enum, `encode()` (absmean threshold), `matmul_scalar()`
 - [x] `NtgError` — `Result`-based, no panics on bad input
 - [x] Unit tests: roundtrip, invalid-value rejection, threshold
       separation, empty input, zero-vector matmul, hand-computed matmul
       reference, shape-mismatch rejection
-- [ ] Confirm green on GitHub Actions (this sandbox has no local
-      cargo/rustc — CI is the real gate, same as Firmament)
+- [x] Confirmed green on GitHub Actions (CI caught one real bug: an
+      arithmetic error in a hand-computed test expectation, inherited
+      from an unverified pasted example — fixed, not the implementation)
 - [ ] Record actual measured baseline (op count, wall-time on CI runner)
-      in this file once confirmed green
 
-### 1.2 Portable SIMD
+### 1.2 Bit-packing ✅ implemented (SIMD intrinsics still pending)
+- [x] `PackedTernary`: 2 bits/value, 4 values/byte, `Result`-based
+- [x] Tests: roundtrip, density claim (16 values -> 4 bytes, checked not
+      asserted), non-multiple-of-4 lengths, out-of-bounds, invalid input
 - [ ] `kernel/src/ntg/simd/mod.rs` — runtime feature-detected dispatch
-      (`is_x86_feature_detected!`), always falling back to 1.1's scalar path
-- [ ] AVX2 path, NEON path
-- [ ] Bit-packing: 4 ternary values per byte (2 bits each)
+      (`is_x86_feature_detected!`) over `PackedTernary`, AVX2 + NEON
+      paths, always falling back to the scalar path. **Not done yet** —
+      bit-packing alone isn't "SIMD," it's the storage format SIMD would
+      operate on. Do not claim this item done until real intrinsics land.
 - [ ] Test requirement: SIMD output must be bit-identical to the 1.1
       scalar reference on every existing test case, not just "close"
 - [ ] Benchmark vs. 1.1 scalar baseline; record the real delta (or the
@@ -57,31 +61,41 @@ starts.
 
 ## Phase 2 — Graph Structure (+ SIS front-end, ADR 0003)
 
-- [ ] `kernel/src/ntg/graph.rs`: node/edge representation, `add_node`,
+- [x] `kernel/src/ntg/graph.rs`: node/edge representation, `add_node`,
       `remove_node`, `add_edge`, `remove_edge` as first-class operations
-- [ ] Deterministic forward pass over a fixed topology
+- [x] Deterministic forward iteration order (`children()` is
+      insertion-ordered) — proven under test
+- [x] Typed nodes: `NodeKind::Content` / `NodeKind::Execution` (ADR 0003)
+- [x] Document structure parser (`docparse.rs`): headings (nested by
+      level), bullets, numbered items, fenced code blocks (->
+      `Execution` nodes) — GraphMD-style structural parsing, tested
+      (including nested-heading reparenting)
+- [ ] Path parser: filesystem paths -> the same typed graph (directory
+      segments as `Content` nodes, files as leaves) — not yet implemented,
+      docparse.rs only handles document text so far
+- [ ] Actual "forward pass" compute over the graph (docparse.rs only
+      builds structure; nothing executes yet) — needed before this phase
+      can claim to do anything beyond parsing
 - [ ] Property tests: same topology + same input -> same output, every
-      time, across repeated runs
+      time, across repeated runs, once a forward pass exists
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly
-- [ ] Typed nodes: at minimum a plain-content type and an execution
-      type (ADR 0003) — the same graph structure used for compute
-      topology also represents parsed documents/paths
-- [ ] Document/path parser: headings/sections/fenced-code-blocks/path
-      segments -> typed graph nodes; containment/reference/execution
-      edges (GraphMD-style — see ADR 0003, LITERATURE.md)
 - [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph
       geometry fingerprint, materialized only when a leaf is read/executed
-      (ByT5/CANINE + PIXEL-lite — see ADR 0003)
+      (ByT5/CANINE + PIXEL-lite — see ADR 0003). **Not implemented** —
+      docparse.rs stores leaf content as a plain `String` today; the
+      glyph-fingerprint side-channel is still just a design in ADR 0003,
+      not code. Do not claim otherwise.
 - [ ] Byte-level cost mitigation (MrT5-style dynamic merging or
       equivalent) — measured, not assumed to be sufficient
 - [ ] Execution-typed node runs are ledger-logged under the same ADR
-      0002 rails as topology mutation
+      0002 rails as topology mutation — blocked on Phase 3's ledger
 
 **Phase 2 exit criteria:** deterministic forward pass proven under test,
 green CI, overhead cost measured and recorded, AND the ADR 0003 items
-above have their own passing tests (typed nodes, doc/path parsing, lazy
-leaf resolution, measured byte-level cost mitigation) before Phase 3 starts.
+above have their own passing tests (typed nodes ✅, doc parsing ✅, path
+parsing, lazy leaf resolution, measured byte-level cost mitigation) before
+Phase 3 starts.
 
 ## Phase 3 — Self-Modification Engine (gated by ADR 0002)
 

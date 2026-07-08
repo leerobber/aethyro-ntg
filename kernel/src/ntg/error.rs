@@ -4,6 +4,8 @@ use core::fmt;
 pub enum NtgError {
     ShapeMismatch { expected: usize, got: usize },
     InvalidTernaryValue(i8),
+    IndexOutOfBounds { index: usize, len: usize },
+    EdgeNotFound { from: usize, to: usize },
 }
 
 impl fmt::Display for NtgError {
@@ -14,6 +16,12 @@ impl fmt::Display for NtgError {
             }
             NtgError::InvalidTernaryValue(v) => {
                 write!(f, "invalid ternary value: {v} (must be -1, 0, or 1)")
+            }
+            NtgError::IndexOutOfBounds { index, len } => {
+                write!(f, "index {index} out of bounds (len {len})")
+            }
+            NtgError::EdgeNotFound { from, to } => {
+                write!(f, "no edge from {from} to {to}")
             }
         }
     }

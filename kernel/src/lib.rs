@@ -1,13 +1,18 @@
 //! Aethyro NTG (Neural Ternary Graph) Engine -- kernel.
 //!
-//! Phase 1.1: ternary scalar reference only. See docs/DESIGN.md and
-//! docs/architecture/ for the full architecture this grows into: graph
-//! topology (Phase 2), bounded self-modification (Phase 3, gated by
-//! ADR 0002), SIMD/FFI (later 1.x phases).
+//! Phase 1.1 (ternary scalar reference) and Phase 1.2 (bit-packed
+//! storage) are implemented. Phase 2 (graph structure + ADR 0003's doc
+//! structure parser) has started. See docs/DESIGN.md and
+//! docs/architecture/ for the full architecture, and docs/ROADMAP.md for
+//! current phase status -- don't assume this comment is up to date,
+//! check ROADMAP.md.
 
 pub mod ntg;
 
+pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
+pub use ntg::graph::{Graph, NodeKind};
+pub use ntg::packed::PackedTernary;
 pub use ntg::ternary::{encode, matmul_scalar, Ternary};
 
 /// Reports whether this build has a working ternary compute path.
@@ -20,6 +25,7 @@ pub fn has_ternary_kernel() -> bool {
 #[derive(Clone, Copy, Debug)]
 pub struct TernaryCapability {
     pub scalar_supported: bool,
+    pub packed_supported: bool,
     pub simd_supported: bool,
     pub version: u32,
 }
@@ -27,8 +33,9 @@ pub struct TernaryCapability {
 pub fn ternary_capability() -> TernaryCapability {
     TernaryCapability {
         scalar_supported: true,
+        packed_supported: true,
         simd_supported: false,
-        version: 1,
+        version: 2,
     }
 }
 
@@ -37,11 +44,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kernel_reports_scalar_capability() {
+    fn kernel_reports_current_capability() {
         assert!(has_ternary_kernel());
         let cap = ternary_capability();
         assert!(cap.scalar_supported);
+        assert!(cap.packed_supported);
         assert!(!cap.simd_supported);
-        assert_eq!(cap.version, 1);
+        assert_eq!(cap.version, 2);
     }
 }
