@@ -131,13 +131,17 @@ starts.
       repeated calls. **Not a substitute for the real ledger's
       tamper-evidence hash** (needs SHA-256/BLAKE3, an external
       dependency decision, not made here) — this is change detection only.
-- [x] Experiment: real ternary matmul between adjacent nodes' encoded
-      labels as an "edge interaction score" — **tried, real numbers
-      collected, does not work, root cause diagnosed** (per-string
-      absmean normalization erases cross-string byte differences; see
-      [docs/EXPERIMENTS.md](EXPERIMENTS.md)). Not shipped as code.
-      A global/fixed-threshold variant is a plausible follow-up,
-      untried.
+- [x] `Graph::edge_interaction_score` / `encode_fixed`
+      (`interaction.rs`, `ternary.rs`): the real ternary-matmul "edge
+      interaction score" between two nodes' labels — attempt #1
+      (`encode()`'s per-string threshold) failed, diagnosed, documented;
+      the fix (a fixed/global threshold, `encode_fixed`) was validated
+      empirically in Python *before* being written as Rust, and works:
+      opposite-byte strings score negatively, self-similarity beats a
+      one-character edit. Honestly scoped as a byte-position
+      correlation, not semantic similarity, and sensitive to positional
+      shifts. Full experiment trail in
+      [docs/EXPERIMENTS.md](EXPERIMENTS.md).
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly
 - [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph

@@ -55,6 +55,48 @@ pub fn encode(weights: &[f32]) -> Vec<i8> {
         .collect()
 }
 
+/// Fixed-threshold constants for `encode_fixed`, empirically validated
+/// (see docs/EXPERIMENTS.md 2026-07-08 follow-up): centered on the a-z
+/// byte range since that's where most English text mass sits. This
+/// gives 'a' and 'z' *opposite* ternary values, which is the whole
+/// point -- see `encode_fixed`'s doc comment.
+const FIXED_CENTER: f32 = 109.5;
+const FIXED_SCALE: f32 = 13.0;
+const FIXED_THRESHOLD: f32 = 0.33;
+
+/// Fixed-threshold, cross-string-comparable byte-to-ternary encoding.
+///
+/// `encode()` above thresholds each input against *its own* mean
+/// magnitude -- correct for BitNet-style single-tensor quantization,
+/// but this makes any two strings with similar byte-value profiles
+/// collapse to the identical ternary pattern (e.g. "aaaaa" and "zzzzz"
+/// both encode to all `-1` under `encode()` -- a real failure,
+/// diagnosed in docs/EXPERIMENTS.md, not a hypothetical one).
+/// `encode_fixed` uses a fixed global threshold instead, so a given
+/// byte always maps to the same ternary value regardless of what
+/// string it appears in, which is what makes
+/// `Graph::edge_interaction_score` (in `interaction.rs`) meaningful.
+///
+/// This is **not a balanced quantization scheme** -- the distribution
+/// over the full printable-ASCII range is skewed (mostly `-1`; see
+/// docs/EXPERIMENTS.md), because it's centered for lowercase-letter
+/// distinguishability, not for even bit-usage. Don't use this as a
+/// drop-in replacement for `encode()`'s quantization use case.
+pub fn encode_fixed(text: &str) -> Vec<i8> {
+    text.bytes()
+        .map(|b| {
+            let v = (b as f32 - FIXED_CENTER) / FIXED_SCALE;
+            if v > FIXED_THRESHOLD {
+                1
+            } else if v < -FIXED_THRESHOLD {
+                -1
+            } else {
+                0
+            }
+        })
+        .collect()
+}
+
 /// Scalar reference matmul: (m x k) @ (k x n) -> m x n, accumulated in
 /// f32. This is the golden reference every faster path must match.
 pub fn matmul_scalar(
@@ -135,6 +177,26 @@ mod tests {
         let b = vec![1i8, 0, -1, 1];
         let out = matmul_scalar(&a, &b, 2, 2, 2).unwrap();
         assert_eq!(out, vec![2.0, -1.0, -1.0, 1.0]);
+    }
+
+    #[test]
+    fn encode_fixed_distinguishes_the_exact_failure_case() {
+        // "aaaaa" and "zzzzz" collapsed to the identical pattern under
+        // encode()'s per-string threshold (see docs/EXPERIMENTS.md).
+        // encode_fixed must not repeat that failure.
+        assert_ne!(encode_fixed("aaaaa"), encode_fixed("zzzzz"));
+        assert_eq!(encode_fixed("aaaaa"), vec![-1i8; 5]);
+        assert_eq!(encode_fixed("zzzzz"), vec![1i8; 5]);
+    }
+
+    #[test]
+    fn encode_fixed_is_context_independent() {
+        // Unlike encode(), the same byte must encode the same way
+        // regardless of what string it's in.
+        let a1 = encode_fixed("a");
+        let a2 = encode_fixed("aaaa");
+        assert_eq!(a1[0], a2[0]);
+        assert_eq!(a1[0], a2[3]);
     }
 
     #[test]

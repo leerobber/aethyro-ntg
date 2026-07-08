@@ -71,15 +71,57 @@ relative to that string alone -- there is no shared reference scale
 across different labels, so cross-string comparison is structurally
 impossible with this construction.
 
-**Conclusion:** this specific approach does not work and is **not**
-shipped as a feature (see `kernel/src/ntg/graph.rs` -- no
-`edge_interaction_score` function exists). The mechanism BitNet-style
-absmean quantization exists for (compress one tensor's own weights) is
-not the same problem as (compare two arbitrary short strings), and
-applying one to the other silently breaks it.
+**Conclusion (at the time):** this specific approach does not work as
+specified. The mechanism BitNet-style absmean quantization exists for
+(compress one tensor's own weights) is not the same problem as (compare
+two arbitrary short strings), and applying one to the other silently
+breaks it.
 
-**What this suggests for a follow-up experiment, not yet tried:** a
-fixed/global byte-to-ternary mapping (same threshold for every string,
-not each string's own mean) would preserve cross-string distinguishability.
-Untried as of this writing -- record the result here, either way, before
-treating it as fact.
+**What this suggested for a follow-up experiment:** a fixed/global
+byte-to-ternary mapping (same threshold for every string, not each
+string's own mean) would preserve cross-string distinguishability. See
+below -- this was tried, and it worked.
+
+## 2026-07-08: follow-up — fixed-threshold encoding fixes the failure above
+
+**Hypothesis:** replace `encode()`'s per-string mean threshold with a
+fixed global one (same byte always maps to the same ternary value,
+regardless of context), calibrated on the a-z byte range (center 109.5,
+scale 13, threshold ±0.33).
+
+**Method:** re-ran the exact same failing pairs from the experiment
+above, in Python first, before writing any Rust.
+
+**Result — real, positive, verified before shipping as code:**
+
+```
+'aaaaa'              x 'aaaaa'              ->    5.0
+'aaaaa'              x 'zzzzz'              ->   -5.0   (was 5.0, identical, before)
+'hello'              x 'hello'              ->    2.0
+'hello'              x 'hxllo'              ->    0.0   (self-score > 1-char-edit score)
+```
+
+`"aaaaa"` vs `"zzzzz"` now score oppositely (`+5.0` vs `-5.0`) instead of
+identically — the exact failure is fixed. Better than just "fixed":
+the score is now *interpretable* in a way it wasn't designed to be —
+self-similarity scores positive, a byte-for-byte "opposite" pairing
+scores negative, and a single-character edit ("hello" -> "hxllo")
+measurably lowers the score below the unedited self-score. This is a
+real, if crude, working similarity signal, not just "no longer broken."
+
+**Honest limits, stated precisely, not hidden:**
+- This is a **byte-position correlation**, not semantic similarity — it
+  knows nothing about meaning.
+- It's sensitive to positional alignment: inserting one character near
+  the start of a string shifts every later comparison out of sync,
+  which could make genuinely similar strings score poorly if they
+  differ in length early on. Not tested here.
+- The fixed-threshold distribution is skewed (mostly `-1` across the
+  full printable-ASCII range — 74 of 95 characters), because it's
+  calibrated for a-z distinguishability, not balanced bit-usage. Not a
+  drop-in replacement for `encode()`'s quantization use case.
+
+**Shipped as code:** `encode_fixed` (`kernel/src/ntg/ternary.rs`) and
+`edge_interaction_score` (`kernel/src/ntg/interaction.rs`), both tested
+against the exact properties measured here (opposite-string negative
+score, self-score-beats-edited-score, determinism).

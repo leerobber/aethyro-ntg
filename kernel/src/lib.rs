@@ -15,10 +15,11 @@ pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
 pub use ntg::fsevents::{apply_event, FsEvent};
 pub use ntg::graph::{Graph, NodeKind};
+pub use ntg::interaction::edge_interaction_score;
 pub use ntg::leafsignal::{extract_leaf_signal, LeafSignal};
 pub use ntg::packed::PackedTernary;
 pub use ntg::pathparse::{find_path, parse_path_into};
-pub use ntg::ternary::{encode, matmul_scalar, Ternary};
+pub use ntg::ternary::{encode, encode_fixed, matmul_scalar, Ternary};
 
 /// Reports whether this build has a working ternary compute path.
 pub fn has_ternary_kernel() -> bool {
@@ -36,6 +37,7 @@ pub struct TernaryCapability {
     pub doc_path_parsing_supported: bool,
     pub forward_pass_supported: bool,
     pub fingerprint_supported: bool,
+    pub edge_interaction_score_supported: bool,
     pub version: u32,
 }
 
@@ -48,7 +50,8 @@ pub fn ternary_capability() -> TernaryCapability {
         doc_path_parsing_supported: true,
         forward_pass_supported: true,
         fingerprint_supported: true,
-        version: 5,
+        edge_interaction_score_supported: true,
+        version: 6,
     }
 }
 
@@ -67,6 +70,7 @@ mod tests {
         assert!(cap.doc_path_parsing_supported);
         assert!(cap.forward_pass_supported);
         assert!(cap.fingerprint_supported);
-        assert_eq!(cap.version, 5);
+        assert!(cap.edge_interaction_score_supported);
+        assert_eq!(cap.version, 6);
     }
 }
