@@ -10,3 +10,5 @@ pub mod pathparse;
 pub mod ternary;
 pub mod ledger;
 pub mod mutation;
+pub mod simd;
+pub mod ffi;
