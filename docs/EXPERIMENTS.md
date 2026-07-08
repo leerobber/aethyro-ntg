@@ -8,6 +8,70 @@ sits next to a real measured 11% bits-per-character win, both kept).
 An experiment that didn't pan out and is documented here is more
 valuable than one that was quietly dropped.
 
+## 2026-07-08: is ChronosLedger actually the "tamper-evident, hash-chained ledger" ADR 0001/0002 assumed it was?
+
+**Why this check happened:** before merging the first substantial batch
+of Phase 1-2 work, the question was asked: is there a foundational gap
+worth closing now, while cheap, rather than discovering it mid-Phase-3?
+ADR 0001 and ADR 0002 both stated, as fact, that this project's audit
+ledger would "reuse the design already proven" in GH05T3's
+ChronosLedger, describing it as tamper-evident and hash-chained. That
+claim had never actually been checked against the real source in this
+project — it was inherited from an external draft and repeated forward
+across three documents without verification. This is exactly the kind
+of claim CONTRIBUTING.md rule 2 exists to catch.
+
+**Method:** read the actual implementation,
+`GH05T3/backend/oss/core/chronos_ledger.py`, directly. Also checked two
+other candidates in the same codebase for a genuine hash-chain:
+`backend/oss/core/seal.py` ("LexGenSeal") and `backend/economy/ledger.py`.
+
+**Result — real, and it corrects a standing false claim:**
+
+- **ChronosLedger** is a real-time **mutable** mmap agent-state store:
+  32-byte slots (desires, fitness, maturity, `parent_offset` for
+  lineage, generation, a scratchpad bitfield), overwritten in place via
+  `write_agent()`/`update_fitness()`/etc. There is no hashing anywhere
+  in the file, no previous-record linkage, no tamper-evidence of any
+  kind. It is genuinely excellent at what it's actually for: fast
+  slot-level state and lineage tracing — not an audit trail.
+- **LexGenSeal** (`seal.py`) is real and genuinely tamper-evident **per
+  record**: each breakthrough record is SHA256-signed over its own
+  content and written to an append-only-by-convention vault file. But
+  records are not chained to each other — deleting one seal file from
+  the vault directory is completely undetectable from the files that
+  remain. It proves "this record wasn't altered," not "no record was
+  removed from the sequence."
+- **`economy/ledger.py`** is a plain SQLite table, append-only by
+  convention (no `UPDATE`/`DELETE` in the code path), no cryptography
+  at all.
+
+**Conclusion: no genuine hash-chained, tamper-evident ledger exists
+anywhere in the checked codebase.** ADR 0001 and ADR 0002's "reuses the
+proven ChronosLedger design" claim was false for the tamper-evidence
+half specifically (true only for the state-slot/lineage half). Both
+ADRs and DESIGN.md have been corrected in place rather than quietly
+patched, so the record shows the mistake and the fix, not just the fix.
+
+**What was built as a direct result:** `kernel/src/ntg/chain.rs`
+(`ChainLog`) — a genuine hash-chain primitive, tested against exactly
+the properties a real audit ledger needs: altering a historical entry's
+content breaks verification from that point forward; removing an entry
+breaks verification; a given piece of content produces a different
+chain value depending on what preceded it (proving the chain captures
+sequence, not just content). Uses `std`'s non-cryptographic
+`DefaultHasher` for now, honestly labeled as such (same pattern as
+`Graph::fingerprint`) — swapping in a real cryptographic hash (SHA-256,
+matching LexGenSeal's own choice, or BLAKE3) is a dependency decision
+for Phase 3, not a redesign of this module.
+
+**Why this was worth doing before merge, not after:** every phase from
+here on assumes ledger-logging exists (ADR 0002 rule 5, ADR 0003's
+execution-node auditing, Phase 3's exit criteria). Finding and fixing
+this now — while only two ADRs and one design doc referenced the false
+claim — is far cheaper than finding it after Phase 3 was built on top
+of an assumption that didn't hold.
+
 ## 2026-07-08: does leaf-signal correlate with file extension?
 
 **Hypothesis:** `LeafSignal` (case/punctuation/whitespace counts) might

@@ -11,6 +11,7 @@
 
 pub mod ntg;
 
+pub use ntg::chain::{ChainEntry, ChainLog};
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
 pub use ntg::fsevents::{apply_event, FsEvent};
@@ -38,6 +39,7 @@ pub struct TernaryCapability {
     pub forward_pass_supported: bool,
     pub fingerprint_supported: bool,
     pub edge_interaction_score_supported: bool,
+    pub chain_log_supported: bool,
     pub version: u32,
 }
 
@@ -51,7 +53,8 @@ pub fn ternary_capability() -> TernaryCapability {
         forward_pass_supported: true,
         fingerprint_supported: true,
         edge_interaction_score_supported: true,
-        version: 6,
+        chain_log_supported: true,
+        version: 7,
     }
 }
 
@@ -71,6 +74,7 @@ mod tests {
         assert!(cap.forward_pass_supported);
         assert!(cap.fingerprint_supported);
         assert!(cap.edge_interaction_score_supported);
-        assert_eq!(cap.version, 6);
+        assert!(cap.chain_log_supported);
+        assert_eq!(cap.version, 7);
     }
 }

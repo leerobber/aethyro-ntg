@@ -43,10 +43,26 @@ ships enabled by default — not after, not as a fast-follow:
 5. **Every modification event is ledger-logged.** Each accepted or
    rejected topology change — with its fitness score and the resource
    budget it consumed — is an entry in a tamper-evident audit ledger, not
-   an optional or separate log. This reuses the design already proven in
-   the founder's GH05T3 project (ChronosLedger: a 32-byte mmap binary
-   agent-state store already used in production for slot inspection and
-   lineage tracing), rather than inventing a new ledger format.
+   an optional or separate log.
+
+   **Correction (2026-07-08), after directly reading the source this ADR
+   originally cited:** this rule previously claimed the ledger would
+   "reuse the design already proven" in GH05T3's ChronosLedger. That
+   claim was checked against the actual code
+   (`backend/oss/core/chronos_ledger.py`) and found false — ChronosLedger
+   is a real-time **mutable** mmap agent-state store (32-byte slots,
+   overwritten in place by `write_agent`/`update_fitness`/etc.), with no
+   hashing and no tamper-evidence of any kind. It is genuinely useful for
+   fast slot state and lineage tracing (`parent_offset` chains) — not for
+   an audit trail. A second candidate,
+   `backend/oss/core/seal.py` ("LexGenSeal"), is real and genuinely
+   tamper-evident *per record* (SHA256 over each record's own content,
+   append-only by file-naming convention) but does not chain records
+   together — deleting one seal file is undetectable from the rest. **No
+   genuine hash-chained ledger existed anywhere in the checked
+   codebase.** `kernel/src/ntg/chain.rs` (`ChainLog`) is the missing
+   piece, built once this gap was found rather than assumed away — see
+   [docs/EXPERIMENTS.md](../EXPERIMENTS.md) for the full finding.
 
 ## Consequences
 
@@ -58,6 +74,13 @@ ships enabled by default — not after, not as a fast-follow:
 - The fitness evaluator must be real and fast enough to run inside the
   budget in rule 2 — not a slow proxy that forces the budget to be
   unreasonably large.
-- Because this reuses ChronosLedger's format rather than a new one,
-  Phase 3 (see ROADMAP.md) includes porting/adapting that ledger code
-  into this repo rather than designing a new binary format from scratch.
+- Phase 3's real ledger combines three pieces, reusing what's genuinely
+  real from each rather than reinventing or assuming: ChronosLedger's
+  state-slot model (for fast agent/node state), something like
+  LexGenSeal's per-record SHA256 signing (for content integrity), and
+  `ChainLog`'s chaining structure (for sequence integrity — detecting a
+  deleted or reordered record, which neither of the other two catches
+  alone). `ChainLog` currently uses `std`'s non-cryptographic
+  `DefaultHasher` to prove the structure; swapping in a real
+  cryptographic hash is a dependency decision Phase 3 still needs to
+  make, not a redesign of the chaining logic itself.

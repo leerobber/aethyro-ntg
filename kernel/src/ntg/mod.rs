@@ -1,3 +1,4 @@
+pub mod chain;
 pub mod docparse;
 pub mod error;
 pub mod fsevents;

@@ -101,11 +101,26 @@ starts.
       real `signal: LeafSignal` field, computed from its `label` at
       creation time in `add_node` (always in sync — no separate API to
       set it, so it can't drift from the label it describes)
-- [ ] Ledger module — **deliberately not built this pass.** ADR 0001
-      already decided to reuse GH05T3's ChronosLedger rather than
-      reinvent one; that code hasn't been examined/ported into this repo
-      yet. Building a simplified stand-in now would violate that
-      decision. This stays blocked on an actual port, tracked in Phase 3.
+- [x] `kernel/src/ntg/chain.rs` (`ChainLog`): a real hash-chain
+      primitive, built after directly reading GH05T3's actual
+      ChronosLedger source and finding the plan's original assumption
+      false — see [docs/EXPERIMENTS.md](EXPERIMENTS.md). ChronosLedger
+      is a real, reusable mutable state store with **no** hashing or
+      tamper-evidence; `seal.py`'s LexGenSeal is real per-record SHA256
+      signing but not chained; no genuine hash chain existed anywhere.
+      Tested: altering or removing a historical entry breaks
+      verification from that point forward; a given content string's
+      chain value depends on what preceded it, not just itself. Uses
+      `std`'s non-cryptographic `DefaultHasher` for now (same honest
+      caveat as `Graph::fingerprint`) — a real crypto hash is a
+      dependency decision for whoever wires up the full Phase 3 ledger.
+- [ ] Full ledger module — still not built this pass. What Phase 3
+      actually needs to combine: ChronosLedger's state-slot model
+      (port/adapt, real reuse), LexGenSeal-style per-record signing
+      (real reuse), and `ChainLog` (done above). Rule-based mutation
+      proposers, fitness evaluation, and rollback (ADR 0002 rules 2-4)
+      still need designing against a real self-modification workflow,
+      not assumed in advance.
 - [x] Actual "forward pass" over the graph (`Graph::forward_pass`): a
       real Kahn's-algorithm `topological_order` (dataflow-ordered
       execution — a node runs only once every node with an edge into it
@@ -172,9 +187,16 @@ Phase 3 starts.
 
 ## Phase 3 — Self-Modification Engine (gated by ADR 0002)
 
-- [ ] Port/adapt ChronosLedger's mmap binary format from GH05T3 into
-      this repo as the audit ledger (see ADR 0002 rule 5) — do not design
-      a new ledger format from scratch
+- [x] `ChainLog` chaining primitive — done in Phase 2, see above and
+      [docs/EXPERIMENTS.md](EXPERIMENTS.md)
+- [ ] Port/adapt ChronosLedger's mmap state-slot model from GH05T3 for
+      fast agent/node state (see ADR 0002 rule 5) — real reuse, not a
+      hash-chained ledger on its own (see the corrected ADR 0002)
+- [ ] A real per-record signing scheme, LexGenSeal-inspired (SHA256 over
+      each entry's own content) — combine with `ChainLog` for the full
+      tamper-evident, sequence-integrity ledger
+- [ ] Swap `ChainLog`'s `DefaultHasher` for a real cryptographic hash
+      (SHA-256 or BLAKE3) — a dependency decision, not yet made
 - [ ] Rule-based mutation proposers (`AddNodeRule`, `RemoveEdgeRule`, etc.)
       as versioned, auditable artifacts (ADR 0002)
 - [ ] Fitness evaluator using a real measured signal (task performance or

@@ -35,7 +35,7 @@ for current status, don't assume this document describes shipped code.
 │  - pure, deterministic, no unsafe (v1)                     │
 └─────────────────────────────────────────────────────────┘
         │
-        └── Audit Ledger (ChronosLedger-derived, Phase 3)
+        └── Audit Ledger (ChronosLedger state + LexGenSeal signing + ChainLog, Phase 3)
             tamper-evident, hash-chained, mmap binary format
 ```
 
@@ -105,12 +105,23 @@ deterministic replay, and every event logged to the audit ledger.
 
 ## Audit Ledger
 
-Reuses the design already proven in GH05T3's ChronosLedger: a 32-byte
-mmap binary format, hash-chained for tamper-evidence. Every accepted or
-rejected modification, with its fitness score and resource cost, becomes
-a ledger entry. This is not a new format designed from scratch —
-Phase 3's scope includes porting/adapting the existing ChronosLedger
-code into this repo.
+**Corrected 2026-07-08** (see [ADR 0002](architecture/0002-safety-rails-for-self-modification.md)
+and [docs/EXPERIMENTS.md](EXPERIMENTS.md) for the full finding): this
+section previously claimed GH05T3's ChronosLedger was already a
+"32-byte mmap binary format, hash-chained for tamper-evidence." Reading
+the actual source found that's only half true — ChronosLedger really is
+a 32-byte mmap format, but it is a real-time **mutable** agent-state
+store (slots overwritten in place), with no hashing and no
+tamper-evidence at all. The real ledger combines three pieces:
+ChronosLedger's state-slot model (fast state, `parent_offset` lineage),
+`LexGenSeal`'s per-record SHA256 signing approach
+(`backend/oss/core/seal.py` — real, but not chained across records),
+and `kernel/src/ntg/chain.rs`'s `ChainLog` (the chaining/sequence-
+integrity piece that didn't exist anywhere until it was built here).
+Every accepted or rejected modification, with its fitness score and
+resource cost, becomes a ledger entry once Phase 3 wires these three
+together — not a new format invented from scratch, but not a drop-in
+port of ChronosLedger alone either.
 
 ## FFI / Observability (Phase 1.3+)
 
