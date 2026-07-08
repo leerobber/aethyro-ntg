@@ -48,7 +48,7 @@ impl Graph {
         let slot = self
             .nodes
             .get_mut(id)
-            .ok_or_else(|| NtgError::IndexOutOfBounds { index: id, len })?;
+            .ok_or(NtgError::IndexOutOfBounds { index: id, len })?;
         if slot.is_none() {
             return Err(NtgError::IndexOutOfBounds { index: id, len });
         }
@@ -78,7 +78,7 @@ impl Graph {
         self.nodes
             .get(id)
             .and_then(|n| n.as_ref())
-            .ok_or_else(|| NtgError::IndexOutOfBounds { index: id, len })
+            .ok_or(NtgError::IndexOutOfBounds { index: id, len })
     }
 
     pub fn node_count(&self) -> usize {
