@@ -34,6 +34,7 @@ pub struct TernaryCapability {
     pub simd_supported: bool,
     pub graph_supported: bool,
     pub doc_path_parsing_supported: bool,
+    pub forward_pass_supported: bool,
     pub version: u32,
 }
 
@@ -44,7 +45,8 @@ pub fn ternary_capability() -> TernaryCapability {
         simd_supported: false,
         graph_supported: true,
         doc_path_parsing_supported: true,
-        version: 3,
+        forward_pass_supported: true,
+        version: 4,
     }
 }
 
@@ -61,6 +63,7 @@ mod tests {
         assert!(!cap.simd_supported);
         assert!(cap.graph_supported);
         assert!(cap.doc_path_parsing_supported);
-        assert_eq!(cap.version, 3);
+        assert!(cap.forward_pass_supported);
+        assert_eq!(cap.version, 4);
     }
 }

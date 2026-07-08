@@ -96,18 +96,32 @@ starts.
       is **not** the PIXEL-lite glyph-geometry fingerprint ADR 0003
       describes — that needs an actual trained visual feature
       extractor, which doesn't exist here. This is a plain, honest count,
-      not a learned representation. It is not yet wired onto graph leaf
-      nodes as an attached field — that's the next increment.
+      not a learned representation.
+- [x] Leaf signal wired onto graph nodes: every `Node` now carries a
+      real `signal: LeafSignal` field, computed from its `label` at
+      creation time in `add_node` (always in sync — no separate API to
+      set it, so it can't drift from the label it describes)
 - [ ] Ledger module — **deliberately not built this pass.** ADR 0001
       already decided to reuse GH05T3's ChronosLedger rather than
       reinvent one; that code hasn't been examined/ported into this repo
       yet. Building a simplified stand-in now would violate that
       decision. This stays blocked on an actual port, tracked in Phase 3.
-- [ ] Actual "forward pass" compute over the graph (docparse.rs/
-      pathparse.rs only build structure; nothing executes yet) — needed
-      before this phase can claim to do anything beyond parsing
-- [ ] Property tests: same topology + same input -> same output, every
-      time, across repeated runs, once a forward pass exists
+- [x] Actual "forward pass" over the graph (`Graph::forward_pass`): a
+      real Kahn's-algorithm `topological_order` (dataflow-ordered
+      execution — a node runs only once every node with an edge into it
+      already has, ties broken by ascending id for determinism) feeding
+      an aggregation of every node's `LeafSignal`. Tested: edges (not
+      creation/id order) determine execution order; cycles are detected
+      and rejected rather than looping forever; every node is visited
+      exactly once (checked against a manual sum); repeated runs on the
+      same graph agree (ADR 0002 replay property, proven not assumed).
+      This is the real version of "time-irrelevant execution" — order
+      comes from dependency readiness, not a fixed loop. It is **not**
+      full ternary-tensor compute over the graph — attaching real ops
+      per node (so the graph does more than aggregate a signal count)
+      is a separate, larger feature, not yet started.
+- [x] Property tests: same topology + same input -> same output, across
+      repeated `forward_pass` runs — proven, not assumed
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly
 - [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph

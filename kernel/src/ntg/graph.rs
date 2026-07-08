@@ -8,6 +8,7 @@
 //! ADR 0002's replay guarantee starts at this layer.
 
 use super::error::NtgError;
+use super::leafsignal::{extract_leaf_signal, LeafSignal};
 
 pub type NodeId = usize;
 
@@ -25,6 +26,10 @@ pub enum NodeKind {
 pub struct Node {
     pub kind: NodeKind,
     pub label: String,
+    /// Real per-character case/punctuation/whitespace signal, computed
+    /// from `label` at creation time (see `leafsignal.rs`) -- always in
+    /// sync with `label` because there is no separate API to set it.
+    pub signal: LeafSignal,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -39,7 +44,9 @@ impl Graph {
     }
 
     pub fn add_node(&mut self, kind: NodeKind, label: impl Into<String>) -> NodeId {
-        self.nodes.push(Some(Node { kind, label: label.into() }));
+        let label = label.into();
+        let signal = extract_leaf_signal(&label);
+        self.nodes.push(Some(Node { kind, label, signal }));
         self.nodes.len() - 1
     }
 
@@ -94,11 +101,74 @@ impl Graph {
     pub fn children(&self, id: NodeId) -> Vec<NodeId> {
         self.edges.iter().filter(|&&(a, _)| a == id).map(|&(_, b)| b).collect()
     }
+
+    /// Ids of every currently-existing node, ascending.
+    pub fn all_node_ids(&self) -> Vec<NodeId> {
+        self.nodes.iter().enumerate().filter_map(|(i, n)| n.as_ref().map(|_| i)).collect()
+    }
+
+    /// Dataflow-ordered execution order via Kahn's algorithm: a node is
+    /// only ready once every node with an edge *into* it has already
+    /// been ordered. This is the real mechanism behind "time-irrelevant
+    /// execution" -- order is determined by dependency readiness, not a
+    /// fixed/insertion-order walk -- and, unlike a naive recursive
+    /// descent that assumes a tree, it correctly handles a node with
+    /// multiple parents and detects cycles instead of looping forever.
+    /// Ties among simultaneously-ready nodes are broken by ascending
+    /// `NodeId`, so the result is fully deterministic (ADR 0002 replay).
+    pub fn topological_order(&self) -> Result<Vec<NodeId>, NtgError> {
+        let existing = self.all_node_ids();
+        let mut in_degree = vec![0usize; self.nodes.len()];
+        for &(_, to) in &self.edges {
+            in_degree[to] += 1;
+        }
+
+        let mut ready: Vec<NodeId> =
+            existing.iter().copied().filter(|&id| in_degree[id] == 0).collect();
+        let mut order = Vec::with_capacity(existing.len());
+
+        while !ready.is_empty() {
+            let id = ready.remove(0);
+            order.push(id);
+            let mut newly_ready = Vec::new();
+            for child in self.children(id) {
+                in_degree[child] -= 1;
+                if in_degree[child] == 0 {
+                    newly_ready.push(child);
+                }
+            }
+            newly_ready.sort_unstable();
+            for child in newly_ready {
+                let pos = ready.partition_point(|&x| x < child);
+                ready.insert(pos, child);
+            }
+        }
+
+        if order.len() != existing.len() {
+            return Err(NtgError::CycleDetected);
+        }
+        Ok(order)
+    }
+
+    /// A minimal, real, deterministic forward pass: visits every node in
+    /// dataflow order and aggregates its `LeafSignal` into a running
+    /// total. This is not full ternary-tensor compute over the graph --
+    /// attaching real ops per node is a separate, larger feature -- it
+    /// is the real scheduling mechanism that compute step will run on.
+    pub fn forward_pass(&self) -> Result<LeafSignal, NtgError> {
+        let order = self.topological_order()?;
+        let mut total = LeafSignal::default();
+        for id in order {
+            total = total.combine(&self.node(id)?.signal);
+        }
+        Ok(total)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ntg::docparse;
 
     #[test]
     fn add_and_fetch_node() {
@@ -106,6 +176,13 @@ mod tests {
         let id = g.add_node(NodeKind::Content, "root");
         assert_eq!(g.node(id).unwrap().label, "root");
         assert_eq!(g.node_count(), 1);
+    }
+
+    #[test]
+    fn add_node_attaches_real_leaf_signal() {
+        let mut g = Graph::new();
+        let id = g.add_node(NodeKind::Content, "Hi, World!");
+        assert_eq!(g.node(id).unwrap().signal, extract_leaf_signal("Hi, World!"));
     }
 
     #[test]
@@ -151,5 +228,49 @@ mod tests {
         let a = g.add_node(NodeKind::Content, "a");
         let b = g.add_node(NodeKind::Content, "b");
         assert!(g.remove_edge(a, b).is_err());
+    }
+
+    #[test]
+    fn topological_order_respects_edges_not_creation_order() {
+        let mut g = Graph::new();
+        let a = g.add_node(NodeKind::Content, "a"); // id 0, created first
+        let b = g.add_node(NodeKind::Content, "b"); // id 1, created second
+        // b has an edge into a, so b must be scheduled first even
+        // though a has the smaller id and was created earlier.
+        g.add_edge(b, a).unwrap();
+        let order = g.topological_order().unwrap();
+        let pos_b = order.iter().position(|&x| x == b).unwrap();
+        let pos_a = order.iter().position(|&x| x == a).unwrap();
+        assert!(pos_b < pos_a);
+    }
+
+    #[test]
+    fn topological_order_detects_cycles() {
+        let mut g = Graph::new();
+        let a = g.add_node(NodeKind::Content, "a");
+        let b = g.add_node(NodeKind::Content, "b");
+        g.add_edge(a, b).unwrap();
+        g.add_edge(b, a).unwrap();
+        assert!(g.topological_order().is_err());
+    }
+
+    #[test]
+    fn forward_pass_visits_every_node_exactly_once() {
+        let mut g = Graph::new();
+        docparse::parse_into(&mut g, "doc", "# A\n- hi\n- Bye!\n");
+        let total = g.forward_pass().unwrap();
+
+        let mut expected = LeafSignal::default();
+        for id in g.all_node_ids() {
+            expected = expected.combine(&g.node(id).unwrap().signal);
+        }
+        assert_eq!(total, expected);
+    }
+
+    #[test]
+    fn forward_pass_is_deterministic_across_repeated_runs() {
+        let mut g = Graph::new();
+        docparse::parse_into(&mut g, "doc", "# A\n- hi\n- Bye!\n");
+        assert_eq!(g.forward_pass().unwrap(), g.forward_pass().unwrap());
     }
 }

@@ -19,6 +19,20 @@ pub struct LeafSignal {
     pub other_count: usize,
 }
 
+impl LeafSignal {
+    /// Combine two signals by summing corresponding counts -- used to
+    /// aggregate a whole graph's signal in `Graph::forward_pass`.
+    pub fn combine(&self, other: &LeafSignal) -> LeafSignal {
+        LeafSignal {
+            uppercase_count: self.uppercase_count + other.uppercase_count,
+            lowercase_count: self.lowercase_count + other.lowercase_count,
+            punctuation_count: self.punctuation_count + other.punctuation_count,
+            whitespace_count: self.whitespace_count + other.whitespace_count,
+            other_count: self.other_count + other.other_count,
+        }
+    }
+}
+
 pub fn extract_leaf_signal(text: &str) -> LeafSignal {
     let mut signal = LeafSignal::default();
     for c in text.chars() {
@@ -55,6 +69,15 @@ mod tests {
     #[test]
     fn empty_string_is_all_zero() {
         assert_eq!(extract_leaf_signal(""), LeafSignal::default());
+    }
+
+    #[test]
+    fn combine_sums_corresponding_counts() {
+        let a = extract_leaf_signal("Hi!");
+        let b = extract_leaf_signal("Bye.");
+        let combined = a.combine(&b);
+        assert_eq!(combined.uppercase_count, a.uppercase_count + b.uppercase_count);
+        assert_eq!(combined.punctuation_count, a.punctuation_count + b.punctuation_count);
     }
 
     #[test]

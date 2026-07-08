@@ -6,6 +6,7 @@ pub enum NtgError {
     InvalidTernaryValue(i8),
     IndexOutOfBounds { index: usize, len: usize },
     EdgeNotFound { from: usize, to: usize },
+    CycleDetected,
 }
 
 impl fmt::Display for NtgError {
@@ -22,6 +23,9 @@ impl fmt::Display for NtgError {
             }
             NtgError::EdgeNotFound { from, to } => {
                 write!(f, "no edge from {from} to {to}")
+            }
+            NtgError::CycleDetected => {
+                write!(f, "cycle detected: graph has no valid topological order")
             }
         }
     }
