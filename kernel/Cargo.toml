@@ -3,6 +3,10 @@ name = "aethyro-ntg-kernel"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+sha2 = "0.10"
+memmap2 = "0.9"
+
 [lib]
 name = "ntg_kernel"
-crate-type = ["cdylib", "rlib"]
+crate_type = ["cdylib", "rlib"]
