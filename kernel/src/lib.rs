@@ -1,7 +1,7 @@
 //! Aethyro NTG (Neural Ternary Graph) Engine -- kernel.
 //!
 //! Phase 1.1 (ternary scalar reference), Phase 1.2 (bit-packed storage
-//! + a safe portable matmul fast-path), and the start of Phase 2/3 are
+//! and a safe portable matmul fast-path), and the start of Phase 2/3 are
 //! implemented: document/path parsing, pure fs-event mutation, a leaf
 //! case/punctuation signal extractor, a dataflow forward pass, graph
 //! fingerprinting, a real SHA256-chained audit ledger. See
