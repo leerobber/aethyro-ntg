@@ -33,7 +33,7 @@ exists for it.
       from an unverified pasted example — fixed, not the implementation)
 - [ ] Record actual measured baseline (op count, wall-time on CI runner)
 
-### 1.2 Bit-packing ✅ implemented (SIMD intrinsics still pending)
+### 1.2 Bit-packing + SIMD Dispatcher ✅ DONE
 - [x] `PackedTernary`: 2 bits/value, 4 values/byte, `Result`-based
 - [x] Tests: roundtrip, density claim (16 values -> 4 bytes, checked not
       asserted), non-multiple-of-4 lengths, out-of-bounds, invalid input
