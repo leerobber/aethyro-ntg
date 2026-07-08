@@ -55,7 +55,7 @@ SIMD/FFI outputs proven bit-identical to the scalar reference, and a real
 measured performance delta recorded (positive or not) before Phase 2
 starts.
 
-## Phase 2 — Graph Structure
+## Phase 2 — Graph Structure (+ SIS front-end, ADR 0003)
 
 - [ ] `kernel/src/ntg/graph.rs`: node/edge representation, `add_node`,
       `remove_node`, `add_edge`, `remove_edge` as first-class operations
@@ -64,9 +64,24 @@ starts.
       time, across repeated runs
 - [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
       ternary computation, to quantify the graph-structure overhead honestly
+- [ ] Typed nodes: at minimum a plain-content type and an execution
+      type (ADR 0003) — the same graph structure used for compute
+      topology also represents parsed documents/paths
+- [ ] Document/path parser: headings/sections/fenced-code-blocks/path
+      segments -> typed graph nodes; containment/reference/execution
+      edges (GraphMD-style — see ADR 0003, LITERATURE.md)
+- [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph
+      geometry fingerprint, materialized only when a leaf is read/executed
+      (ByT5/CANINE + PIXEL-lite — see ADR 0003)
+- [ ] Byte-level cost mitigation (MrT5-style dynamic merging or
+      equivalent) — measured, not assumed to be sufficient
+- [ ] Execution-typed node runs are ledger-logged under the same ADR
+      0002 rails as topology mutation
 
 **Phase 2 exit criteria:** deterministic forward pass proven under test,
-green CI, overhead cost measured and recorded.
+green CI, overhead cost measured and recorded, AND the ADR 0003 items
+above have their own passing tests (typed nodes, doc/path parsing, lazy
+leaf resolution, measured byte-level cost mitigation) before Phase 3 starts.
 
 ## Phase 3 — Self-Modification Engine (gated by ADR 0002)
 

@@ -13,6 +13,7 @@ and update the doc.
 |---|---|---|
 | [0001](0001-vision-and-pivot.md) | Vision: the Aethyro NTG Engine, and why this isn't a vertical bet | Accepted |
 | [0002](0002-safety-rails-for-self-modification.md) | Safety rails for self-modifying graph topology | Accepted, not yet implemented |
+| [0003](0003-sis-frontend.md) | SIS front-end: docs/paths/glyphs into the NTG graph | Accepted (design), not yet implemented |
 
 ## How to add a new one
 
