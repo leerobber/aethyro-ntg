@@ -9,11 +9,23 @@ Any phase below **75%** fails and must **full redo**.
 ## Quick start
 
 ```bash
+# Linux / WSL / Git Bash (LF line endings)
 cd kernel
 cargo run --release --bin ntg_school -- \
   --docs ../docs \
   --out ../docs/schooling/runs \
   --runs 5
+```
+
+**Windows PowerShell** (do not rely on `bash tools/dev.sh` if you see `pipefail` errors — that is usually CRLF or non-bash):
+
+```powershell
+cd ~/aethyro-ntg
+.\tools\dev.ps1 school
+
+# or pure cargo (always works if Rust is installed):
+cd kernel
+cargo run --release --bin ntg_school -- --docs ../docs --out ../docs/schooling/runs --runs 5
 ```
 
 ## Read first
