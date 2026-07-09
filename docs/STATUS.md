@@ -142,9 +142,14 @@ do not start N+1 until N is certified.
 
 **Not claimed:** production mmap ChronosLedger file format parity, multi-agent orchestration, live Reflexive Fitness critics driving topology at scale.
 
-### Phase 4–8 — **NOT STARTED** (Phase 4 **may begin** under gate protocol)
-Training/calibration is next. GPU/WASM/product remain later. Trained PIXEL
-and full AVX-512 intrinsics are re-scoped (Phase 4+/5) with certificates.
+### Phase 4 — **IN PROGRESS** (2026-07-09)
+- ADR 0006 + `ntg/calib` + `phase4_calib` binary
+- Fixtures: **WIN** (+10.7 pp vs majority baseline)
+- Real `docs/`: **NON-WIN** (−2.9 pp; class imbalance) — see EXPERIMENTS.md
+- COMPLETE cert **not** filed yet (hold-out, imbalance, deep dive remaining)
+
+### Phase 5–8 — **NOT STARTED**
+GPU/WASM/product remain later.
 
 ---
 

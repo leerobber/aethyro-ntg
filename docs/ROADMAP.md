@@ -226,17 +226,23 @@ starts.
 
 **Code:** 2,600+ lines | **Tests:** 45+ cases | **Branch:** phase-3-ledger-engine
 
-## Phase 4 — Training / Calibration Loop
+## Phase 4 — Training / Calibration Loop 🔄 IN PROGRESS
 
-- [ ] A real (not synthetic) small-scale training or calibration task to
-      exercise the full stack: ternary core -> graph -> (optionally)
-      bounded self-modification
-- [ ] Report results the way `aetherflux-zero` already does in this
-      founder's portfolio: a real measured win reported as a win, a real
-      non-win reported honestly as a non-win — no exceptions
+**Started 2026-07-09** after Phases 0–3 COMPLETE certificates.  
+**Scope:** [ADR 0006](architecture/0006-phase4-calibration-task.md).
+
+- [x] Real calibration task design (ADR 0006): doc-graph NodeKind classifier
+- [x] Implementation: `ntg/calib/` + `phase4_calib` binary
+- [x] Unit tests (features, fixtures, calibrate, ledger snapshot)
+- [x] End-to-end run on fixtures — **WIN** recorded (EXPERIMENTS.md)
+- [x] End-to-end run on real `docs/` — **NON-WIN** recorded honestly
+- [ ] Hold-out train/test split + class-imbalance handling
+- [ ] Optional topology self-mod under ADR 0002 (still off by default)
+- [ ] `docs/phases/PHASE_4_COMPLETE.md` + deep dive (gate protocol)
 
 **Phase 4 exit criteria:** at least one full end-to-end run against a
-real task, with results recorded regardless of outcome.
+real task, with results recorded regardless of outcome — **partially met**
+(real docs run recorded; COMPLETE cert requires imbalance work + deep dive).
 
 ## Phase 5 — Optimization
 

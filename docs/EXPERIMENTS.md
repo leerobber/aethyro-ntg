@@ -348,3 +348,46 @@ graphs where signal work grows with nodes while topo is O(V+E). This is
 API used for SIS forward_pass.
 
 **Honest non-claim:** not compared to production aethyro.com inference.
+
+## 2026-07-09: Phase 4 calibration — doc-graph NodeKind classifier (ADR 0006)
+
+**Why:** Phase 4 requires a real closed loop: ternary features → score →
+calibrate → measure vs baseline, win or non-win recorded equally.
+
+**Method:** `cargo run --release --bin phase4_calib`  
+Module: `kernel/src/ntg/calib/`. Labels = parser `NodeKind` (Execution vs
+Content). Features = `encode_fixed` + LeafSignal + GlyphFingerprint v0
+folded to length-64 ternary. Model = ternary weights + threshold score.
+Baseline = always Content. Train = 25 epochs ternary perceptron updates.
+
+### Run A — built-in fixtures (3 synthetic docs)
+
+```
+n=28 exec=3 content=25 baseline=0.893 before=0.893 after=1.000 delta=+0.107
+epochs=25 latency_us=17 win=true
+```
+
+**Result: WIN** on fixtures (perfect after accuracy; beats 89.3% majority).
+
+### Run B — real repo `docs/` (20 markdown files)
+
+```
+n=2153 exec=37 content=2116 baseline=0.983 before=0.983 after=0.954 delta=-0.029
+epochs=25 latency_us=1477 win=false
+```
+
+**Result: NON-WIN** on real docs. Extreme class imbalance (~1.7% Execution).
+Calibration *hurt* accuracy vs majority baseline (over-predicting Execution).
+
+**Interpretation:**
+1. Closed loop works end-to-end (parse → features → train → ledger snapshot).
+2. Fixture win does **not** generalize; real corpus is majority-dominated.
+3. Phase 4 must treat imbalance (class weights, threshold search, or
+   balanced sampling) before claiming intelligence gains.
+4. Ledger weight snapshot verified after both runs.
+
+**Follow-ups (still Phase 4, not COMPLETE yet):**
+- Threshold sweep / balanced sampling
+- Hold-out split (train/test)
+- Optional topology self-mod under ADR 0002 (off by default)
+- PHASE_4_COMPLETE.md only after exit criteria + deep dive

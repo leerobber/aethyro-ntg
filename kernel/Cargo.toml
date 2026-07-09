@@ -22,3 +22,7 @@ path = "src/bin/density_bench.rs"
 [[bin]]
 name = "graph_overhead_bench"
 path = "src/bin/graph_overhead_bench.rs"
+
+[[bin]]
+name = "phase4_calib"
+path = "src/bin/phase4_calib.rs"
