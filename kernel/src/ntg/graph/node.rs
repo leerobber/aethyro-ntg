@@ -30,6 +30,12 @@ impl GraphNode {
         Self { id, weights }
     }
 
+    /// Warm-start from a dense ternary weight slice (e.g. CalibModel.weights).
+    /// Phase 5 prep: calib → GraphNode without re-encoding.
+    pub fn from_ternary_weights(id: usize, weights: &[i8]) -> Self {
+        Self::with_weights(id, SparseBitSlicedTernary::from_slice(weights))
+    }
+
     /// Ledgered weight update; may trigger lazy sparse compact.
     pub fn update_weight_and_adapt(
         &mut self,
@@ -74,5 +80,15 @@ mod tests {
         let mut node = GraphNode::new(0, 8);
         let mut ledger = TamperEvidentLedger::new(None).unwrap();
         assert!(node.update_weight_and_adapt(99, 1, &mut ledger).is_err());
+    }
+
+    #[test]
+    fn from_ternary_weights_preserves_nonzero() {
+        let w = vec![1i8, 0, -1, 0, 1];
+        let node = GraphNode::from_ternary_weights(3, &w);
+        assert_eq!(node.id, 3);
+        assert_eq!(node.weights.get(0), 1);
+        assert_eq!(node.weights.get(2), -1);
+        assert_eq!(node.weights.get(4), 1);
     }
 }
