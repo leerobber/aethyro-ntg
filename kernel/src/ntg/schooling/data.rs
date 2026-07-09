@@ -42,14 +42,20 @@ impl SchoolDataRoot {
         })
     }
 
-    /// Load all `.md` under docs/ (depth 2), real files only.
+    /// Load real engineering markdown under docs/ (depth 2).
+    ///
+    /// Excludes `schooling/**` (curriculum + generated runs) so calib/school
+    /// learn from design/ADR/phase certificates — not self-referential school text.
     pub fn load_markdown_corpus(&self) -> Result<Vec<RealDoc>, NtgError> {
         let mut out = Vec::new();
         load_md_recursive(&self.docs_dir, &self.docs_dir, &mut out, 0)?;
+        out.retain(|d| {
+            !d.rel_path.starts_with("schooling/") && !d.rel_path.contains("schooling/")
+        });
         out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
         if out.is_empty() {
             return Err(NtgError::InvalidInput(
-                "no markdown files found under docs/".into(),
+                "no markdown files found under docs/ (after excluding schooling/)".into(),
             ));
         }
         Ok(out)
