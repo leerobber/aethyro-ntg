@@ -20,3 +20,5 @@ pub mod runtime;
 pub mod accel;
 pub mod calib;
 pub mod schooling;
+pub mod observability;
+pub mod genome;

@@ -12,6 +12,7 @@ it in [STATUS.md](../STATUS.md).
 | [0004](0004-phase3-tamper-evident-ledger.md) | Tamper-evident ledger composition | **Accepted + implemented** |
 | [0005](0005-canonical-ternary-storage.md) | Canonical ternary storage types | **Accepted** |
 | [0006](0006-phase4-calibration-task.md) | Phase 4 doc-graph calibration task | **Accepted + implemented** |
+| [0007](0007-observability-genome-prototype.md) | Stats collector + ternary DNA genome prototype | **Accepted (prototype)** |
 
 ## How to add a new ADR
 
