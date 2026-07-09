@@ -11,10 +11,10 @@
 
 | Split | Source |
 |-------|--------|
-| Train | ~80% of live `docs/**/*.md`, **stratified by fenced code** so Execution labels appear in both splits |
+| Train | ~80% of live engineering docs, **stratified by fenced code** so Execution labels appear in both splits |
 | Holdout | ~20% remainder (same stratification) |
 | Labels | Parser `NodeKind` only — structural ground truth |
-| Excluded | `docs/schooling/runs/**` generated notebooks (no train pollution) |
+| Excluded | entire `docs/schooling/**` (curriculum + generated runs — no self-train pollution) |
 
 ## Teaching / learning
 
