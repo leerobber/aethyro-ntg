@@ -24,6 +24,28 @@ jobs:
         working-directory: kernel
         run: cargo test
 
+      - name: phase4 calib smoke (fixtures)
+        working-directory: kernel
+        run: cargo run --release --bin phase4_calib -- --json
+
+      - name: phase4 model roundtrip smoke
+        working-directory: kernel
+        run: |
+          cargo run --release --bin phase4_calib -- \
+            --write-model /tmp/ci_ntg.calib \
+            --write-sparse /tmp/ci_ntg.sparse \
+            --write-report /tmp/ci_ntg.json \
+            --json
+          cargo run --release --bin phase4_calib -- --eval-model /tmp/ci_ntg.calib --json
+          cargo run --release --bin phase4_calib -- \
+            --eval-model /tmp/ci_ntg.calib \
+            --predict 'fn main() {}' --sparse-score
+          test -s /tmp/ci_ntg.calib && test -s /tmp/ci_ntg.sparse && test -s /tmp/ci_ntg.json
+
+      - name: density bench smoke
+        working-directory: kernel
+        run: cargo run --release --bin density_bench
+
       - name: cargo clippy
         working-directory: kernel
         run: cargo clippy -- -D warnings

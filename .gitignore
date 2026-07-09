@@ -13,6 +13,13 @@ target
 # Contains mutation testing data
 **/mutants.out*/
 
+# Local calib artifacts (keep directory via .gitkeep)
+artifacts/models/*
+!artifacts/models/.gitkeep
+
+# Schooling per-run JSON can be large; keep notebooks + latest master
+# (commit MASTER + RUN notebooks for evidence; ignore nothing by default)
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

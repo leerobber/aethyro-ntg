@@ -10,8 +10,8 @@ deployment.
 proof matrix, gaps, and next priorities.  
 → **[docs/ROADMAP.md](docs/ROADMAP.md)** — phased gates.
 
-**As of 2026-07-09:** pre-alpha research kernel, **capability v8**,
-**213** automated tests green (`cargo test` in `kernel/`). Not
+**As of 2026-07-09:** pre-alpha research kernel, **capability v10**,
+Phase 0–5 COMPLETE (calib + precision + GraphNode warm-start path). Not
 benchmarked against production aethyro.com inference; no GTM decision.
 
 ## What's actually new (precise claim)
@@ -39,9 +39,20 @@ those tiers already run — not a new vertical sales motion.
 
 ```bash
 cd kernel
-cargo test          # 213 tests
+cargo test
 cargo build --release
 ```
+
+From repo root (tests + benches + calib + schooling):
+
+```bash
+./tools/dev.sh check    # test + clippy
+./tools/dev.sh model    # train → artifacts/models + eval + predict
+./tools/dev.sh model-ab # A/B two epoch settings
+./tools/dev.sh school   # doctorate study+exam phases 0–5 (75% gate, notebooks)
+```
+
+Schooling notebooks: [docs/schooling/](docs/schooling/) — real data only, fail <75% full redo.
 
 Optional layer ingest contract check:
 
@@ -53,14 +64,17 @@ echo '{"layers":[{"nodes":[{"id":0},{"id":1}]}]}' | python3 tools/ingest.py
 
 | Path | Purpose |
 |------|---------|
-| `kernel/` | Rust crate: ternary core, storage, graph, ledger, mutation, runtime |
+| `kernel/` | Rust crate: ternary core, storage, graph, ledger, mutation, runtime, calib |
 | `tools/ingest.py` | Sequential `GraphNode.id` contract for native forward |
+| `tools/dev.sh` | One-shot test / calib / model / bench workflows |
+| `artifacts/models/` | Local CalibModel dumps (`dev.sh model`; not required in git) |
 | `docs/STATUS.md` | **Where the project is** (read first) |
 | `docs/ROADMAP.md` | Phased build plan and open gates |
+| `docs/PHASE5_PREP.md` | Pre-positioned Phase 5 hooks |
 | `docs/DESIGN.md` | Technical architecture |
 | `docs/LITERATURE.md` | Sourced novelty grounding |
 | `docs/EXPERIMENTS.md` | Measured wins and non-wins |
-| `docs/architecture/` | ADRs 0001–0004 |
+| `docs/architecture/` | ADRs 0001–0006 |
 | `kernel/FFI_*.md`, `TOBL_FFI_REFERENCE.md` | C ABI notes |
 
 ## Implemented stack (summary)
@@ -74,10 +88,10 @@ echo '{"layers":[{"nodes":[{"id":0},{"id":1}]}]}' | python3 tools/ingest.py
 
 ## Explicitly not done
 
-- Honest micro-bench campaign vs scalar (open gate)  
 - Full AVX-512 VPOPCNTDQ kernels (detect yes, full kernels no)  
-- Phase 4 training / calibration on a real task  
-- Product head-to-head vs aethyro.com production inference  
+- GPU/NPU (re-scoped: CPU TOBL 12–20×; revisit at large tensors)  
+- Phase 6 integration / product head-to-head vs aethyro.com  
+- Self-mod enabled by default (stays off)
 - Lazy PIXEL-lite glyph fingerprints (ADR 0003 design only)
 
 ## Engineering principles
