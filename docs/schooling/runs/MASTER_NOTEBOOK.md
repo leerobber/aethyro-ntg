@@ -13,7 +13,7 @@ Professional multi-run learning log for Aethyro NTG kernel phases 0–5.
 ## Corpus manifest (sourced)
 
 ```
-n_docs=31 total_bytes=170662 (real files under docs/)
+n_docs=23 total_bytes=161276 (real files under docs/)
 - DESIGN.md (9590 B)
 - EXPERIMENTS.md (24338 B)
 - LITERATURE.md (7313 B)
@@ -23,7 +23,7 @@ n_docs=31 total_bytes=170662 (real files under docs/)
 - PHASE5_PREP.md (3061 B)
 - PHASE_GATE_PROTOCOL.md (2732 B)
 - ROADMAP.md (16608 B)
-- STATUS.md (14398 B)
+- STATUS.md (14581 B)
 - architecture/0001-vision-and-pivot.md (7752 B)
 - architecture/0002-safety-rails-for-self-modification.md (4932 B)
 - architecture/0003-sis-frontend.md (7602 B)
@@ -37,14 +37,6 @@ n_docs=31 total_bytes=170662 (real files under docs/)
 - phases/PHASE_3_COMPLETE.md (1910 B)
 - phases/PHASE_4_COMPLETE.md (2210 B)
 - phases/PHASE_5_COMPLETE.md (3951 B)
-- schooling/PROTOCOL.md (2519 B)
-- schooling/README.md (1517 B)
-- schooling/curriculum/PHASE_0.md (791 B)
-- schooling/curriculum/PHASE_1.md (1015 B)
-- schooling/curriculum/PHASE_2.md (939 B)
-- schooling/curriculum/PHASE_3.md (724 B)
-- schooling/curriculum/PHASE_4.md (1248 B)
-- schooling/curriculum/PHASE_5.md (816 B)
 ```
 
 ## Aggregate results across campaign runs
@@ -55,8 +47,8 @@ n_docs=31 total_bytes=170662 (real files under docs/)
 | 1 | 5 | 5 | 0 | 100.0% | 100.0% | 100.0% | 1.00 |
 | 2 | 5 | 5 | 0 | 100.0% | 100.0% | 100.0% | 1.00 |
 | 3 | 5 | 5 | 0 | 100.0% | 100.0% | 100.0% | 1.00 |
-| 4 | 5 | 5 | 0 | 76.5% | 76.5% | 76.5% | 1.00 |
-| 5 | 5 | 5 | 0 | 76.7% | 76.7% | 76.7% | 1.00 |
+| 4 | 5 | 5 | 0 | 76.1% | 76.1% | 76.1% | 1.00 |
+| 5 | 5 | 5 | 0 | 75.7% | 75.7% | 75.7% | 1.00 |
 
 ## Master verdict
 
