@@ -10,6 +10,9 @@
 //! not done -- don't assume this comment is up to date, check ROADMAP.md.
 
 pub mod ntg;
+pub mod runtime;
+pub mod storage;
+pub mod kernels;
 
 pub use ntg::chain::{ChainEntry, ChainLog};
 pub use ntg::docparse::parse_into;
@@ -21,6 +24,8 @@ pub use ntg::leafsignal::{extract_leaf_signal, LeafSignal};
 pub use ntg::packed::PackedTernary;
 pub use ntg::pathparse::{find_path, parse_path_into};
 pub use ntg::ternary::{encode, encode_fixed, matmul_scalar, Ternary};
+pub use runtime::{Runtime, Layer, GraphNode};
+pub use storage::sparse_bit_sliced_ternary::{BitSlicedBlock, SparseBitSlicedTernary};
 
 /// Reports whether this build has a working ternary compute path.
 pub fn has_ternary_kernel() -> bool {
@@ -54,7 +59,7 @@ pub fn ternary_capability() -> TernaryCapability {
         fingerprint_supported: true,
         edge_interaction_score_supported: true,
         chain_log_supported: true,
-        version: 7,
+        version: 8,
     }
 }
 
@@ -75,6 +80,6 @@ mod tests {
         assert!(cap.fingerprint_supported);
         assert!(cap.edge_interaction_score_supported);
         assert!(cap.chain_log_supported);
-        assert_eq!(cap.version, 7);
+        assert_eq!(cap.version, 8);
     }
 }
