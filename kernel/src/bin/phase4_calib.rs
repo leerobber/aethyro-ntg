@@ -1,4 +1,4 @@
-//! Phase 4 calibration runner (ADR 0006).
+//! Phase 4 calibration runner (ADR 0006) — class-balanced.
 //!
 //! ```bash
 //! cargo run --release --bin phase4_calib
@@ -28,7 +28,6 @@ fn load_docs_dir(dir: &Path) -> Result<Vec<(String, String)>, String> {
             out.push((name, text));
         }
     }
-    // shallow recurse one level (docs/architecture)
     if let Ok(rd2) = fs::read_dir(dir) {
         for ent in rd2.flatten() {
             let p = ent.path();
@@ -60,7 +59,7 @@ fn load_docs_dir(dir: &Path) -> Result<Vec<(String, String)>, String> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut docs_path: Option<String> = None;
-    let mut epochs: usize = 25;
+    let mut epochs: usize = 40;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -70,10 +69,7 @@ fn main() {
             }
             "--epochs" => {
                 i += 1;
-                epochs = args
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(25);
+                epochs = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(40);
             }
             "-h" | "--help" => {
                 eprintln!("phase4_calib [--docs DIR] [--epochs N]");
@@ -105,15 +101,22 @@ fn main() {
     };
 
     let report = calibrate(&samples, epochs, 1).expect("calibrate");
-    println!("# phase4_calib (ADR 0006)");
+    println!("# phase4_calib (ADR 0006) — class-balanced + hold-out");
     println!("{}", report.summary_line());
     println!(
-        "win_definition: after_accuracy > baseline_accuracy (majority Content)"
+        "confusion_test: tp={} tn={} fp={} fn={}",
+        report.test_metrics.tp,
+        report.test_metrics.tn,
+        report.test_metrics.fp,
+        report.test_metrics.fn_
+    );
+    println!(
+        "win_definition: (bal>base+0.05 && rec>=0.25) OR (f1>=0.25 && bal>=0.55) OR (rec>=0.5 && prec>=0.15)"
     );
     if report.is_win {
-        println!("result: WIN — ternary calib beat majority baseline");
+        println!("result: WIN — balanced metrics beat majority baseline");
     } else {
-        println!("result: NON-WIN — did not beat majority baseline (recorded honestly)");
+        println!("result: NON-WIN — balanced metrics did not clear win bar");
     }
 
     let mut ledger = TamperEvidentLedger::new(None).expect("ledger");

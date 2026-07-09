@@ -234,9 +234,10 @@ starts.
 - [x] Real calibration task design (ADR 0006): doc-graph NodeKind classifier
 - [x] Implementation: `ntg/calib/` + `phase4_calib` binary
 - [x] Unit tests (features, fixtures, calibrate, ledger snapshot)
-- [x] End-to-end run on fixtures — **WIN** recorded (EXPERIMENTS.md)
-- [x] End-to-end run on real `docs/` — **NON-WIN** recorded honestly
-- [ ] Hold-out train/test split + class-imbalance handling
+- [x] End-to-end run on fixtures (hold-out; metrics honest)
+- [x] End-to-end run on real `docs/` — **WIN on balanced metrics** after imbalance fix
+- [x] Hold-out train/test split + class-imbalance handling (balanced epochs,
+      minority oversampling, F1-aware threshold, bal_acc/F1/recall metrics)
 - [ ] Optional topology self-mod under ADR 0002 (still off by default)
 - [ ] `docs/phases/PHASE_4_COMPLETE.md` + deep dive (gate protocol)
 

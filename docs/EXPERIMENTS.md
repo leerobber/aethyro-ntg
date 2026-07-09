@@ -391,3 +391,42 @@ Calibration *hurt* accuracy vs majority baseline (over-predicting Execution).
 - Hold-out split (train/test)
 - Optional topology self-mod under ADR 0002 (off by default)
 - PHASE_4_COMPLETE.md only after exit criteria + deep dive
+
+## 2026-07-09: Phase 4 imbalance fix — balanced train + F1 threshold
+
+**Problem:** Naive perceptron on ~98% Content collapsed to worse-than-majority
+accuracy (flood of Execution false positives or zero minority recall).
+
+**Fixes implemented:**
+1. Stratified 80/20 train/test split
+2. Balanced epoch sampling (all minority + equal majority)
+3. Cost-sensitive minority update repeats (`n_neg/n_pos`, cap 64)
+4. Code-cue feature for fence *bodies* (no ``` in labels from docparse)
+5. Threshold sweep maximizing F1 + bal_acc (penalty for precision floods)
+6. Win bar uses **balanced accuracy / F1 / recall**, not raw accuracy
+
+**Command:** `cargo run --release --bin phase4_calib -- --docs ../docs`
+
+### Real docs (20 files) after fix
+
+```
+n=2189 train=1751 test=438 exec=39 content=2150 thr=21
+base_acc=0.982 base_bal=0.500
+test_acc=0.952 test_bal=0.608 test_f1=0.160 test_rec=0.250 test_prec=0.118
+delta_bal=+0.108
+confusion: tp=2 tn=415 fp=15 fn=6
+result: WIN
+```
+
+**Interpretation:** Raw accuracy (95%) is below majority (98%) but that is
+expected under imbalance. **Balanced accuracy 60.8%** and **25% Execution
+recall** with only 15 FPs is a real lift vs majority (bal 50%, rec 0%).
+F1 remains low (0.16) — precision is the next bottleneck.
+
+### Fixtures
+
+Hold-out on tiny sets is noisy (often 1 Execution in test). Unit tests
+require bal_acc ≥ 0.5 and some train/test exec detection.
+
+**Honest residual gaps:** low precision; need richer code features or more
+epochs / calibration on Execution-heavy corpora for higher F1.

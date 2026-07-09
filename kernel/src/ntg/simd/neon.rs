@@ -93,11 +93,10 @@ pub fn matmul_neon(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(target_arch = "aarch64")]
-    fn neon_matmul_simple() -> Result<(), NtgError> {
+    fn neon_matmul_simple() -> Result<(), super::super::super::error::NtgError> {
+        use super::*;
         let a = vec![1i8, -1, 0, 1];
         let b = vec![1i8, 0, -1, 1];
 
