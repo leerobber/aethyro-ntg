@@ -26,3 +26,7 @@ path = "src/bin/graph_overhead_bench.rs"
 [[bin]]
 name = "phase4_calib"
 path = "src/bin/phase4_calib.rs"
+
+[[bin]]
+name = "ntg_school"
+path = "src/bin/ntg_school.rs"

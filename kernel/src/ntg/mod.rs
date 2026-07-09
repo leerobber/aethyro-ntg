@@ -19,3 +19,4 @@ pub mod storage;
 pub mod runtime;
 pub mod accel;
 pub mod calib;
+pub mod schooling;

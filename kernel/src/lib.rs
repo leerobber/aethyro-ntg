@@ -1,8 +1,7 @@
 //! Aethyro NTG (Neural Ternary Graph) Engine -- kernel.
 //!
-//! Capability version 8: scalar + packed/bit-sliced/sparse storage,
-//! SIMD/TOBL/FFI, graph + SIS front-end, native parallel runtime with
-//! AccelManager, and Phase 3 ledger/self-mod (off by default).
+//! Capability version 10: Phase 0–5 complete — ternary/storage, SIS graph,
+//! ledger/self-mod, calibration, precision+runtime warm-start optimization.
 //!
 //! **Status truth:** repo-root `docs/STATUS.md` and `docs/ROADMAP.md` —
 //! trust those over this comment if they disagree.
@@ -53,6 +52,9 @@ pub struct TernaryCapability {
     pub bit_sliced_supported: bool,
     pub sparse_bit_sliced_supported: bool,
     pub native_parallel_forward_supported: bool,
+    pub phase4_calibration_supported: bool,
+    /// Phase 5: CalibModel → GraphNode warm-start + parallel batch score path.
+    pub phase5_runtime_calib_supported: bool,
     pub version: u32,
 }
 
@@ -72,7 +74,9 @@ pub fn ternary_capability() -> TernaryCapability {
         bit_sliced_supported: true,
         sparse_bit_sliced_supported: true,
         native_parallel_forward_supported: true,
-        version: 8,
+        phase4_calibration_supported: true,
+        phase5_runtime_calib_supported: true,
+        version: 10,
     }
 }
 
@@ -96,6 +100,8 @@ mod tests {
         assert!(cap.bit_sliced_supported);
         assert!(cap.sparse_bit_sliced_supported);
         assert!(cap.native_parallel_forward_supported);
-        assert_eq!(cap.version, 8);
+        assert!(cap.phase4_calibration_supported);
+        assert!(cap.phase5_runtime_calib_supported);
+        assert_eq!(cap.version, 10);
     }
 }
