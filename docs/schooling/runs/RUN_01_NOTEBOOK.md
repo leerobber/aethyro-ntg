@@ -11,8 +11,8 @@
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
@@ -64,7 +64,7 @@ Samples/activities seen: **15**
 | Items passed | 22 / 22 |
 | Score | **100.00%** |
 | Composite | None |
-| Latency µs | 37 |
+| Latency µs | 45 |
 | Verdict | **PASS** |
 
 #### Item results
@@ -100,8 +100,8 @@ Samples/activities seen: **15**
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
@@ -143,7 +143,7 @@ Samples/activities seen: **10**
 | Items passed | 16 / 16 |
 | Score | **100.00%** |
 | Composite | None |
-| Latency µs | 14 |
+| Latency µs | 10 |
 | Verdict | **PASS** |
 
 #### Item results
@@ -173,12 +173,12 @@ Samples/activities seen: **10**
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
-Samples/activities seen: **31**
+Samples/activities seen: **24**
 
 **Taught:**
 
@@ -191,22 +191,15 @@ Samples/activities seen: **31**
 - structure of PHASE5_PREP.md (3061 B) absorbed into graph
 - structure of PHASE_GATE_PROTOCOL.md (2732 B) absorbed into graph
 - structure of ROADMAP.md (16608 B) absorbed into graph
-- structure of STATUS.md (14398 B) absorbed into graph
+- structure of STATUS.md (14581 B) absorbed into graph
 - structure of architecture/0001-vision-and-pivot.md (7752 B) absorbed into graph
 - structure of architecture/0002-safety-rails-for-self-modification.md (4932 B) absorbed into graph
 - structure of architecture/0003-sis-frontend.md (7602 B) absorbed into graph
 - structure of architecture/0004-phase3-tamper-evident-ledger.md (10739 B) absorbed into graph
 - structure of architecture/0005-canonical-ternary-storage.md (1557 B) absorbed into graph
 - structure of architecture/0006-phase4-calibration-task.md (2301 B) absorbed into graph
-- structure of architecture/README.md (1242 B) absorbed into graph
-- structure of phases/PHASE_0_COMPLETE.md (833 B) absorbed into graph
 - structure of phases/PHASE_1_COMPLETE.md (1976 B) absorbed into graph
 - structure of phases/PHASE_2_COMPLETE.md (2247 B) absorbed into graph
-- structure of phases/PHASE_3_COMPLETE.md (1910 B) absorbed into graph
-- structure of phases/PHASE_4_COMPLETE.md (2210 B) absorbed into graph
-- structure of schooling/curriculum/PHASE_0.md (791 B) absorbed into graph
-- structure of schooling/curriculum/PHASE_1.md (1015 B) absorbed into graph
-- structure of schooling/curriculum/PHASE_2.md (939 B) absorbed into graph
 - path graph: kernel/src/ntg/ternary.rs
 - path graph: kernel/src/ntg/graph/mod.rs
 - path graph: kernel/src/bin/phase4_calib.rs
@@ -233,44 +226,36 @@ Samples/activities seen: **31**
 - `parse train architecture/0004-phase3-tamper-evident-ledger.md nodes +132`
 - `parse train architecture/0005-canonical-ternary-storage.md nodes +30`
 - `parse train architecture/0006-phase4-calibration-task.md nodes +47`
-- `parse train architecture/README.md nodes +18`
-- `parse train phases/PHASE_0_COMPLETE.md nodes +23`
 - `parse train phases/PHASE_1_COMPLETE.md nodes +40`
 - `parse train phases/PHASE_2_COMPLETE.md nodes +45`
-- `parse train phases/PHASE_3_COMPLETE.md nodes +43`
-- `parse train phases/PHASE_4_COMPLETE.md nodes +38`
-- `parse train schooling/curriculum/PHASE_0.md nodes +21`
-- `parse train schooling/curriculum/PHASE_1.md nodes +24`
-- `parse train schooling/curriculum/PHASE_2.md nodes +24`
 - `pathparse practice kernel/src/ntg/ternary.rs nodes=5`
 - `pathparse practice kernel/src/ntg/graph/mod.rs nodes=6`
 - `pathparse practice kernel/src/bin/phase4_calib.rs nodes=5`
 - `pathparse practice docs/DESIGN.md nodes=3`
 - `pathparse practice docs/architecture/0001-vision-and-pivot.md nodes=4`
 - `pathparse practice tools/dev.sh nodes=3`
-- `forward_pass practice nodes=2401 edges≈2376`
+- `forward_pass practice nodes=2210 edges≈2192`
 
 ### Advanced exam
 
 | Field | Value |
 |-------|------|
 | Attempt | 1 |
-| Items passed | 19 / 19 |
+| Items passed | 18 / 18 |
 | Score | **100.00%** |
 | Composite | None |
-| Latency µs | 126 |
+| Latency µs | 118 |
 | Verdict | **PASS** |
 
 #### Item results
 
 | ID | Skill | Pass | Detail |
 |----|-------|:----:|--------|
-| `p2_parse_0` | docparse_holdout | Y | parse holdout phases/PHASE_5_COMPLETE.md — nodes=58 exec=3 fence=true |
-| `p2_parse_1` | docparse_holdout | Y | parse holdout schooling/PROTOCOL.md — nodes=41 exec=2 fence=true |
-| `p2_parse_2` | docparse_holdout | Y | parse holdout schooling/README.md — nodes=24 exec=2 fence=true |
-| `p2_parse_3` | docparse_holdout | Y | parse holdout schooling/curriculum/PHASE_3.md — nodes=21 exec=0 fence=false |
-| `p2_parse_4` | docparse_holdout | Y | parse holdout schooling/curriculum/PHASE_4.md — nodes=27 exec=0 fence=false |
-| `p2_parse_5` | docparse_holdout | Y | parse holdout schooling/curriculum/PHASE_5.md — nodes=22 exec=0 fence=false |
+| `p2_parse_0` | docparse_holdout | Y | parse holdout architecture/README.md — nodes=18 exec=0 fence=false |
+| `p2_parse_1` | docparse_holdout | Y | parse holdout phases/PHASE_0_COMPLETE.md — nodes=23 exec=0 fence=false |
+| `p2_parse_2` | docparse_holdout | Y | parse holdout phases/PHASE_3_COMPLETE.md — nodes=43 exec=1 fence=true |
+| `p2_parse_3` | docparse_holdout | Y | parse holdout phases/PHASE_4_COMPLETE.md — nodes=38 exec=2 fence=true |
+| `p2_parse_4` | docparse_holdout | Y | parse holdout phases/PHASE_5_COMPLETE.md — nodes=58 exec=3 fence=true |
 | `p2_path_0` | pathparse | Y | pathparse kernel/src/ntg/ternary.rs — nodes=5 |
 | `p2_path_1` | pathparse | Y | pathparse kernel/src/ntg/graph/mod.rs — nodes=6 |
 | `p2_path_2` | pathparse | Y | pathparse kernel/src/bin/phase4_calib.rs — nodes=5 |
@@ -291,8 +276,8 @@ Samples/activities seen: **31**
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
@@ -347,23 +332,23 @@ Samples/activities seen: **5**
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
-Samples/activities seen: **2401**
+Samples/activities seen: **2210**
 
 **Taught:**
 
-- ternary weights dim=64 nonzero=44
+- ternary weights dim=64 nonzero=37
 - class-balanced NodeKind Execution vs Content on real markdown train split
 - feature schema=1
 
 **Activities:**
 
-- `train_model_full n=2401 epochs=60 thr=5 nonzero=44`
-- `train_set bal=0.551 f1=0.077 rec=0.167 prec=0.050`
+- `train_model_full n=2210 epochs=80 thr=10 nonzero=37`
+- `train_set bal=0.562 f1=0.082 rec=0.200 prec=0.052`
 
 ### Advanced exam
 
@@ -371,20 +356,20 @@ Samples/activities seen: **2401**
 |-------|------|
 | Attempt | 1 |
 | Items passed | 8 / 8 |
-| Score | **76.49%** |
-| Composite | Some(0.7649385452270508) |
-| Latency µs | 428 |
+| Score | **76.05%** |
+| Composite | Some(0.7605015516281128) |
+| Latency µs | 416 |
 | Verdict | **PASS** |
 
 #### Item results
 
 | ID | Skill | Pass | Detail |
 |----|-------|:----:|--------|
-| `p4_code_ranks_above_prose` | score_ranking | Y | code-like body score > prose score — code_score=2 prose_score=-2 thr=5 |
-| `p4_code_label` | predict_execution | Y | code classified Execution or strong ranking margin — pred=false score=2 thr=5 |
-| `p4_prose_label` | predict_content | Y | prose scores as Content (not Execution) — score=-2 |
-| `p4_holdout_generalize` | holdout_generalization | Y | holdout shows real learning (bal/f1/rec-prec criteria; requires exec labels) — bal=0.5499 lift=+0.0499 f1=0.1250 rec=0.1429 prec=0.1111 tp=1 fp=8 fn=6 n_exec=7 |
-| `p4_holdout_has_exec` | holdout_stratification | Y | holdout contains ≥1 Execution label (fence-stratified split) — n_exec_holdout=7 |
+| `p4_code_ranks_above_prose` | score_ranking | Y | code-like body score > prose score — code_score=10 prose_score=9 thr=10 |
+| `p4_code_label` | predict_execution | Y | code classified Execution or ranks above prose by ≥1 — pred=true score=10 thr=10 |
+| `p4_prose_label` | predict_content | Y | prose scores as Content (not Execution) — score=9 |
+| `p4_holdout_generalize` | holdout_generalization | Y | holdout shows real learning vs majority (bal/f1/lift criteria; needs exec labels) — bal=0.5402 lift=+0.0402 f1=0.0909 rec=0.1667 prec=0.0625 tp=1 fp=15 fn=5 n_exec=6 |
+| `p4_holdout_has_exec` | holdout_stratification | Y | holdout contains ≥1 Execution label (fence-stratified split) — n_exec_holdout=6 |
 | `p4_feature_dim` | features | Y | features_from_label len == 64 — len=64 |
 | `p4_schema` | model_schema | Y | feature_schema == 1 — 1 |
 | `p4_wire` | model_persistence | Y | wire roundtrip preserves weights — NTG_CALIB_V1 |
@@ -395,16 +380,16 @@ Samples/activities seen: **2401**
 
 ### Dataset (real)
 
-- **dataset_id:** `docs_corpus_v1_n31_train25_hold6`
-- **source:** real filesystem: ../docs (31 docs)
+- **dataset_id:** `docs_corpus_v1_n23_train18_hold5`
+- **source:** real filesystem: ../docs (23 docs)
 
 ### Teaching / learning (study)
 
-Samples/activities seen: **2401**
+Samples/activities seen: **2210**
 
 **Taught:**
 
-- ternary weights dim=64 nonzero=44
+- ternary weights dim=64 nonzero=37
 - class-balanced NodeKind Execution vs Content on real markdown train split
 - feature schema=1
 - score_via_graph_node production path
@@ -412,9 +397,9 @@ Samples/activities seen: **2401**
 
 **Activities:**
 
-- `train_model_full n=2401 epochs=60 thr=5 nonzero=44`
-- `train_set bal=0.551 f1=0.077 rec=0.167 prec=0.050`
-- `practice path_identity dense=0 graph=0`
+- `train_model_full n=2210 epochs=80 thr=10 nonzero=37`
+- `train_set bal=0.562 f1=0.082 rec=0.200 prec=0.052`
+- `practice path_identity dense=-6 graph=-6`
 - `to_runtime_layer practice ok`
 
 ### Advanced exam
@@ -423,9 +408,9 @@ Samples/activities seen: **2401**
 |-------|------|
 | Attempt | 1 |
 | Items passed | 5 / 6 |
-| Score | **76.66%** |
-| Composite | Some(0.7665898482004803) |
-| Latency µs | 1327 |
+| Score | **75.69%** |
+| Composite | Some(0.7568965236345928) |
+| Latency µs | 1396 |
 | Verdict | **PASS** |
 
 #### Item results
@@ -433,10 +418,10 @@ Samples/activities seen: **2401**
 | ID | Skill | Pass | Detail |
 |----|-------|:----:|--------|
 | `p5_path_identity` | graph_node_path | Y | dense ≡ graph-node score on holdout previews — 32/32 = 1.000 |
-| `p5_sparse_path` | sparse_score | Y | sparse score matches dense — d=-3 s=-3 |
+| `p5_sparse_path` | sparse_score | Y | sparse score matches dense — d=8 s=8 |
 | `p5_batch_parallel` | parallel_batch | Y | batch_predict_parallel ≡ serial — par=[false, false, false, false] ser=[false, false, false, false] |
-| `p5_runtime_layer` | runtime_warmstart | Y | to_runtime_layer succeeds with 1 node — Ok(Runtime { layers: [[GraphNode { id: 0, weights: SparseBitSlicedTernary { blocks: [(0, BitSlicedBlock { pos: 14869767232066995472, neg: 2387604069352089807 })], len: 64, density: 0.6875, last_op_cycles: 0, tombstone_count: 0 } }]], accel_manager: AccelManager { sparse_density_threshold: 0.35, host_path: Avx512Popcnt } }) |
-| `p5_holdout_bal` | precision_calib | N | holdout bal >= 0.55 — bal=0.550 f1=0.125 prec=0.111 rec=0.143 |
+| `p5_runtime_layer` | runtime_warmstart | Y | to_runtime_layer succeeds with 1 node — Ok(Runtime { layers: [[GraphNode { id: 0, weights: SparseBitSlicedTernary { blocks: [(0, BitSlicedBlock { pos: 15081720642068283392, neg: 1008971459283195274 })], len: 64, density: 0.578125, last_op_cycles: 0, tombstone_count: 0 } }]], accel_manager: AccelManager { sparse_density_threshold: 0.35, host_path: Avx512Popcnt } }) |
+| `p5_holdout_bal` | precision_calib | N | holdout bal >= 0.55 — bal=0.540 f1=0.091 prec=0.062 rec=0.167 |
 | `p5_capability` | capability | Y | phase5_runtime_calib_supported — v10 p5=true |
 
 ---
