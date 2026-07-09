@@ -430,3 +430,32 @@ require bal_acc ≥ 0.5 and some train/test exec detection.
 
 **Honest residual gaps:** low precision; need richer code features or more
 epochs / calibration on Execution-heavy corpora for higher F1.
+
+## 2026-07-09: Phase 4 COMPLETE — final calib + self-mod probe
+
+**Command:**
+```bash
+cargo run --release --bin phase4_calib -- --docs ../docs
+cargo run --release --bin phase4_calib -- --docs ../docs --self-mod
+```
+
+### Final real-docs calib (imbalance-aware)
+
+```
+n=2212 train=1770 test=442 exec=40 thr=11
+base_acc=0.982 base_bal=0.500
+test_acc=0.959 test_bal=0.611 test_f1=0.182 test_rec=0.250 test_prec=0.143
+delta_bal=+0.111
+confusion: tp=2 tn=422 fp=12 fn=6
+result: WIN (balanced metrics)
+```
+
+### Self-mod probe
+
+| Mode | Result |
+|------|--------|
+| default (no flag) | disabled, no mutation (ADR 0002 rail 1) |
+| `--self-mod` | AddNode proposed, **rejected** by dual-objective fitness, **ledgered** (id=1), caller graph unchanged |
+
+**Phase 4 exit criteria:** met — real task E2E, win recorded, non-win paths
+honest, optional self-mod off-by-default with ledger when enabled.

@@ -1,7 +1,7 @@
 # 0006: Phase 4 calibration task — doc-graph node kind classifier
 
-**Status:** Accepted / **in progress** (2026-07-09).  
-**Phase:** 4 (Training / Calibration Loop).  
+**Status:** Accepted + **implemented** (2026-07-09).  
+**Phase:** 4 COMPLETE — see `docs/phases/PHASE_4_COMPLETE.md`.  
 **Depends on:** Phases 0–3 COMPLETE certificates.
 
 ## Context

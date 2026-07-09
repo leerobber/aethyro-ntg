@@ -226,24 +226,21 @@ starts.
 
 **Code:** 2,600+ lines | **Tests:** 45+ cases | **Branch:** phase-3-ledger-engine
 
-## Phase 4 — Training / Calibration Loop 🔄 IN PROGRESS
+## Phase 4 — Training / Calibration Loop ✅ COMPLETE
 
-**Started 2026-07-09** after Phases 0–3 COMPLETE certificates.  
+**Completed 2026-07-09.** Certificate: [phases/PHASE_4_COMPLETE.md](phases/PHASE_4_COMPLETE.md).  
 **Scope:** [ADR 0006](architecture/0006-phase4-calibration-task.md).
 
 - [x] Real calibration task design (ADR 0006): doc-graph NodeKind classifier
 - [x] Implementation: `ntg/calib/` + `phase4_calib` binary
-- [x] Unit tests (features, fixtures, calibrate, ledger snapshot)
-- [x] End-to-end run on fixtures (hold-out; metrics honest)
-- [x] End-to-end run on real `docs/` — **WIN on balanced metrics** after imbalance fix
-- [x] Hold-out train/test split + class-imbalance handling (balanced epochs,
-      minority oversampling, F1-aware threshold, bal_acc/F1/recall metrics)
-- [ ] Optional topology self-mod under ADR 0002 (still off by default)
-- [ ] `docs/phases/PHASE_4_COMPLETE.md` + deep dive (gate protocol)
+- [x] Unit tests (features, fixtures, split, metrics, calibrate, ledger, self-mod)
+- [x] End-to-end run on fixtures (hold-out)
+- [x] End-to-end run on real `docs/` — **WIN** on balanced metrics (bal≈0.61)
+- [x] Hold-out + class-imbalance handling
+- [x] Optional topology self-mod probe (`--self-mod`, **off by default**, ledgered)
+- [x] `docs/phases/PHASE_4_COMPLETE.md` + deep dive
 
-**Phase 4 exit criteria:** at least one full end-to-end run against a
-real task, with results recorded regardless of outcome — **partially met**
-(real docs run recorded; COMPLETE cert requires imbalance work + deep dive).
+**Phase 4 exit criteria: MET** — real task E2E + results recorded (win and residual F1 limits honest).
 
 ## Phase 5 — Optimization
 

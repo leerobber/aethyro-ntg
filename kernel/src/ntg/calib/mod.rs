@@ -18,6 +18,8 @@ use crate::ntg::leafsignal::extract_leaf_signal;
 use crate::ntg::ledger::{
     replay::ExecutionTrace, FitnessMeasure, MutationOutcome, TamperEvidentLedger,
 };
+use crate::ntg::mutation::rules::{MutationRule, MutationRuleKind};
+use crate::ntg::mutation::{MutationCycle, SelfModConfig};
 use crate::ntg::ternary::encode_fixed;
 use std::time::Instant;
 
@@ -572,6 +574,111 @@ fn calibrate_in_sample(samples: &[Sample], epochs: usize) -> Result<CalibReport,
     })
 }
 
+/// Report from optional topology self-mod probe (ADR 0002; off by default).
+#[derive(Clone, Debug)]
+pub struct SelfModProbeReport {
+    pub enabled: bool,
+    pub proposed: bool,
+    pub accepted: bool,
+    pub ledger_mutation_id: Option<u64>,
+    pub detail: String,
+}
+
+/// Optional topology self-mod under ADR 0002 rails.
+///
+/// - If `enable` is false (default): no mutation; returns immediately.
+/// - If true: propose `AddNode` on a cloned graph, evaluate dual-objective
+///   fitness, accept or reject, **always ledger-log** the decision.
+///
+/// Does **not** permanently alter the caller's graph unless accepted and
+/// the caller applies the rule (this probe logs only; graph stays intact
+/// for safety in Phase 4 v1).
+pub fn optional_self_mod_probe(
+    graph: &Graph,
+    enable: bool,
+    ledger: &mut TamperEvidentLedger,
+    timestamp: u64,
+) -> Result<SelfModProbeReport, NtgError> {
+    if !enable {
+        return Ok(SelfModProbeReport {
+            enabled: false,
+            proposed: false,
+            accepted: false,
+            ledger_mutation_id: None,
+            detail: "self-mod disabled (ADR 0002 rail 1)".into(),
+        });
+    }
+
+    let mut config = SelfModConfig::default();
+    config.enabled = true;
+    config.cycle_budget_us = 5_000_000; // 5ms budget for probe
+    config.max_mutations_per_cycle = 1;
+
+    // Baseline fitness: use fingerprint cost proxy + node count
+    let pre_fp = graph.fingerprint().unwrap_or(0);
+    let baseline = (100u64, graph.node_count() as u64 * 64);
+
+    let mut cycle = MutationCycle::new(config, baseline)?;
+    let rule = MutationRule {
+        kind: MutationRuleKind::AddNode {
+            label: "phase4_probe_node".into(),
+        },
+    };
+    cycle.propose_mutation(rule)?;
+
+    let ((lat, mem), budget_us) = cycle.evaluate_mutation(graph, 0)?;
+    let accept = cycle.should_accept((lat, mem));
+    if accept {
+        cycle.accept_mutation(0)?;
+    }
+
+    let post_fp = {
+        let mut g2 = graph.clone();
+        // apply for ledger description only
+        let _ = MutationRule {
+            kind: MutationRuleKind::AddNode {
+                label: "phase4_probe_node".into(),
+            },
+        }
+        .apply(&mut g2);
+        g2.fingerprint().unwrap_or(pre_fp)
+    };
+
+    let outcome = if accept {
+        MutationOutcome::Accepted
+    } else {
+        MutationOutcome::RejectedFitnessGate
+    };
+
+    let mid = ledger.log_mutation(
+        format!(
+            "phase4_self_mod_probe accept={} pre_fp={} post_fp={} lat={} mem={} budget_us={}",
+            accept, pre_fp, post_fp, lat, mem, budget_us
+        ),
+        pre_fp,
+        post_fp,
+        FitnessMeasure {
+            latency_us: lat,
+            memory_bytes: mem,
+        },
+        outcome,
+        budget_us.saturating_mul(1000),
+        ExecutionTrace::new(),
+        timestamp,
+    )?;
+
+    Ok(SelfModProbeReport {
+        enabled: true,
+        proposed: true,
+        accepted: accept,
+        ledger_mutation_id: Some(mid),
+        detail: format!(
+            "AddNode probe; accept={} (dual-objective fitness vs baseline)",
+            accept
+        ),
+    })
+}
+
 /// Optional: snapshot weights into ledger for audit.
 pub fn ledger_weight_snapshot(
     ledger: &mut TamperEvidentLedger,
@@ -752,5 +859,29 @@ mod tests {
         let mut ledger = TamperEvidentLedger::new(None).unwrap();
         ledger_weight_snapshot(&mut ledger, &report, 1).unwrap();
         ledger.verify_full_ledger().unwrap();
+    }
+
+    #[test]
+    fn self_mod_probe_disabled_by_default() {
+        let mut g = Graph::new();
+        docparse::parse_into(&mut g, "t", "# A\n```\nfn x(){}\n```\n");
+        let mut ledger = TamperEvidentLedger::new(None).unwrap();
+        let r = optional_self_mod_probe(&g, false, &mut ledger, 1).unwrap();
+        assert!(!r.enabled);
+        assert!(!r.proposed);
+        assert!(r.ledger_mutation_id.is_none());
+    }
+
+    #[test]
+    fn self_mod_probe_enabled_logs_ledger() {
+        let mut g = Graph::new();
+        docparse::parse_into(&mut g, "t", "# A\n```\nfn x(){}\n```\n");
+        let mut ledger = TamperEvidentLedger::new(None).unwrap();
+        let r = optional_self_mod_probe(&g, true, &mut ledger, 1).unwrap();
+        assert!(r.enabled && r.proposed);
+        assert!(r.ledger_mutation_id.is_some());
+        ledger.verify_full_ledger().unwrap();
+        // Graph node count unchanged (probe does not mutate caller graph)
+        assert_eq!(g.node_count(), 3); // root + heading + exec roughly
     }
 }

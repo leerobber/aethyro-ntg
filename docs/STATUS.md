@@ -142,14 +142,13 @@ do not start N+1 until N is certified.
 
 **Not claimed:** production mmap ChronosLedger file format parity, multi-agent orchestration, live Reflexive Fitness critics driving topology at scale.
 
-### Phase 4 — **IN PROGRESS** (imbalance fix applied)
-- ADR 0006 + class-balanced calib (split, minority oversample, thr by F1)
-- Real `docs/`: **WIN** on balanced metrics (bal_acc 0.61 vs 0.50 majority;
-  rec 0.25; 15 FP) — raw acc still below majority (expected under imbalance)
-- COMPLETE cert **not** filed (optional self-mod + deep dive remaining)
+### Phase 4 — **COMPLETE** (2026-07-09)
+- Certificate: `docs/phases/PHASE_4_COMPLETE.md`
+- Real docs WIN: bal_acc≈0.61, rec≈0.25, fp≈12; self-mod off by default
+- Optional `--self-mod` probe ledgered, fitness may reject
 
-### Phase 5–8 — **NOT STARTED**
-GPU/WASM/product remain later.
+### Phase 5–8 — **NOT STARTED** (Phase 5 may begin)
+GPU/optimization, WASM, product head-to-head remain later.
 
 ---
 
