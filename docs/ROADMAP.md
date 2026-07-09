@@ -16,6 +16,16 @@ exists for it.
 **Test baseline (2026-07-09):** 213 automated tests green (`cargo test`
 in `kernel/`). Capability report version **8**.
 
+### Phase 4 entry gate (audited 2026-07-09)
+
+| Gate | Verdict |
+|------|---------|
+| Phases 0–3 **core** (ternary + graph SIS structural + ledger self-mod rails + tests) | **PASS** — ready to **start** Phase 4 |
+| Phases 0–3 **literal every checkbox** (including ADR 0003 stretch) | **FAIL** — open items below are **carry-forward**, not Phase 4 blockers |
+| Full CI on GitHub Actions for tip of `main` | Confirm on repo Actions (local `cargo test` + `cargo build --release` green) |
+
+**Decision:** Phase 4 (training/calibration loop) may begin. Stretch items from Phase 1–2 remain tracked but do not gate the closed-loop task.
+
 ---
 
 ## Phase 0 — Repo setup ✅ done
@@ -194,11 +204,19 @@ starts.
 - [ ] Execution-typed node runs are ledger-logged under the same ADR
       0002 rails as topology mutation — blocked on Phase 3's ledger
 
-**Phase 2 exit criteria:** deterministic forward pass proven under test,
-green CI, overhead cost measured and recorded, AND the ADR 0003 items
-above have their own passing tests (typed nodes ✅, doc parsing ✅, path
-parsing, lazy leaf resolution, measured byte-level cost mitigation) before
-Phase 3 starts.
+**Phase 2 exit criteria (historical wording):** deterministic forward pass
+proven under test, green CI, overhead cost measured and recorded, AND the
+ADR 0003 items above have their own passing tests (typed nodes ✅, doc
+parsing ✅, path parsing, lazy leaf resolution, measured byte-level cost
+mitigation) before Phase 3 starts.
+
+**Phase 2 status (2026-07-09 audit):** **CORE DONE** for Phase 4 entry —
+typed graph, doc/path parse, fs-event pure layer, leaf signal, forward_pass,
+fingerprint, adj_list, GraphNode weights. **STRETCH OPEN** (do not claim
+done): forward-pass overhead bench, lazy glyph/PIXEL-lite, MrT5-style byte
+merge, Execution-node runs auto-ledgered on every execute. Phase 3 already
+shipped with this core/stretch split de facto; formalized here so Phase 4
+is not blocked by ADR 0003 research features.
 
 ## Phase 3 — Self-Modification Engine (gated by ADR 0002) ✅ DONE
 

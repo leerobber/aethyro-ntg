@@ -20,6 +20,16 @@
 
 **Bottom line:** The engine has a real, tested stack from ternary scalar → packed / bit-sliced / sparse storage → graph + SIS front-end → native parallel forward → tamper-evident ledger + mutation budget. What it does **not** have is Phase 4 training, measured production lift, or a single canonical “this is the tensor type for all nodes” consolidation.
 
+### Phase 4 readiness (audited 2026-07-09)
+
+| Question | Answer |
+|----------|--------|
+| Are Phases 0–3 **core** complete enough to start Phase 4? | **YES** |
+| Are Phases 0–3 **every ROADMAP checkbox** complete? | **NO** — stretch/open items remain (see §4 and ROADMAP) |
+| May Phase 4 closed-loop calibration begin? | **YES** — with carry-forward list explicit |
+
+**Do not claim “all phases fully complete.”** Claim: **core foundation green; Phase 4 entry authorized.**
+
 ---
 
 ## 2. Evidence base (this audit)
@@ -131,8 +141,8 @@
 
 **Not claimed:** production mmap ChronosLedger file format parity, multi-agent orchestration, live Reflexive Fitness critics driving topology at scale.
 
-### Phase 4–8 — **NOT STARTED**
-Training/calibration loop, GPU decision, WASM, product vs aethyro.com head-to-head, GTM decision — all future, gated on measurements.
+### Phase 4–8 — **NOT STARTED** (Phase 4 **entry authorized**)
+Training/calibration loop, GPU decision, WASM, product vs aethyro.com head-to-head, GTM decision — all future. Phase 4 may start now on the core stack; Phase 2 stretch (PIXEL-lite, MrT5 merge, graph overhead bench) is carry-forward, not a soft-start for inventing more storage.
 
 ---
 
