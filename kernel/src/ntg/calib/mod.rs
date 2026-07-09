@@ -602,7 +602,36 @@ pub fn train_model_full(samples: &[Sample], epochs: usize) -> Result<CalibModel,
         return Err(NtgError::InvalidInput("no samples for train_model_full".into()));
     }
     let weights = train_balanced(samples, epochs, 1);
-    let threshold = best_threshold(&weights, samples);
+    let mut threshold = best_threshold(&weights, samples);
+    // Re-balance thr if collapsed (precision-only or FLOOD/recall-only).
+    let m0 = class_metrics(&weights, samples, threshold);
+    let collapsed = m0.recall_exec < 0.12
+        || (m0.precision_exec < 0.05 && m0.fp > m0.tp.saturating_mul(10).max(20));
+    if collapsed {
+        let mut best_thr = threshold;
+        let mut best_obj = f32::NEG_INFINITY;
+        for thr in -5i64..=40 {
+            let m = class_metrics(&weights, samples, thr);
+            // Operating region: useful recall without catastrophic flood.
+            if m.recall_exec < 0.12 || m.recall_exec > 0.90 {
+                continue;
+            }
+            if m.precision_exec < 0.05 {
+                continue;
+            }
+            let obj = 4.0 * m.f1_exec
+                + 1.5 * m.balanced_accuracy
+                + 0.75 * m.precision_exec
+                + 0.5 * m.recall_exec;
+            if obj > best_obj {
+                best_obj = obj;
+                best_thr = thr;
+            }
+        }
+        if best_obj > f32::NEG_INFINITY {
+            threshold = best_thr;
+        }
+    }
     let metrics = class_metrics(&weights, samples, threshold);
     let mut model = CalibModel {
         weights: weights.clone(),
