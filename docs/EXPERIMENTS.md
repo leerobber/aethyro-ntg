@@ -459,3 +459,61 @@ result: WIN (balanced metrics)
 
 **Phase 4 exit criteria:** met — real task E2E, win recorded, non-win paths
 honest, optional self-mod off-by-default with ledger when enabled.
+
+## 2026-07-09: Phase 5 optimization — precision + runtime path
+
+**Why:** Phase 5 targets higher F1/precision, CalibModel → GraphNode production
+path, CPU parallel batch scoring, and honest GPU deferral.
+
+**Command:**
+```bash
+cargo run --release --bin phase4_calib -- --docs ../docs
+cargo run --release --bin density_bench
+cargo run --release --bin graph_overhead_bench
+```
+
+### Precision calib (22 docs markdown)
+
+```
+n=2299 train=1839 test=460 exec=45 thr=11
+base_bal=0.500
+test_acc=0.954 test_bal=0.704 test_f1=0.276 test_rec=0.444 test_prec=0.200
+delta_bal=+0.204
+confusion: tp=4 tn=435 fp=16 fn=5
+result: WIN
+path_identity dense==graph_node: true
+```
+
+| Metric | Phase 4 cert | Phase 5 | Δ |
+|--------|-------------:|--------:|--:|
+| test_bal | 0.611 | **0.704** | +0.09 |
+| test_f1 | 0.182 | **0.276** | +0.09 |
+| test_rec | 0.250 | **0.444** | +0.19 |
+| test_prec | 0.143 | **0.200** | +0.06 |
+
+**Changes:** richer code/indent/line-shape cues; flood-reject thr objective
+with rec/prec floors; GraphNode warm-start scoring path.
+
+### density_bench (post Phase 5)
+
+| density | scalar µs | bit-sliced µs | sparse µs | BS/S | SP/S |
+|--------:|----------:|--------------:|----------:|-----:|-----:|
+| 1% | 80.2 | 6.5 | 3.9 | 12.4× | 20.8× |
+| 10% | 80.1 | 6.5 | 13.4 | 12.3× | 6.0× |
+| 50% | 80.1 | 6.5 | 13.4 | 12.3× | 6.0× |
+
+**GPU decision:** **not implemented.** 64-d calib activations do not justify
+device transfer; CPU TOBL already delivers double-digit speedups. Revisit in
+Phase 6+ if production tensor dims grow.
+
+### graph_overhead_bench
+
+```
+graph≈0.20 µs  static≈0.02 µs  ratio≈10×  (same character as Phase 2)
+```
+
+### Self-mod (still off by default)
+
+`--self-mod`: AddNode proposed, rejected by fitness, ledgered.
+
+**Phase 5 exit criteria:** met — see `docs/phases/PHASE_5_COMPLETE.md`.

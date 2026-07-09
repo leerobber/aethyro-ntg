@@ -1,7 +1,7 @@
 # Aethyro NTG Engine — Project Status Report
 
 **As of:** 2026-07-09  
-**Capability version:** 8 (`ternary_capability()`)  
+**Capability version:** 10 (`ternary_capability()` — Phase 5 runtime calib supported)  
 **Build:** `cargo test` + `cargo build --release` green on host  
 **Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md).
 
@@ -18,15 +18,15 @@
 | **Product readiness** | **Not ready** — no production-benchmark win/loss vs aethyro.com inference |
 | **Primary risk** | Docs and marketing language outrunning measurements; dual storage stacks need a clear “canonical path” story |
 
-**Bottom line:** The engine has a real, tested stack from ternary scalar → packed / bit-sliced / sparse storage → graph + SIS front-end → native parallel forward → tamper-evident ledger + mutation budget. What it does **not** have is Phase 4 training, measured production lift, or a single canonical “this is the tensor type for all nodes” consolidation.
+**Bottom line:** The engine has a real, tested stack through **Phase 5**: ternary storage → graph/SIS → ledger/self-mod → calibration → **precision push + CalibModel→GraphNode production scoring**. **Doctorate schooling** (`ntg_school`, [docs/schooling/](schooling/)) runs study+exam on real data for Phases 0–5 with a **75% pass bar** and full redo on fail — multi-run notebooks under `docs/schooling/runs/`. What it does **not** have is Phase 6 integration (WASM/FFI host product path), aethyro.com head-to-head, or GPU (explicitly deferred — CPU TOBL already 12–20×).
 
-### Phase 4 readiness (policy 2026-07-09, certificates filed)
+### Phase gates (policy 2026-07-09, certificates filed)
 
 | Question | Answer |
 |----------|--------|
 | Soft advance without certificates? | **Forbidden** — see [PHASE_GATE_PROTOCOL.md](PHASE_GATE_PROTOCOL.md) |
-| Phases 0–3 COMPLETE certificates? | **YES** — `docs/phases/PHASE_{0,1,2,3}_COMPLETE.md` |
-| May Phase 4 begin? | **YES** — only as a new gated phase with its own tests/docs/COMPLETE at end |
+| Phases 0–5 COMPLETE certificates? | **YES** — `docs/phases/PHASE_{0,1,2,3,4,5}_COMPLETE.md` |
+| May Phase 6 begin? | **YES** — Integration (host load of frozen models + production compare) |
 
 **Process:** after each phase COMPLETE, deep-dive is in the certificate;
 do not start N+1 until N is certified.
@@ -37,10 +37,9 @@ do not start N+1 until N is certified.
 
 | Check | Result |
 |-------|--------|
-| `cargo test` (kernel) | **213** tests: 182 unit + 11 SIMD/FFI + 10 storage + 7 Phase-3 ADR + 3 self-parse — **all pass** |
-| `cargo build --release` | Success (`libntg_kernel.{so,rlib}`, `kernel_host`) |
-| Source lines (kernel `src/`, approx.) | ~6.7k LOC Rust implementation |
-| CI | `.github/workflows/ci.yml`: `cargo test` + `cargo clippy -D warnings` |
+| `cargo test` (kernel) | Unit + integration suites green (capability v9; calib model/sparse/compare tests included) |
+| `cargo build --release` | Success (`libntg_kernel.{so,rlib}`, `phase4_calib`, benches) |
+| CI | `.github/workflows/ci.yml`: test + phase4 smoke + model roundtrip + density_bench + clippy |
 | Host hardware (audit machine) | x86_64 with AVX2 + AVX-512F/VPOPCNTDQ advertised |
 
 ---

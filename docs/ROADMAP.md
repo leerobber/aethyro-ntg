@@ -13,8 +13,8 @@ before starting the next phase. No exceptions, no "we'll fix the tests
 later." A phase that isn't green isn't done, regardless of how much code
 exists for it.
 
-**Test baseline (2026-07-09):** 213 automated tests green (`cargo test`
-in `kernel/`). Capability report version **8**.
+**Test baseline (2026-07-09):** 200+ automated tests green (`cargo test`
+in `kernel/`). Capability report version **10** (Phase 5 optimization complete).
 
 ### Phase gate policy (binding — 2026-07-09)
 
@@ -242,12 +242,23 @@ starts.
 
 **Phase 4 exit criteria: MET** — real task E2E + results recorded (win and residual F1 limits honest).
 
-## Phase 5 — Optimization
+## Phase 5 — Optimization ✅ COMPLETE
 
-- [ ] GPU path (if justified by Phase 1-4 measurements — not assumed
-      necessary in advance)
-- [ ] Parallelization across available CPU cores for the graph forward pass
-- [ ] Re-run Phase 1-4 benchmarks post-optimization; record deltas
+**Completed 2026-07-09.** Certificate: [phases/PHASE_5_COMPLETE.md](phases/PHASE_5_COMPLETE.md).  
+Prep inventory: [PHASE5_PREP.md](PHASE5_PREP.md).
+
+- [x] Precision-oriented calib (code cues + flood-reject thr) — real docs
+      **WIN** bal≈0.70 F1≈0.28 (up from Phase 4 bal≈0.61 F1≈0.18)
+- [x] Drive production path through CalibModel → GraphNode (`score_via_graph_node`,
+      `to_runtime_layer`, path identity tested)
+- [x] CPU parallelization for hot path: `forward_native_parallel` (existing) +
+      `batch_predict_parallel` / `batch_score_parallel`
+- [x] Re-run density_bench + graph_overhead_bench; record in EXPERIMENTS.md
+- [x] GPU path **explicitly re-scoped to Phase 6+** — 64-d calib tensors; CPU
+      TOBL already 12–20× vs scalar; transfer cost not justified yet
+- [x] `docs/phases/PHASE_5_COMPLETE.md`
+
+**Phase 5 exit criteria: MET.**
 
 ## Phase 6 — Integration
 
