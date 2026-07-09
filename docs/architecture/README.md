@@ -1,22 +1,19 @@
 # Architecture Decisions
 
-This folder is the durable record of what's actually been built in this
-repo, why, and what was tried and rejected. Each entry is a lightweight
-ADR (Architecture Decision Record): Status / Context / Decision /
-Consequences.
-
-Written from real code and real test runs, not aspiration — if a
-decision below turns out to be stale, trust the code over this document
-and update the doc.
+Durable record of decisions made from **real code and tests**, not
+aspiration. If code and ADR diverge, fix the ADR (or the code) and note
+it in [STATUS.md](../STATUS.md).
 
 | # | Decision | Status |
-|---|---|---|
-| [0001](0001-vision-and-pivot.md) | Vision: the Aethyro NTG Engine, and why this isn't a vertical bet | Accepted |
-| [0002](0002-safety-rails-for-self-modification.md) | Safety rails for self-modifying graph topology | Accepted, not yet implemented |
-| [0003](0003-sis-frontend.md) | SIS front-end: docs/paths/glyphs into the NTG graph | Accepted (design), not yet implemented |
+|---|----------|--------|
+| [0001](0001-vision-and-pivot.md) | Vision: NTG Engine, not a vertical-first bet | **Accepted** |
+| [0002](0002-safety-rails-for-self-modification.md) | Five safety rails for self-modifying topology | **Accepted + implemented** (Phase 3; tests in `phase3_integration.rs`) |
+| [0003](0003-sis-frontend.md) | SIS front-end: docs / paths / glyphs into the graph | **Accepted; partially implemented** (doc/path/fs-event/leaf signal ✅; lazy glyph / PIXEL-lite ❌) |
+| [0004](0004-phase3-tamper-evident-ledger.md) | Tamper-evident ledger composition | **Accepted + implemented** |
 
-## How to add a new one
+## How to add a new ADR
 
-Copy the format of any existing entry, number it sequentially, and add a
-row to the table above. Prefer documenting a real decision after it's
-been implemented and tested over speculating about one in advance.
+1. Copy the format of an existing entry.  
+2. Number sequentially.  
+3. Prefer documenting **after** implementation and tests.  
+4. Update this table and [STATUS.md](../STATUS.md).

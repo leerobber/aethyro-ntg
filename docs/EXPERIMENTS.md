@@ -251,3 +251,72 @@ relatedness signal probably needs actual learned weights (a real
 Phase 4 training step), not a fixed, untrained byte-correlation --
 which is itself a useful, concrete thing to have ruled out cheaply
 before investing in that larger feature.
+
+## 2026-07-09: density micro-bench — scalar i8 vs bit-sliced vs sparse COO dots
+
+**Why this ran:** docs/STATUS.md P0 gate — record real wall-clock deltas
+(or honest non-wins) before claiming TOBL / sparse speedups. Prior
+architecture prose asserted ~40% cycle reduction; that claim was never
+measured on this kernel.
+
+**Method:** `cargo run --release --bin density_bench` on the audit host
+(x86_64, AVX2 + AVX-512F/VPOPCNTDQ present). Harness:
+`kernel/src/bin/density_bench.rs`.
+
+- Vector length **N = 262,144** ternary elements (4096 × 64-bit chunks)
+- Densities **1%, 10%, 50%** (independent random ±1 with that fraction;
+  zeros elsewhere; same seed family per density)
+- Paths compared:
+  1. **scalar** — dense `i8` product-sum loop
+  2. **bit-sliced** — `BitSlicedTernary::dot_product_parallel` (AND + popcount)
+  3. **sparse** — `SparseBitSlicedTernary::dot_product_sparse` (COO merge-join)
+- Timing: 20 warmup + **200** timed iters; **median** wall-clock µs
+- Correctness: all three paths must return identical integer sums
+
+**Results (median µs, sums matched on all rows):**
+
+| density | scalar µs | bit-sliced µs | sparse µs | speedup BS/S | speedup SP/S | active COO blocks (max of A,B) |
+|--------:|----------:|--------------:|----------:|-------------:|-------------:|-------------------------------:|
+| 1% | 80.69 | 6.53 | 4.00 | **12.35×** | **20.19×** | 1963 |
+| 10% | 80.64 | 6.53 | 13.52 | **12.35×** | **5.97×** | 4091 |
+| 50% | 80.80 | 6.53 | 13.47 | **12.37×** | **6.00×** | 4096 (full) |
+
+JSON (machine-readable):
+```json
+[{"density":0.01,"n":262144,"scalar_us":80.688,"bit_sliced_us":6.531,"sparse_us":3.997,"sparse_blocks":1963,"sums_match":true},{"density":0.1,"n":262144,"scalar_us":80.637,"bit_sliced_us":6.531,"sparse_us":13.517,"sparse_blocks":4091,"sums_match":true},{"density":0.5,"n":262144,"scalar_us":80.799,"bit_sliced_us":6.532,"sparse_us":13.467,"sparse_blocks":4096,"sums_match":true}]
+```
+
+**Interpretation (honest):**
+
+1. **Bit-sliced is a clear win** over naive i8 scalar on this host:
+   ~**12×** across all densities (dense dual-stream always scans all
+   words; cost is density-independent for this N).
+2. **Sparse is the best path only at true sparsity.** At 1% density it
+   beats bit-sliced (~20× vs scalar, ~1.6× vs bit-sliced). At 10% and
+   50% random occupancy, almost every 64-wide chunk is non-empty
+   (4091–4096 / 4096), so sparse loses the “skip zero regions” advantage
+   and is **slower than bit-sliced** while still beating scalar (~6×).
+3. The architecture claim “always use sparse for multi-agent scale” is
+   therefore **conditional**: sparse wins when active chunks << total
+   chunks (structured sparsity / block sparsity), not merely when
+   element density is “medium.” Random independent nonzeros fill chunks
+   fast.
+4. **No claim of 40% cycle reduction** is supported or needed — measured
+   speedups are larger for this micro-op, but they are **dot-product
+   micro-benches**, not end-to-end inference vs aethyro.com, not full
+   matmul, and not AVX-512 intrinsic kernels (portable `count_ones` /
+   software path).
+
+**What was shipped as a direct result:**
+
+- `kernel/src/bin/density_bench.rs` + `[[bin]] density_bench` in Cargo.toml
+- This experiment log entry
+- ROADMAP / STATUS: P0 measurement gate closed for dots; end-to-end
+  still open
+
+**Follow-ups (not done here):**
+
+- Structured block-sparse generators (k contiguous nonzeros per block)
+  to model GraphNode weight patterns more realistically
+- Dense GEMM / `ternary_matmul` wall-clock (chunk gate, not full GEMM)
+- True `_mm512_popcnt_epi64` path vs `u64::count_ones`

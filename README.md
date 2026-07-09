@@ -2,55 +2,89 @@
 
 The Aethyro NTG (Neural Ternary Graph) Engine: a ternary-weight,
 self-evolving-graph-topology inference engine, wrapped in a
-tamper-evident audit ledger, built for provably air-gapped deployment.
+tamper-evident audit ledger, engineered for air-gapped / sovereign edge
+deployment.
 
-**What's actually new here, stated precisely** (see
-[docs/architecture/0001-vision-and-pivot.md](docs/architecture/0001-vision-and-pivot.md)
-and [docs/LITERATURE.md](docs/LITERATURE.md) for the full, sourced
-version): ternary weight quantization is proven, production technology
-(Microsoft's BitNet b1.58). Self-evolving graph topology is an active
-2025-2026 research area, not an invention of this project. What (as of a
-2026-07-07 literature check) doesn't appear to exist yet is the specific
-combination of both, inside a deterministic-replay, ledger-audited safety
-envelope engineered for fully air-gapped/sovereign edge deployment. That
-combination — not any single piece — is this project's bet.
+**Current status (authoritative):**  
+→ **[docs/STATUS.md](docs/STATUS.md)** — full research-agency report, test
+proof matrix, gaps, and next priorities.  
+→ **[docs/ROADMAP.md](docs/ROADMAP.md)** — phased gates.
+
+**As of 2026-07-09:** pre-alpha research kernel, **capability v8**,
+**213** automated tests green (`cargo test` in `kernel/`). Not
+benchmarked against production aethyro.com inference; no GTM decision.
+
+## What's actually new (precise claim)
+
+See [docs/architecture/0001-vision-and-pivot.md](docs/architecture/0001-vision-and-pivot.md)
+and [docs/LITERATURE.md](docs/LITERATURE.md). Ternary quantization and
+dynamic graph topology each have prior art. This project's bet is the
+*combination* of both inside a deterministic-replay, ledger-audited
+safety envelope for fully air-gapped deployment.
 
 ## Why this repo, not Firmament
 
-This supersedes the founder's prior plan
-([leerobber/Firmament](https://github.com/leerobber/Firmament), a
-legal-vertical-first bet) in favor of building the underlying engine
-first and letting the product/vertical decision follow from what it can
-actually do. Firmament's ADRs remain as historical record.
+Supersedes the prior legal-vertical-first plan
+([leerobber/Firmament](https://github.com/leerobber/Firmament)) in favor
+of building the engine first and letting product/vertical follow from
+measured capability.
 
 ## Where this fits with aethyro.com
 
-[aethyro.com](https://aethyro.com) is a live product today (Personal,
-CPA, Dev, Research tiers, real paying customers; Legal/Healthcare are
-waitlist-only, no code yet). This engine's first real target is those
-existing tiers — a memory/compute efficiency upgrade on hardware they
-already run on — not a new vertical's sales motion. See
-[docs/DESIGN.md](docs/DESIGN.md) for how that fits together.
+[aethyro.com](https://aethyro.com) is live (Personal, CPA, Dev, Research).
+This engine's first intended target is an efficiency upgrade on hardware
+those tiers already run — not a new vertical sales motion.
 
-## Status
+## Quick start
 
-Pre-alpha. Phase 1.1 (ternary scalar reference) is implemented — see
-[docs/ROADMAP.md](docs/ROADMAP.md) for the full phased build plan, gates,
-and current status. Nothing here is benchmarked against production
-inference yet; no product or go-to-market decision has been made.
+```bash
+cd kernel
+cargo test          # 213 tests
+cargo build --release
+```
 
-## Structure
+Optional layer ingest contract check:
 
-- `kernel/` — Rust ternary tensor / graph / self-modification engine.
-- `docs/architecture/` — ADRs: what's decided, why, and what was rejected.
-- `docs/DESIGN.md` — technical architecture.
-- `docs/ROADMAP.md` — phased build plan with gates and to-do checklists.
-- `docs/LITERATURE.md` — sourced grounding for every novelty claim made
-  anywhere in this repo.
-- `docs/EXPERIMENTS.md` — real, measured experiments, wins and
-  non-wins alike (e.g. why a naive ternary-matmul "edge interaction
-  score" doesn't work, diagnosed, not just abandoned).
+```bash
+echo '{"layers":[{"nodes":[{"id":0},{"id":1}]}]}' | python3 tools/ingest.py
+```
+
+## Repository layout
+
+| Path | Purpose |
+|------|---------|
+| `kernel/` | Rust crate: ternary core, storage, graph, ledger, mutation, runtime |
+| `tools/ingest.py` | Sequential `GraphNode.id` contract for native forward |
+| `docs/STATUS.md` | **Where the project is** (read first) |
+| `docs/ROADMAP.md` | Phased build plan and open gates |
+| `docs/DESIGN.md` | Technical architecture |
+| `docs/LITERATURE.md` | Sourced novelty grounding |
+| `docs/EXPERIMENTS.md` | Measured wins and non-wins |
+| `docs/architecture/` | ADRs 0001–0004 |
+| `kernel/FFI_*.md`, `TOBL_FFI_REFERENCE.md` | C ABI notes |
+
+## Implemented stack (summary)
+
+1. **Ternary core** — scalar golden `matmul_scalar`, encoding  
+2. **Storage** — packed 2-bit, dual-stream bit-sliced, sparse COO  
+3. **SIMD / TOBL / FFI** — runtime dispatch, C ABI, OpStats  
+4. **Graph + SIS** — topology, doc/path parse, fs-event pure layer, adj_list  
+5. **Native runtime** — `forward_native_parallel` + density-based `AccelManager`  
+6. **Ledger + self-mod** — SHA-256 chain, budgets, fitness, **off by default**
+
+## Explicitly not done
+
+- Honest micro-bench campaign vs scalar (open gate)  
+- Full AVX-512 VPOPCNTDQ kernels (detect yes, full kernels no)  
+- Phase 4 training / calibration on a real task  
+- Product head-to-head vs aethyro.com production inference  
+- Lazy PIXEL-lite glyph fingerprints (ADR 0003 design only)
 
 ## Engineering principles
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Rule: **measure, don't assume**;
+docs and CI green before calling a phase done.
+
+## License
+
+Proprietary — see [LICENSE](LICENSE).

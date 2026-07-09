@@ -1,15 +1,20 @@
 # Aethyro NTG Engine — build roadmap
 
+**Live status snapshot:** [STATUS.md](STATUS.md) (2026-07-09 audit).  
+This file is the phase checklist; STATUS is the research-agency report.
+
 See [DESIGN.md](DESIGN.md) for the architecture these phases build, and
 [ADR 0001](architecture/0001-vision-and-pivot.md) for why there's no
 fixed calendar here — phases are gated on real green CI and real
-measurements, not dates. T-shirt sizes below are rough estimates for
-planning, not commitments.
+measurements, not dates.
 
 **Non-negotiable rule across every phase:** docs updated + full CI green
 before starting the next phase. No exceptions, no "we'll fix the tests
 later." A phase that isn't green isn't done, regardless of how much code
 exists for it.
+
+**Test baseline (2026-07-09):** 213 automated tests green (`cargo test`
+in `kernel/`). Capability report version **8**.
 
 ---
 
@@ -33,39 +38,52 @@ exists for it.
       from an unverified pasted example — fixed, not the implementation)
 - [ ] Record actual measured baseline (op count, wall-time on CI runner)
 
-### 1.2 Bit-packing + SIMD Dispatcher ✅ DONE
-- [x] `PackedTernary`: 2 bits/value, 4 values/byte, `Result`-based
-- [x] Tests: roundtrip, density claim (16 values -> 4 bytes, checked not
-      asserted), non-multiple-of-4 lengths, out-of-bounds, invalid input
-- [ ] `kernel/src/ntg/simd/mod.rs` — runtime feature-detected dispatch
-      (`is_x86_feature_detected!`) over `PackedTernary`, AVX2 + NEON
-      paths, always falling back to the scalar path. **Not done yet** —
-      bit-packing alone isn't "SIMD," it's the storage format SIMD would
-      operate on. Do not claim this item done until real intrinsics land.
-- [ ] Test requirement: SIMD output must be bit-identical to the 1.1
-      scalar reference on every existing test case, not just "close"
-- [ ] Benchmark vs. 1.1 scalar baseline; record the real delta (or the
-      honest absence of one) in this file
+### 1.2 Bit-packing + SIMD + sparse TOBL ✅ DONE (perf measurement open)
+- [x] `PackedTernary` (early `packed.rs` + storage `packed_ternary.rs`)
+- [x] Tests: roundtrip, density, bounds, invalid input
+- [x] Runtime feature-detected SIMD dispatch (`simd/`) + TOBL paths;
+      scalar bit-identity enforced in tests
+- [x] **BitSlicedTernary** — dual-stream pos/neg, 64-wide popcount dot
+- [x] **SparseBitSlicedTernary** — flat COO, tombstones, ledgered compact
+- [x] `ternary_matmul` + `sparse_residual_add` (chunk merge-join)
+- [x] `Runtime::forward_native_parallel` + `AccelManager` density select
+- [x] `GraphNode` weighted nodes (`graph/node.rs`)
+- [x] `tools/ingest.py` sequential layer node-ID contract
+- [x] **P0:** Micro-bench vs scalar i8 dots; recorded in EXPERIMENTS.md
+      (2026-07-09): bit-sliced ~12×; sparse best at 1% density (~20×);
+      sparse loses to bit-sliced at 10–50% *random* chunk fill — see
+      `cargo run --release --bin density_bench`
+- [ ] AVX-512 VPOPCNTDQ multi-block kernels (host detect exists; full kernels open)
+- [ ] NEON full path (stub / scalar fallback today)
+- [ ] Canonical-storage ADR (resolve dual PackedTernary modules;
+      interim: naming note in `ntg/storage/mod.rs`)
 
-### 1.3 FFI + observability
-- [ ] `#[no_mangle] extern "C"` surface for orchestrator integration
-- [ ] `Stats` struct (op count, timing) feeding future ledger ingestion
-- [ ] Memory-safety review of the FFI boundary specifically (this is
-      where `unsafe` first enters the codebase — treat it accordingly)
-- [ ] Integration test calling the FFI surface from a non-Rust caller
+### 1.3 FFI + observability ✅ DONE
+- [x] `#[no_mangle] extern "C"` surface for orchestrator integration (ntg_matmul_ffi)
+- [x] `Stats` struct (op count, timing) feeding future ledger ingestion (OpStats)
+- [x] Memory-safety review of the FFI boundary (all pointer validation, no panics)
+- [x] Integration test calling the FFI surface (phase1_2_3_simd_ffi.rs)
+- [x] **PackedTernary storage layer** — 2-bit ternary encoding, cache-aligned
+- [x] **TOBL kernel dispatch** — runtime-selected dot-product (AVX2/NEON/Scalar)
+- [x] **FFI TOBL extension** — C interface for PackedTernary operations (tobl_ffi.rs)
+- [x] **Observability hooks** — density metric + cycle tracking for Phase 3+ integration
 
 **Phase 1 exit criteria:** scalar, SIMD, and FFI paths all green in CI,
-SIMD/FFI outputs proven bit-identical to the scalar reference, and a real
+SIMD/FFI outputs proven bit-identical to the scalar reference (see
+[PHASE1_2_3_IMPLEMENTATION.md](PHASE1_2_3_IMPLEMENTATION.md) for test results)
 measured performance delta recorded (positive or not) before Phase 2
 starts.
 
 ## Phase 2 — Graph Structure (+ SIS front-end, ADR 0003)
 
-- [x] `kernel/src/ntg/graph.rs`: node/edge representation, `add_node`,
+- [x] `kernel/src/ntg/graph/`: node/edge representation, `add_node`,
       `remove_node`, `add_edge`, `remove_edge` as first-class operations
+- [x] Adjacency list (`adj_list`) for O(degree) `children()`; flat
+      `edges` retained for serialization / audit
 - [x] Deterministic forward iteration order (`children()` is
       insertion-ordered) — proven under test
 - [x] Typed nodes: `NodeKind::Content` / `NodeKind::Execution` (ADR 0003)
+- [x] Weighted runtime nodes: `GraphNode { id, weights }`
 - [x] Document structure parser (`docparse.rs`): headings (nested by
       level), bullets, numbered items, fenced code blocks (->
       `Execution` nodes) — GraphMD-style structural parsing, tested
@@ -114,13 +132,10 @@ starts.
       `std`'s non-cryptographic `DefaultHasher` for now (same honest
       caveat as `Graph::fingerprint`) — a real crypto hash is a
       dependency decision for whoever wires up the full Phase 3 ledger.
-- [ ] Full ledger module — still not built this pass. What Phase 3
-      actually needs to combine: ChronosLedger's state-slot model
-      (port/adapt, real reuse), LexGenSeal-style per-record signing
-      (real reuse), and `ChainLog` (done above). Rule-based mutation
-      proposers, fitness evaluation, and rollback (ADR 0002 rules 2-4)
-      still need designing against a real self-modification workflow,
-      not assumed in advance.
+- [x] Full ledger module — **completed in Phase 3** (`ntg/ledger/`):
+      CryptoChainLog (SHA-256), SignedEntry, StateSlotStore, ExecutionTrace,
+      TamperEvidentLedger. (Non-crypto `ChainLog` in `chain.rs` remains for
+      change-detection-style use; crypto path is the ledger.)
 - [x] Actual "forward pass" over the graph (`Graph::forward_pass`): a
       real Kahn's-algorithm `topological_order` (dataflow-ordered
       execution — a node runs only once every node with an edge into it

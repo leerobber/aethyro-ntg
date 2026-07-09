@@ -15,29 +15,37 @@ for current status, don't assume this document describes shipped code.
 │  Personal / CPA / Dev / Research tiers + Legal/Healthcare │
 │  (waitlist-only today)                                    │
 └───────────────────────┬───────────────────────────────────┘
-                         │ FFI / C ABI (Phase 1.3)
+                         │ FFI / C ABI (Phase 1.3) + tools/ingest.py
 ┌───────────────────────┴───────────────────────────────────┐
-│  Self-Modification Engine (Phase 3, gated by ADR 0002)    │
-│  - rule-based topology mutation proposals                │
-│  - fitness evaluation against real measured metrics       │
-│  - accept/rollback, ledger-logged                         │
+│  Native Runtime (implemented)                             │
+│  - Runtime::forward_native_parallel + AccelManager        │
+│  - GraphNode.weights: SparseBitSlicedTernary              │
+└───────────────────────┬───────────────────────────────────┘
+┌───────────────────────┴───────────────────────────────────┐
+│  Self-Modification Engine (Phase 3, ADR 0002) — OFF default│
+│  - rule-based topology mutation proposals                 │
+│  - fitness (latency + memory) + budget + rollback         │
+│  - accept/reject ledger-logged                            │
 └───────────────────────┬───────────────────────────────────┘
 ┌───────────────────────┴───────────────────────────────────┐
 │  Graph Structure (Phase 2)                                │
-│  - nodes (compute units) + edges (data flow)              │
-│  - dynamic topology: add/remove node/edge                 │
-│  - forward pass over the current topology                 │
+│  - structural Node + edges + adj_list                     │
+│  - docparse / pathparse / fsevents / leafsignal           │
+│  - Graph::forward_pass (LeafSignal aggregate)             │
 └───────────────────────┬───────────────────────────────────┘
 ┌───────────────────────┴───────────────────────────────────┐
-│  Ternary Tensor Core (Phase 1: 1.1 scalar → 1.2 SIMD)     │
-│  - encode(f32[]) -> Ternary[] (absmean threshold)         │
-│  - matmul over {-1,0,+1}, bit-packed storage (1.2+)       │
-│  - pure, deterministic, no unsafe (v1)                     │
+│  Ternary storage + compute (Phase 1)                      │
+│  - scalar golden matmul_scalar                            │
+│  - PackedTernary / BitSliced / SparseBitSliced            │
+│  - SIMD dispatcher + TOBL FFI                             │
 └─────────────────────────────────────────────────────────┘
         │
-        └── Audit Ledger (ChronosLedger state + LexGenSeal signing + ChainLog, Phase 3)
-            tamper-evident, hash-chained, mmap binary format
+        └── TamperEvidentLedger (Phase 3)
+            SHA-256 chain + SignedEntry + StateSlotStore + ExecutionTrace
+            (mmap file format / full ChronosLedger parity still optional)
 ```
+
+**Current implementation truth:** see [STATUS.md](STATUS.md).
 
 ## Ternary Tensor Core (Phase 1)
 
