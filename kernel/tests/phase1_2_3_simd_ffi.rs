@@ -48,17 +48,11 @@ fn test_simd_bit_parity_simple() -> Result<(), NtgError> {
 /// Test 3: Larger matrix test for SIMD paths
 #[test]
 fn test_simd_bit_parity_large() -> Result<(), NtgError> {
-    // 50x50 matrix
-    let a = vec![
-        1i8, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, 1,
-        -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1;
-        50 * 50
-    ];
-    let b = vec![
-        0i8, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 0,
-        1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0;
-        50 * 50
-    ];
+    // 50x50 matrix filled from a repeating ternary pattern
+    let a_pat = [1i8, -1, 0, 1, -1, 0, 1, -1, 0, 1];
+    let b_pat = [0i8, 1, -1, 0, 1, -1, 0, 1, -1, 0];
+    let a: Vec<i8> = a_pat.iter().copied().cycle().take(50 * 50).collect();
+    let b: Vec<i8> = b_pat.iter().copied().cycle().take(50 * 50).collect();
 
     let scalar_result = matmul_scalar(&a, &b, 50, 50, 50)?;
     let auto_result = matmul_auto(&a, &b, 50, 50, 50)?;

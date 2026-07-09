@@ -8,11 +8,11 @@
 
 pub mod stats;
 pub mod bindings;
+pub mod tobl_ffi;
 
 pub use stats::OpStats;
 
 use crate::ntg::simd::get_dispatcher;
-use crate::ntg::error::NtgError;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Global operation counter for observability
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn ffi_counter_increments() {
-        let before = get_op_count();
+        let _before = get_op_count();
         ntg_reset_op_count();
         assert_eq!(get_op_count(), 0);
         // Would need to actually call ntg_matmul_ffi to increment
@@ -130,19 +130,18 @@ mod tests {
 
     #[test]
     fn ffi_null_pointers_rejected() {
-        let result = unsafe {
-            ntg_matmul_ffi(
-                std::ptr::null(),  // null a
-                2,
-                2,
-                std::ptr::null(),  // null b
-                2,
-                2,
-                std::ptr::null_mut(),  // null out
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(result, -1);  // EINVAL
+        // C ABI entry points are safe to call; nulls are validated before use.
+        let result = ntg_matmul_ffi(
+            std::ptr::null(), // null a
+            2,
+            2,
+            std::ptr::null(), // null b
+            2,
+            2,
+            std::ptr::null_mut(), // null out
+            std::ptr::null_mut(),
+        );
+        assert_eq!(result, -1); // EINVAL
     }
 
     #[test]
@@ -151,18 +150,16 @@ mod tests {
         let b = vec![1i8; 6];
         let mut out = vec![0.0f32; 4];
 
-        let result = unsafe {
-            ntg_matmul_ffi(
-                a.as_ptr(),
-                2,
-                2,
-                b.as_ptr(),
-                3,  // Doesn't match k=2
-                2,
-                out.as_mut_ptr(),
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(result, -1);  // EINVAL
+        let result = ntg_matmul_ffi(
+            a.as_ptr(),
+            2,
+            2,
+            b.as_ptr(),
+            3, // Doesn't match k=2
+            2,
+            out.as_mut_ptr(),
+            std::ptr::null_mut(),
+        );
+        assert_eq!(result, -1); // EINVAL
     }
 }

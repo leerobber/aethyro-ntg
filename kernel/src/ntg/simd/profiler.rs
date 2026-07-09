@@ -46,7 +46,7 @@ pub fn profile_simd_path(path: SIMDPath, test_size: usize) -> Result<ProfileResu
 /// Returns (latency_us, throughput_ops_per_sec).
 pub fn benchmark_matmul<F>(
     f: F,
-    matrix_size: usize,
+    _matrix_size: usize,
     runs: usize,
 ) -> (f64, f64)
 where
@@ -58,13 +58,14 @@ where
         let start = Instant::now();
         let _ = f();
         let elapsed = start.elapsed();
-        latencies.push(elapsed.as_micros() as f64);
+        // Sub-microsecond resolution so tiny closures don't report 0.0 µs
+        latencies.push(elapsed.as_secs_f64() * 1_000_000.0);
     }
 
     latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    // Return median latency
-    let median_latency = latencies[latencies.len() / 2];
+    // Return median latency (floor at epsilon to keep throughput finite)
+    let median_latency = latencies[latencies.len() / 2].max(f64::EPSILON);
 
     // Compute throughput (matrix multiplications per second)
     let throughput = 1_000_000.0 / median_latency;

@@ -15,7 +15,7 @@ pub mod budget;
 
 use super::error::NtgError;
 use super::graph::Graph;
-use rules::{MutationRule, MutationRuleKind};
+use rules::MutationRule;
 use evaluator::FitnessEvaluator;
 use budget::BudgetTracker;
 
@@ -70,9 +70,10 @@ impl MutationCycle {
             ));
         }
 
+        let cycle_budget_us = config.cycle_budget_us;
         Ok(Self {
             config,
-            budget: BudgetTracker::new(config.cycle_budget_us),
+            budget: BudgetTracker::new(cycle_budget_us),
             fitness_evaluator: FitnessEvaluator::new(),
             mutations_proposed: Vec::new(),
             mutations_accepted: Vec::new(),
@@ -170,6 +171,7 @@ impl MutationCycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rules::MutationRuleKind;
 
     #[test]
     fn default_config_is_disabled() {

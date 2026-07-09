@@ -44,12 +44,13 @@ impl StateSlot {
     }
 
     pub fn from_bytes(bytes: &[u8; Self::SIZE_BYTES]) -> Result<Self, NtgError> {
-        let agent_id = u32::from_le_bytes(bytes[0..4].try_into()?);
-        let desires = i32::from_le_bytes(bytes[4..8].try_into()?) as i32;
-        let fitness_int = u64::from_le_bytes(bytes[8..16].try_into()?);
-        let parent_offset = u64::from_le_bytes(bytes[16..24].try_into()?);
-        let generation = u32::from_le_bytes(bytes[24..28].try_into()?);
-        let timestamp = u64::from_le_bytes(bytes[28..36].try_into()?);
+        // Fixed-width slices; try_into is infallible for these lengths.
+        let agent_id = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let desires = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let fitness_int = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+        let parent_offset = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        let generation = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
+        let timestamp = u64::from_le_bytes(bytes[28..36].try_into().unwrap());
 
         Ok(Self {
             agent_id,
@@ -64,6 +65,7 @@ impl StateSlot {
 
 /// State slot store: append-only, in-memory simulation of mmap state store.
 /// Phase 3 uses in-memory; Phase 3.1+ can mmap to a real file.
+#[derive(Clone, Debug)]
 pub struct StateSlotStore {
     /// Slots in append order
     slots: Vec<StateSlot>,
@@ -87,11 +89,12 @@ impl StateSlotStore {
     pub fn write_slot(&mut self, slot: StateSlot) -> Result<usize, NtgError> {
         let offset = self.slots.len();
 
-        // For lineage: find the previous version of this agent's state
+        // For lineage: find the previous version of this agent's state.
+        // parent_offset is 1-based (prev_idx + 1) so 0 stays reserved for genesis.
+        // (0 as a raw index would collide with the first slot.)
         let corrected_slot = if let Some(&prev_idx) = self.agent_latest.get(&slot.agent_id) {
-            // Link to the previous slot
             StateSlot {
-                parent_offset: prev_idx as u64,
+                parent_offset: (prev_idx as u64) + 1,
                 generation: slot.generation,
                 ..slot
             }
@@ -123,7 +126,7 @@ impl StateSlotStore {
     /// Trace the lineage of an agent: walk backwards via parent_offset.
     pub fn lineage(&self, agent_id: u32) -> Result<Vec<StateSlot>, NtgError> {
         let mut lineage = Vec::new();
-        let mut current_idx = self
+        let mut current_idx = *self
             .agent_latest
             .get(&agent_id)
             .ok_or(NtgError::InvalidInput(format!(
@@ -132,7 +135,7 @@ impl StateSlotStore {
             )))?;
 
         loop {
-            let slot = self.slots[*current_idx];
+            let slot = self.slots[current_idx];
             lineage.push(slot);
 
             if slot.parent_offset == 0 {
@@ -140,8 +143,9 @@ impl StateSlotStore {
                 break;
             }
 
-            current_idx = &(slot.parent_offset as usize);
-            if *current_idx >= self.slots.len() {
+            // Decode 1-based parent pointer
+            current_idx = (slot.parent_offset - 1) as usize;
+            if current_idx >= self.slots.len() {
                 return Err(NtgError::InvalidInput(format!(
                     "Lineage pointer out of bounds: {} >= {}",
                     current_idx,
@@ -157,11 +161,14 @@ impl StateSlotStore {
     /// Verify that all parent_offset pointers are valid (lineage integrity).
     pub fn verify_lineage(&self) -> Result<(), String> {
         for (idx, slot) in self.slots.iter().enumerate() {
-            if slot.parent_offset > 0 && slot.parent_offset as usize >= idx {
-                return Err(format!(
-                    "Slot {} has invalid parent_offset: {}",
-                    idx, slot.parent_offset
-                ));
+            if slot.parent_offset > 0 {
+                let parent = (slot.parent_offset - 1) as usize;
+                if parent >= idx {
+                    return Err(format!(
+                        "Slot {} has invalid parent_offset: {}",
+                        idx, slot.parent_offset
+                    ));
+                }
             }
         }
         Ok(())
@@ -315,12 +322,12 @@ mod tests {
             timestamp: 1000,
         })?;
 
-        // Manually inject a bad slot (this shouldn't happen in normal use)
+        // Manually inject a bad slot (1-based parent that points past current idx)
         store.slots.push(StateSlot {
             agent_id: 2,
             desires: 60,
             fitness_int: 3100,
-            parent_offset: 999, // Invalid: points beyond slot array
+            parent_offset: 999, // Invalid: decoded parent >= idx
             generation: 1,
             timestamp: 1100,
         });

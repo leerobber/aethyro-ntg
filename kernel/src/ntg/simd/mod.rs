@@ -24,15 +24,16 @@ static DISPATCHER_INSTANCE: std::sync::OnceLock<SIMDDispatcher> = std::sync::Onc
 
 /// Get or initialize the global SIMD dispatcher.
 pub fn get_dispatcher() -> Result<&'static SIMDDispatcher, NtgError> {
-    match DISPATCHER_INSTANCE.get_or_try_init(|| {
-        SIMDDispatcher::new()
-    }) {
-        Ok(d) => Ok(d),
-        Err(e) => Err(NtgError::InvalidInput(format!(
-            "Failed to initialize SIMD dispatcher: {}",
-            e
-        ))),
+    // OnceLock::get_or_try_init is still unstable; init once and map errors.
+    if DISPATCHER_INSTANCE.get().is_none() {
+        let dispatcher = SIMDDispatcher::new().map_err(|e| {
+            NtgError::InvalidInput(format!("Failed to initialize SIMD dispatcher: {}", e))
+        })?;
+        let _ = DISPATCHER_INSTANCE.set(dispatcher);
     }
+    Ok(DISPATCHER_INSTANCE
+        .get()
+        .expect("SIMD dispatcher set above"))
 }
 
 /// High-level matmul that uses optimal SIMD path for this hardware.

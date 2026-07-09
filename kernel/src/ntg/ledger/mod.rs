@@ -27,7 +27,7 @@ use self::chain::CryptoChainLog;
 use super::error::NtgError;
 use signed_entry::SignedEntry;
 use stateblots::StateSlotStore;
-use replay::{ExecutionTrace, ReplayEvent};
+use replay::ExecutionTrace;
 use std::collections::HashMap;
 
 /// Ledger entry covering a complete mutation cycle: proposal, evaluation, decision.

@@ -36,12 +36,16 @@ impl SIMDPath {
 struct PathProfile {
     path: SIMDPath,
     available: bool,
+    /// Reserved for interior-mutability profiling (see `profile_all`).
+    #[allow(dead_code)]
     benchmark: Option<ProfileResult>,
 }
 
 pub struct SIMDDispatcher {
     profiles: Vec<PathProfile>,
-    selected_path: AtomicUsize,  // Index into profiles
+    selected_path: AtomicUsize, // Index into profiles
+    /// Wall time of last profile run (ns); reserved for adaptive re-profile.
+    #[allow(dead_code)]
     last_profile_ns: std::sync::atomic::AtomicU64,
 }
 
@@ -98,7 +102,7 @@ impl SIMDDispatcher {
             }
 
             match profile_simd_path(profile.path, 1000) {
-                Ok(result) => {
+                Ok(_result) => {
                     // Store benchmark result
                     let idx = self.profiles
                         .iter()
@@ -157,32 +161,25 @@ impl SIMDDispatcher {
         n: usize,
     ) -> Result<Vec<f32>, NtgError> {
         match self.selected_path() {
-            SIMDPath::Scalar => matmul_scalar(a, b, m, k, n),
+            SIMDPath::Scalar | SIMDPath::SSE41 => matmul_scalar(a, b, m, k, n),
 
-            #[cfg(target_arch = "x86_64")]
             SIMDPath::AVX2 => {
-                if is_x86_feature_detected!("avx2") {
-                    super::avx2::matmul_avx2(a, b, m, k, n)
-                } else {
-                    matmul_scalar(a, b, m, k, n)
+                #[cfg(target_arch = "x86_64")]
+                {
+                    if is_x86_feature_detected!("avx2") {
+                        return super::avx2::matmul_avx2(a, b, m, k, n);
+                    }
                 }
+                matmul_scalar(a, b, m, k, n)
             }
 
-            #[cfg(target_arch = "aarch64")]
             SIMDPath::NEON => {
-                if cfg!(target_feature = "neon") {
-                    super::neon::matmul_neon(a, b, m, k, n)
-                } else {
-                    matmul_scalar(a, b, m, k, n)
+                #[cfg(target_arch = "aarch64")]
+                {
+                    if cfg!(target_feature = "neon") {
+                        return super::neon::matmul_neon(a, b, m, k, n);
+                    }
                 }
-            }
-
-            #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-            _ => matmul_scalar(a, b, m, k, n),
-
-            #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-            SIMDPath::SSE41 => {
-                // SSE4.1 not yet implemented, fall back to scalar
                 matmul_scalar(a, b, m, k, n)
             }
         }
