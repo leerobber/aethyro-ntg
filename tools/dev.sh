@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Developer shortcuts for aethyro-ntg (run from repo root or anywhere).
-set -euo pipefail
+# Prefer tools/dev.ps1 on Windows PowerShell if bash complains about pipefail (CRLF).
+set -eu
+# pipefail is bash-specific; tolerate environments that choke (CRLF / non-bash).
+set -o pipefail 2>/dev/null || true
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 K="$ROOT/kernel"
 ART="${ARTIFACTS:-$ROOT/artifacts}"
@@ -88,7 +91,7 @@ case "$cmd" in
     ;;
   help|*)
     cat <<EOF
-usage: tools/dev.sh <cmd>
+usage: tools/dev.sh <cmd>   (or on Windows: .\\tools\\dev.ps1 <cmd>)
 
   test | test-quiet     cargo test
   clippy | check        clippy (-D warnings); check = test + clippy
@@ -105,6 +108,12 @@ usage: tools/dev.sh <cmd>
 
 Env: ARTIFACTS, MODEL_PATH, SPARSE_PATH, REPORT_PATH, MODEL_A, MODEL_B
      SCHOOL_RUNS, SCHOOL_MAX_ATTEMPTS
+
+Windows PowerShell (recommended):
+  .\\tools\\dev.ps1 school
+  # or pure cargo:
+  cd kernel
+  cargo run --release --bin ntg_school -- --docs ../docs --out ../docs/schooling/runs --runs 5
 EOF
     ;;
 esac
