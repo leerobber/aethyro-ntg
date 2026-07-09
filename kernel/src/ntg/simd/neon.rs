@@ -1,11 +1,13 @@
-//! NEON SIMD implementation of ternary matmul (ARM64).
+//! NEON path for ternary matmul (ARM64).
 //!
-//! Uses NEON intrinsics: vmull_s8 (multiply 8 i8 values).
-//! Produces same numerical results as scalar reference.
+//! **Honest scope:** on `aarch64`, processes k-dimension in 8-element
+//! chunks for cache-friendly structure; accumulation is currently
+//! scalar within the chunk (Rust `std` NEON surface for full `vmull`
+//! wiring is limited / was incomplete here). Output is **bit-identical**
+//! to [`crate::ntg::ternary::matmul_scalar`] by construction.
 //!
-//! Optimizations:
-//! - Process 8 elements per intrinsic call
-//! - Loop unrolling for throughput
+//! On non-ARM hosts, [`matmul_neon`] falls back to scalar immediately.
+//! Full intrinsic NEON is a future optimization once measured on ARM CI.
 
 use super::super::error::NtgError;
 

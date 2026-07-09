@@ -35,8 +35,13 @@ from skipping that step.
 7. **Library code returns `Result`, it does not panic on bad input.**
    Reserve `unwrap`/`panic!` for tests and truly-unreachable invariants.
 8. **Docs and full green CI before the next phase, every time.** See
-   [docs/ROADMAP.md](docs/ROADMAP.md) — a phase without both is not done,
-   no matter how much code exists for it.
+   [docs/ROADMAP.md](docs/ROADMAP.md) and the binding
+   [docs/PHASE_GATE_PROTOCOL.md](docs/PHASE_GATE_PROTOCOL.md). A phase
+   is not done until every checklist item is implemented *or*
+   explicitly re-scoped in an ADR, tests are heavy and green, and a
+   `docs/phases/PHASE_N_COMPLETE.md` certificate exists with sign-off.
+   **No soft advance. No Phase N+1 while Phase N has open unexplained
+   items.**
 9. **Claims discipline extends to marketing copy.** No product claim
    ships through aethyro.com or anywhere else ahead of the tested code
    that makes it true — same standard as rule 1, applied to the business

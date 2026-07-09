@@ -10,6 +10,7 @@ it in [STATUS.md](../STATUS.md).
 | [0002](0002-safety-rails-for-self-modification.md) | Five safety rails for self-modifying topology | **Accepted + implemented** (Phase 3; tests in `phase3_integration.rs`) |
 | [0003](0003-sis-frontend.md) | SIS front-end: docs / paths / glyphs into the graph | **Accepted; partially implemented** (doc/path/fs-event/leaf signal ✅; lazy glyph / PIXEL-lite ❌) |
 | [0004](0004-phase3-tamper-evident-ledger.md) | Tamper-evident ledger composition | **Accepted + implemented** |
+| [0005](0005-canonical-ternary-storage.md) | Canonical ternary storage types | **Accepted** |
 
 ## How to add a new ADR
 

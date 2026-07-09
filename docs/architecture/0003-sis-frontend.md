@@ -1,12 +1,11 @@
 # 0003: SIS front-end — parsing documents, paths, and glyphs into the NTG graph
 
-**Status:** Partially implemented (2026-07-08). Docs parsing
-(`docparse.rs`), path parsing (`pathparse.rs`), pure fs-event mutation
-(`fsevents.rs`), and a leaf case/punctuation signal counter
-(`leafsignal.rs`) are real and tested. Lazy byte-exact leaf resolution,
-the actual PIXEL-lite glyph-geometry fingerprint, real OS filesystem
-watching, and ledger wiring remain design-only — see the progress note
-at the end of this ADR and ROADMAP.md for the exact, current split.
+**Status:** Phase 2 SIS **implemented** (2026-07-09) with honest scope.
+Docs/path/fs-event pure layer, LeafSignal, LazyLeaf body resolution,
+GlyphFingerprint **v0** (deterministic shape-class proxy — **not** trained
+PIXEL), bytemerge cost mitigation, and `Graph::log_execution_nodes` are
+real and tested. Trained PIXEL-lite and OS `notify` watching remain
+**explicitly deferred** (see PHASE_2_COMPLETE).
 
 ## Context
 

@@ -18,7 +18,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use super::error::NtgError;
+use super::glyph::{extract_glyph_fingerprint, GlyphFingerprint};
+use super::lazyleaf::LazyLeaf;
 use super::leafsignal::{extract_leaf_signal, LeafSignal};
+use super::ledger::{
+    replay::ExecutionTrace, FitnessMeasure, MutationOutcome, TamperEvidentLedger,
+};
 
 pub type NodeId = usize;
 
@@ -36,10 +41,14 @@ pub enum NodeKind {
 pub struct Node {
     pub kind: NodeKind,
     pub label: String,
-    /// Real per-character case/punctuation/whitespace signal, computed
-    /// from `label` at creation time (see `leafsignal.rs`) -- always in
-    /// sync with `label` because there is no separate API to set it.
+    /// Real per-character case/punctuation/whitespace signal.
+    /// Starts from `label`; updates if lazy body is resolved.
     pub signal: LeafSignal,
+    /// Glyph fingerprint v0 from identity (or resolved body) — ADR 0003.
+    /// Not trained PIXEL; see `glyph.rs`.
+    pub glyph: GlyphFingerprint,
+    /// Lazy full-body payload (ADR 0003 content-lazy). `None` until attached.
+    pub lazy: Option<LazyLeaf>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -60,9 +69,106 @@ impl Graph {
     pub fn add_node(&mut self, kind: NodeKind, label: impl Into<String>) -> NodeId {
         let label = label.into();
         let signal = extract_leaf_signal(&label);
-        self.nodes.push(Some(Node { kind, label, signal }));
+        let glyph = extract_glyph_fingerprint(&label);
+        self.nodes.push(Some(Node {
+            kind,
+            label,
+            signal,
+            glyph,
+            lazy: None,
+        }));
         self.adj_list.push(Vec::new());
         self.nodes.len() - 1
+    }
+
+    /// Attach a lazy leaf (identity already on node label; body deferred).
+    pub fn attach_lazy_leaf(&mut self, id: NodeId, leaf: LazyLeaf) -> Result<(), NtgError> {
+        let node = self.node_mut(id)?;
+        node.lazy = Some(leaf);
+        Ok(())
+    }
+
+    /// Resolve full body bytes for a leaf (ADR 0003 lazy resolution).
+    pub fn resolve_leaf_body(
+        &mut self,
+        id: NodeId,
+        body: impl Into<String>,
+    ) -> Result<(), NtgError> {
+        let node = self.node_mut(id)?;
+        let body = body.into();
+        if let Some(ref mut lazy) = node.lazy {
+            lazy.resolve_body(body.clone());
+            node.signal = lazy.signal;
+            node.glyph = lazy.glyph;
+        } else {
+            // Implicit lazy from identity + body
+            let mut lazy = LazyLeaf::from_identity(node.label.clone());
+            lazy.resolve_body(body);
+            node.signal = lazy.signal;
+            node.glyph = lazy.glyph;
+            node.lazy = Some(lazy);
+        }
+        Ok(())
+    }
+
+    fn node_mut(&mut self, id: NodeId) -> Result<&mut Node, NtgError> {
+        let len = self.nodes.len();
+        self.nodes
+            .get_mut(id)
+            .and_then(|n| n.as_mut())
+            .ok_or(NtgError::IndexOutOfBounds { index: id, len })
+    }
+
+    /// Run all `Execution` nodes in topo order and ledger-log each run
+    /// (ADR 0002 rail 5 for execution-typed nodes). Does not execute
+    /// external code — logs the effective leaf text length and fingerprint
+    /// as a deterministic audit event. Self-mod remains separate.
+    pub fn log_execution_nodes(
+        &self,
+        ledger: &mut TamperEvidentLedger,
+        timestamp: u64,
+    ) -> Result<usize, NtgError> {
+        let order = self.topological_order()?;
+        let mut count = 0usize;
+        for id in order {
+            let node = self.node(id)?;
+            if node.kind != NodeKind::Execution {
+                continue;
+            }
+            let text = node
+                .lazy
+                .as_ref()
+                .map(|l| l.effective_text())
+                .unwrap_or(node.label.as_str());
+            let mut trace = ExecutionTrace::with_fingerprint(node.glyph.shape_hash);
+            trace.record_event(
+                id as u32,
+                node.glyph.shape_hash,
+                text.len() as u64,
+                timestamp.saturating_add(count as u64),
+            );
+            ledger.log_mutation(
+                format!(
+                    "execute_node id={} label_len={} body_len={} glyph={:016x}",
+                    id,
+                    node.label.len(),
+                    text.len(),
+                    node.glyph.shape_hash
+                ),
+                node.glyph.shape_hash,
+                node.glyph.shape_hash,
+                FitnessMeasure {
+                    latency_us: 0,
+                    memory_bytes: text.len() as u64,
+                },
+                MutationOutcome::Accepted,
+                0,
+                trace,
+                timestamp.saturating_add(count as u64),
+            )?;
+            count += 1;
+        }
+        Ok(count)
     }
 
     pub fn remove_node(&mut self, id: NodeId) -> Result<(), NtgError> {
@@ -276,6 +382,31 @@ mod tests {
         g.remove_node(c).unwrap();
         assert_eq!(g.children(a), Vec::<NodeId>::new());
         assert_eq!(g.children(b), Vec::<NodeId>::new());
+    }
+
+    #[test]
+    fn lazy_body_resolve_updates_glyph() -> Result<(), NtgError> {
+        let mut g = Graph::new();
+        let id = g.add_node(NodeKind::Content, "leaf");
+        let g0 = g.node(id)?.glyph;
+        g.resolve_leaf_body(id, "FULL BODY CONTENT HERE")?;
+        let n = g.node(id)?;
+        assert!(n.lazy.as_ref().unwrap().is_resolved());
+        assert_ne!(n.glyph.codepoint_count, g0.codepoint_count);
+        Ok(())
+    }
+
+    #[test]
+    fn log_execution_nodes_writes_ledger() -> Result<(), NtgError> {
+        let mut g = Graph::new();
+        let root = g.add_node(NodeKind::Content, "doc");
+        let ex = g.add_node(NodeKind::Execution, "```rust\nfn main(){}\n```");
+        g.add_edge(root, ex)?;
+        let mut ledger = TamperEvidentLedger::new(None)?;
+        let n = g.log_execution_nodes(&mut ledger, 1000)?;
+        assert_eq!(n, 1);
+        ledger.verify_full_ledger()?;
+        Ok(())
     }
 
     #[test]

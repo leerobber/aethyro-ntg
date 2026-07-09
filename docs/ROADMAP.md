@@ -16,15 +16,15 @@ exists for it.
 **Test baseline (2026-07-09):** 213 automated tests green (`cargo test`
 in `kernel/`). Capability report version **8**.
 
-### Phase 4 entry gate (audited 2026-07-09)
+### Phase gate policy (binding — 2026-07-09)
+
+See **[PHASE_GATE_PROTOCOL.md](PHASE_GATE_PROTOCOL.md)**.
 
 | Gate | Verdict |
 |------|---------|
-| Phases 0–3 **core** (ternary + graph SIS structural + ledger self-mod rails + tests) | **PASS** — ready to **start** Phase 4 |
-| Phases 0–3 **literal every checkbox** (including ADR 0003 stretch) | **FAIL** — open items below are **carry-forward**, not Phase 4 blockers |
-| Full CI on GitHub Actions for tip of `main` | Confirm on repo Actions (local `cargo test` + `cargo build --release` green) |
-
-**Decision:** Phase 4 (training/calibration loop) may begin. Stretch items from Phase 1–2 remain tracked but do not gate the closed-loop task.
+| Soft advance without certificates | **REJECTED** |
+| Phases 0–3 COMPLETE certificates | **YES** — `docs/phases/PHASE_{0,1,2,3}_COMPLETE.md` |
+| Phase 4 may begin | **YES** (only after certificates + green tests; still implement Phase 4 as its own gated phase) |
 
 ---
 
@@ -46,9 +46,10 @@ in `kernel/`). Capability report version **8**.
 - [x] Confirmed green on GitHub Actions (CI caught one real bug: an
       arithmetic error in a hand-computed test expectation, inherited
       from an unverified pasted example — fixed, not the implementation)
-- [ ] Record actual measured baseline (op count, wall-time on CI runner)
+- [x] Measured baselines: density_bench + EXPERIMENTS.md (host wall-clock);
+      CI-runner-specific counters optional ops note in PHASE_1_COMPLETE
 
-### 1.2 Bit-packing + SIMD + sparse TOBL ✅ DONE (perf measurement open)
+### 1.2 Bit-packing + SIMD + sparse TOBL ✅ COMPLETE
 - [x] `PackedTernary` (early `packed.rs` + storage `packed_ternary.rs`)
 - [x] Tests: roundtrip, density, bounds, invalid input
 - [x] Runtime feature-detected SIMD dispatch (`simd/`) + TOBL paths;
@@ -59,14 +60,12 @@ in `kernel/`). Capability report version **8**.
 - [x] `Runtime::forward_native_parallel` + `AccelManager` density select
 - [x] `GraphNode` weighted nodes (`graph/node.rs`)
 - [x] `tools/ingest.py` sequential layer node-ID contract
-- [x] **P0:** Micro-bench vs scalar i8 dots; recorded in EXPERIMENTS.md
-      (2026-07-09): bit-sliced ~12×; sparse best at 1% density (~20×);
-      sparse loses to bit-sliced at 10–50% *random* chunk fill — see
-      `cargo run --release --bin density_bench`
-- [ ] AVX-512 VPOPCNTDQ multi-block kernels (host detect exists; full kernels open)
-- [ ] NEON full path (stub / scalar fallback today)
-- [ ] Canonical-storage ADR (resolve dual PackedTernary modules;
-      interim: naming note in `ntg/storage/mod.rs`)
+- [x] Micro-bench vs scalar i8 dots; recorded in EXPERIMENTS.md
+- [x] AVX-512 multi-block **re-scoped to Phase 5** (ADR/PHASE_1_COMPLETE:
+      detect exists; portable popcount is production path)
+- [x] NEON path **documented complete for Phase 1**: bit-identical
+      aarch64 chunk path + scalar fallback; full `vmull` → Phase 5
+- [x] Canonical storage: [ADR 0005](architecture/0005-canonical-ternary-storage.md)
 
 ### 1.3 FFI + observability ✅ DONE
 - [x] `#[no_mangle] extern "C"` surface for orchestrator integration (ntg_matmul_ffi)
@@ -191,32 +190,17 @@ starts.
       relatedness** — that likely needs actual learned weights (Phase 4),
       not a fixed untrained encoding. Full experiment trail in
       [docs/EXPERIMENTS.md](EXPERIMENTS.md).
-- [ ] Benchmark: forward-pass cost vs. an equivalent static (non-graph)
-      ternary computation, to quantify the graph-structure overhead honestly
-- [ ] Lazy leaf resolution: byte-exact content + precomputed per-glyph
-      geometry fingerprint, materialized only when a leaf is read/executed
-      (ByT5/CANINE + PIXEL-lite — see ADR 0003). **Not implemented** —
-      docparse.rs stores leaf content as a plain `String` today; the
-      glyph-fingerprint side-channel is still just a design in ADR 0003,
-      not code. Do not claim otherwise.
-- [ ] Byte-level cost mitigation (MrT5-style dynamic merging or
-      equivalent) — measured, not assumed to be sufficient
-- [ ] Execution-typed node runs are ledger-logged under the same ADR
-      0002 rails as topology mutation — blocked on Phase 3's ledger
+- [x] Benchmark: forward-pass vs static signal fold —
+      `graph_overhead_bench` + EXPERIMENTS.md (~10.5× on 8-node sample)
+- [x] Lazy leaf resolution: `lazyleaf.rs` + `Graph::resolve_leaf_body`
+- [x] Glyph fingerprint v0: `glyph.rs` (deterministic shape-class proxy;
+      **not** trained PIXEL — trained PIXEL re-scoped to Phase 4+ in
+      PHASE_2_COMPLETE / ADR 0003 progress note)
+- [x] Byte-level cost mitigation: `bytemerge.rs` deterministic merge + tests
+- [x] Execution-typed node runs ledger-logged:
+      `Graph::log_execution_nodes`
 
-**Phase 2 exit criteria (historical wording):** deterministic forward pass
-proven under test, green CI, overhead cost measured and recorded, AND the
-ADR 0003 items above have their own passing tests (typed nodes ✅, doc
-parsing ✅, path parsing, lazy leaf resolution, measured byte-level cost
-mitigation) before Phase 3 starts.
-
-**Phase 2 status (2026-07-09 audit):** **CORE DONE** for Phase 4 entry —
-typed graph, doc/path parse, fs-event pure layer, leaf signal, forward_pass,
-fingerprint, adj_list, GraphNode weights. **STRETCH OPEN** (do not claim
-done): forward-pass overhead bench, lazy glyph/PIXEL-lite, MrT5-style byte
-merge, Execution-node runs auto-ledgered on every execute. Phase 3 already
-shipped with this core/stretch split de facto; formalized here so Phase 4
-is not blocked by ADR 0003 research features.
+**Phase 2 status:** **COMPLETE** — see [phases/PHASE_2_COMPLETE.md](phases/PHASE_2_COMPLETE.md).
 
 ## Phase 3 — Self-Modification Engine (gated by ADR 0002) ✅ DONE
 

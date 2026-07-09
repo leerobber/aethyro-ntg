@@ -320,3 +320,31 @@ JSON (machine-readable):
   to model GraphNode weight patterns more realistically
 - Dense GEMM / `ternary_matmul` wall-clock (chunk gate, not full GEMM)
 - True `_mm512_popcnt_epi64` path vs `u64::count_ones`
+
+## 2026-07-09: graph forward-pass overhead vs static signal fold
+
+**Why:** Phase 2 exit required measuring graph-structure overhead vs a
+non-graph baseline.
+
+**Method:** `cargo run --release --bin graph_overhead_bench`  
+Parse a small markdown sample into a Graph (8 nodes), then median of 500
+timed runs (50 warmup):
+
+1. `Graph::forward_pass` (topo order + LeafSignal combine)
+2. Static fold of the same 8 signals in a `Vec` (no edges/topo)
+
+**Results (host LOQ-class x86_64, release):**
+
+| path | median µs |
+|------|----------:|
+| graph forward_pass | 0.21 |
+| static signal fold | 0.02 |
+| **overhead ratio** | **~10.5×** |
+
+**Interpretation:** On this tiny graph, scheduling/topo dominates absolute
+time; absolute costs are sub-microsecond. Ratio will shrink on larger
+graphs where signal work grows with nodes while topo is O(V+E). This is
+**not** a ternary TOBL cost; it is pure structural overhead of the graph
+API used for SIS forward_pass.
+
+**Honest non-claim:** not compared to production aethyro.com inference.
