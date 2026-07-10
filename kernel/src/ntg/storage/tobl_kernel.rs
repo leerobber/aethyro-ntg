@@ -13,7 +13,7 @@ use std::time::Instant;
 
 /// TOBL kernel selection enum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ToблKernelPath {
+pub enum ToblKernelPath {
     /// Generic fallback: no SIMD
     Scalar = 0,
     /// AVX2: 256-bit SIMD, 32-element ternary batches
@@ -22,33 +22,33 @@ pub enum ToблKernelPath {
     NEON = 2,
 }
 
-impl ToблKernelPath {
+impl ToblKernelPath {
     pub fn name(&self) -> &'static str {
         match self {
-            ToблKernelPath::Scalar => "Scalar",
-            ToблKernelPath::AVX2 => "AVX2",
-            ToблKernelPath::NEON => "NEON",
+            ToblKernelPath::Scalar => "Scalar",
+            ToblKernelPath::AVX2 => "AVX2",
+            ToblKernelPath::NEON => "NEON",
         }
     }
 }
 
 /// Detect best available TOBL kernel path on this hardware.
-pub fn select_kernel_path() -> ToблKernelPath {
+pub fn select_kernel_path() -> ToblKernelPath {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
-            return ToблKernelPath::AVX2;
+            return ToblKernelPath::AVX2;
         }
     }
 
     #[cfg(target_arch = "aarch64")]
     {
         if cfg!(target_feature = "neon") {
-            return ToблKernelPath::NEON;
+            return ToblKernelPath::NEON;
         }
     }
 
-    ToблKernelPath::Scalar
+    ToblKernelPath::Scalar
 }
 
 /// Ternary dot-product: sum of element-wise products.
@@ -56,7 +56,7 @@ pub fn select_kernel_path() -> ToблKernelPath {
 pub fn tobl_dot_product(
     a: &PackedTernary,
     b: &PackedTernary,
-    kernel: Option<ToблKernelPath>,
+    kernel: Option<ToblKernelPath>,
 ) -> Result<(i64, u64), NtgError> {
     if a.len() != b.len() {
         return Err(NtgError::InvalidInput(format!(
@@ -70,7 +70,7 @@ pub fn tobl_dot_product(
 
     let start = Instant::now();
     let result = match kernel {
-        ToблKernelPath::AVX2 => {
+        ToblKernelPath::AVX2 => {
             #[cfg(target_arch = "x86_64")]
             {
                 if is_x86_feature_detected!("avx2") {
@@ -84,7 +84,7 @@ pub fn tobl_dot_product(
                 tobl_dot_scalar(a, b)
             }
         }
-        ToблKernelPath::NEON => {
+        ToblKernelPath::NEON => {
             #[cfg(target_arch = "aarch64")]
             {
                 if cfg!(target_feature = "neon") {
@@ -98,7 +98,7 @@ pub fn tobl_dot_product(
                 tobl_dot_scalar(a, b)
             }
         }
-        ToблKernelPath::Scalar => tobl_dot_scalar(a, b),
+        ToblKernelPath::Scalar => tobl_dot_scalar(a, b),
     };
 
     let elapsed_us = start.elapsed().as_micros() as u64;
@@ -208,7 +208,7 @@ mod tests {
         a.set_from_slice(&[1i8, -1, 0, 1]).unwrap();
         b.set_from_slice(&[1i8, -1, 0, 1]).unwrap();
 
-        let (result, _cycles) = tobl_dot_product(&a, &b, Some(ToблKernelPath::Scalar)).unwrap();
+        let (result, _cycles) = tobl_dot_product(&a, &b, Some(ToblKernelPath::Scalar)).unwrap();
         // 1*1 + (-1)*(-1) + 0*0 + 1*1 = 1 + 1 + 0 + 1 = 3
         assert_eq!(result, 3);
     }
@@ -240,7 +240,7 @@ mod tests {
         let path = select_kernel_path();
         assert!(matches!(
             path,
-            ToблKernelPath::Scalar | ToблKernelPath::AVX2 | ToблKernelPath::NEON
+            ToblKernelPath::Scalar | ToblKernelPath::AVX2 | ToblKernelPath::NEON
         ));
     }
 }
