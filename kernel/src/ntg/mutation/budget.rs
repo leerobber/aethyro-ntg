@@ -51,11 +51,7 @@ impl BudgetTracker {
 
     /// Remaining budget in microseconds.
     pub fn remaining_us(&self) -> u64 {
-        if self.consumed_us >= self.budget_us {
-            0
-        } else {
-            self.budget_us - self.consumed_us
-        }
+        self.budget_us.saturating_sub(self.consumed_us)
     }
 
     /// Status: (consumed_us, remaining_us, budget_us).

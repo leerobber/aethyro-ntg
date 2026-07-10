@@ -35,7 +35,7 @@ pub fn get_op_count() -> u64 {
 /// # Returns
 /// 0 on success, negative error code on failure
 #[no_mangle]
-pub extern "C" fn ntg_matmul_ffi(
+pub unsafe extern "C" fn ntg_matmul_ffi(
     a: *const i8,
     m: u32,
     k: u32,
@@ -130,36 +130,42 @@ mod tests {
 
     #[test]
     fn ffi_null_pointers_rejected() {
-        // C ABI entry points are safe to call; nulls are validated before use.
-        let result = ntg_matmul_ffi(
-            std::ptr::null(), // null a
-            2,
-            2,
-            std::ptr::null(), // null b
-            2,
-            2,
-            std::ptr::null_mut(), // null out
-            std::ptr::null_mut(),
-        );
+        // Nulls are validated before any dereference, so this call is sound
+        // despite the null args; the `unsafe` here is the FFI contract, not
+        // a claim that these particular inputs are dangerous.
+        let result = unsafe {
+            ntg_matmul_ffi(
+                std::ptr::null(), // null a
+                2,
+                2,
+                std::ptr::null(), // null b
+                2,
+                2,
+                std::ptr::null_mut(), // null out
+                std::ptr::null_mut(),
+            )
+        };
         assert_eq!(result, -1); // EINVAL
     }
 
     #[test]
     fn ffi_dimension_mismatch_rejected() {
-        let a = vec![1i8; 4];
-        let b = vec![1i8; 6];
+        let a = [1i8; 4];
+        let b = [1i8; 6];
         let mut out = vec![0.0f32; 4];
 
-        let result = ntg_matmul_ffi(
-            a.as_ptr(),
-            2,
-            2,
-            b.as_ptr(),
-            3, // Doesn't match k=2
-            2,
-            out.as_mut_ptr(),
-            std::ptr::null_mut(),
-        );
+        let result = unsafe {
+            ntg_matmul_ffi(
+                a.as_ptr(),
+                2,
+                2,
+                b.as_ptr(),
+                3, // Doesn't match k=2
+                2,
+                out.as_mut_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
         assert_eq!(result, -1); // EINVAL
     }
 }

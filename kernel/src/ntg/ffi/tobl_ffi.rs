@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static TOBL_OP_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Opaque handle for C code (wraps PackedTernary)
-pub struct ToблHandle {
+pub struct ToblHandle {
     inner: PackedTernary,
 }
 
@@ -19,16 +19,20 @@ pub struct ToблHandle {
 /// # Safety
 /// Caller must call `ntg_tobl_drop` to free allocated memory.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_new(len: u32) -> *mut ToблHandle {
-    let handle = Box::new(ToблHandle {
+pub extern "C" fn ntg_tobl_new(len: u32) -> *mut ToblHandle {
+    let handle = Box::new(ToblHandle {
         inner: PackedTernary::new(len as usize),
     });
     Box::into_raw(handle)
 }
 
 /// Destroy PackedTernary (C interface)
+///
+/// # Safety
+/// `handle` must be either null or a pointer previously returned by
+/// `ntg_tobl_new` that has not already been passed to `ntg_tobl_drop`.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_drop(handle: *mut ToблHandle) {
+pub unsafe extern "C" fn ntg_tobl_drop(handle: *mut ToblHandle) {
     if !handle.is_null() {
         unsafe {
             let _ = Box::from_raw(handle);
@@ -37,8 +41,12 @@ pub extern "C" fn ntg_tobl_drop(handle: *mut ToблHandle) {
 }
 
 /// Set single ternary value
+///
+/// # Safety
+/// `handle` must be either null or a valid, live pointer returned by
+/// `ntg_tobl_new`.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_set(handle: *mut ToблHandle, idx: u32, val: i8) -> i32 {
+pub unsafe extern "C" fn ntg_tobl_set(handle: *mut ToblHandle, idx: u32, val: i8) -> i32 {
     if handle.is_null() {
         return -1; // EINVAL
     }
@@ -53,8 +61,12 @@ pub extern "C" fn ntg_tobl_set(handle: *mut ToблHandle, idx: u32, val: i8) -> 
 }
 
 /// Get single ternary value
+///
+/// # Safety
+/// `handle` must be either null or a valid, live pointer returned by
+/// `ntg_tobl_new`.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_get(handle: *const ToблHandle, idx: u32) -> i8 {
+pub unsafe extern "C" fn ntg_tobl_get(handle: *const ToblHandle, idx: u32) -> i8 {
     if handle.is_null() {
         return 0;
     }
@@ -68,12 +80,15 @@ pub extern "C" fn ntg_tobl_get(handle: *const ToблHandle, idx: u32) -> i8 {
 }
 
 /// Ternary dot-product: C interface
+///
 /// # Safety
-/// Both handles must be valid and same length.
+/// `a` and `b` must be either null or valid, live pointers returned by
+/// `ntg_tobl_new`, with equal length. `result` and `cycles` must be either
+/// null or valid for writes.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_dot(
-    a: *const ToблHandle,
-    b: *const ToблHandle,
+pub unsafe extern "C" fn ntg_tobl_dot(
+    a: *const ToblHandle,
+    b: *const ToblHandle,
     result: *mut i64,
     cycles: *mut u64,
 ) -> i32 {
@@ -102,15 +117,17 @@ pub extern "C" fn ntg_tobl_dot(
 }
 
 /// Get density metric for structural evolution heuristics
+///
+/// # Safety
+/// `handle` must be either null or a valid, live pointer returned by
+/// `ntg_tobl_new`.
 #[no_mangle]
-pub extern "C" fn ntg_tobl_density(handle: *mut ToблHandle) -> f32 {
+pub unsafe extern "C" fn ntg_tobl_density(handle: *mut ToblHandle) -> f32 {
     if handle.is_null() {
         return 0.0;
     }
 
-    unsafe {
-        (*handle).inner.compute_density()
-    }
+    unsafe { (*handle).inner.compute_density() }
 }
 
 /// Get total TOBL operations
@@ -125,37 +142,43 @@ mod tests {
 
     #[test]
     fn tobl_ffi_new_drop() {
-        let handle = ntg_tobl_new(100);
-        assert!(!handle.is_null());
-        ntg_tobl_drop(handle);
+        unsafe {
+            let handle = ntg_tobl_new(100);
+            assert!(!handle.is_null());
+            ntg_tobl_drop(handle);
+        }
     }
 
     #[test]
     fn tobl_ffi_set_get() {
-        let handle = ntg_tobl_new(10);
-        assert_eq!(ntg_tobl_set(handle, 0, 1), 0);
-        assert_eq!(ntg_tobl_get(handle, 0), 1);
-        ntg_tobl_drop(handle);
+        unsafe {
+            let handle = ntg_tobl_new(10);
+            assert_eq!(ntg_tobl_set(handle, 0, 1), 0);
+            assert_eq!(ntg_tobl_get(handle, 0), 1);
+            ntg_tobl_drop(handle);
+        }
     }
 
     #[test]
     fn tobl_ffi_dot() {
-        let a = ntg_tobl_new(10);
-        let b = ntg_tobl_new(10);
+        unsafe {
+            let a = ntg_tobl_new(10);
+            let b = ntg_tobl_new(10);
 
-        // Set values: [1, -1, 0, ...]
-        ntg_tobl_set(a, 0, 1);
-        ntg_tobl_set(a, 1, -1);
-        ntg_tobl_set(b, 0, 1);
-        ntg_tobl_set(b, 1, -1);
+            // Set values: [1, -1, 0, ...]
+            ntg_tobl_set(a, 0, 1);
+            ntg_tobl_set(a, 1, -1);
+            ntg_tobl_set(b, 0, 1);
+            ntg_tobl_set(b, 1, -1);
 
-        let mut result: i64 = 0;
-        let mut cycles: u64 = 0;
-        assert_eq!(ntg_tobl_dot(a, b, &mut result, &mut cycles), 0);
-        // 1*1 + (-1)*(-1) = 2
-        assert!(result > 0);
+            let mut result: i64 = 0;
+            let mut cycles: u64 = 0;
+            assert_eq!(ntg_tobl_dot(a, b, &mut result, &mut cycles), 0);
+            // 1*1 + (-1)*(-1) = 2
+            assert!(result > 0);
 
-        ntg_tobl_drop(a);
-        ntg_tobl_drop(b);
+            ntg_tobl_drop(a);
+            ntg_tobl_drop(b);
+        }
     }
 }

@@ -68,15 +68,13 @@ impl AccelDevice {
         activations: &SparseBitSlicedTernary,
         threshold: i64,
     ) -> Result<SparseBitSlicedTernary, NtgError> {
-        if weights.len() != activations.len() && weights.len() != 0 && activations.len() != 0 {
-            // Allow zero-len empty tensors through; otherwise require match.
-            // Sparse matmul itself only asserts in debug; enforce in release too.
-            if weights.len() != activations.len() {
-                return Err(NtgError::ShapeMismatch {
-                    expected: weights.len(),
-                    got: activations.len(),
-                });
-            }
+        // Allow zero-len empty tensors through; otherwise require a length match.
+        // Sparse matmul itself only asserts in debug; enforce in release too.
+        if weights.len() != activations.len() && !weights.is_empty() && !activations.is_empty() {
+            return Err(NtgError::ShapeMismatch {
+                expected: weights.len(),
+                got: activations.len(),
+            });
         }
         // All devices use the proven sparse kernel today. Device tag is
         // recorded by the runtime for observability / future dispatch.

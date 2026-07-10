@@ -343,8 +343,8 @@ pub fn exam_phase2(
         .into_iter()
         .filter_map(|id| g.node(id).ok().map(|n| n.kind.clone()))
         .collect();
-    let has_exec = kinds.iter().any(|k| *k == NodeKind::Execution);
-    let has_content = kinds.iter().any(|k| *k == NodeKind::Content);
+    let has_exec = kinds.contains(&NodeKind::Execution);
+    let has_content = kinds.contains(&NodeKind::Content);
     items.push(item(
         "p2_kinds",
         "node_kinds",
@@ -652,7 +652,7 @@ pub fn exam_phase4(
         "p4_code_label",
         "predict_execution",
         "code classified Execution or ranks above prose by ≥1",
-        pred_code || sc >= sp + 1,
+        pred_code || sc > sp,
         format!("pred={pred_code} score={sc} thr={}", model.threshold),
     ));
     items.push(item(
@@ -741,7 +741,7 @@ pub fn exam_phase4(
         + 0.10 * f1_q
         + 0.20 * if holdout_ok { 1.0 } else { 0.0 }
         + 0.20 * if rank_ok { 1.0 } else { 0.0 }
-        + 0.15 * if pred_code || sc >= sp + 1 { 1.0 } else { 0.0 }
+        + 0.15 * if pred_code || sc > sp { 1.0 } else { 0.0 }
         + 0.10 * if !pred_prose { 1.0 } else { 0.0 }
         + 0.05 * skill_items_pass;
 

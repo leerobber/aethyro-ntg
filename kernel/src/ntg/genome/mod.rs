@@ -46,6 +46,10 @@ impl DNAGraphNode {
         self.ternary_genome.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.ternary_genome.len() == 0
+    }
+
     pub fn to_i8(&self) -> Result<Vec<i8>, NtgError> {
         self.ternary_genome.to_values()
     }
@@ -139,7 +143,7 @@ pub fn propose_density_delta(genome: &DNAGraphNode, seed: u64, max_flips: usize)
         s ^= s << 13;
         s ^= s >> 7;
         s ^= s << 17;
-        if v == 0 && (s % 3 == 0) {
+        if v == 0 && s.is_multiple_of(3) {
             let t = if s & 1 == 0 { 1i8 } else { -1i8 };
             sets.push((i, t));
         }

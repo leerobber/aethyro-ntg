@@ -23,7 +23,7 @@ pub struct BitSlicedTernary {
 
 impl BitSlicedTernary {
     pub fn new(len: usize) -> Self {
-        let words = (len + 63) / 64;
+        let words = len.div_ceil(64);
         Self {
             pos_bits: vec![0u64; words],
             neg_bits: vec![0u64; words],

@@ -11,7 +11,6 @@
 //! integrated with the graph, ledger, and fitness evaluator.
 
 use ntg_kernel::ntg::{
-    graph::Graph,
     ledger::{
         TamperEvidentLedger, MutationOutcome, FitnessMeasure,
     },
@@ -34,9 +33,11 @@ fn adr0002_rail1_self_mod_off_by_default() {
 /// Rail 2: Bounded compute/time budget per cycle
 #[test]
 fn adr0002_rail2_bounded_budget() -> Result<(), NtgError> {
-    let mut config = SelfModConfig::default();
-    config.enabled = true;
-    config.cycle_budget_us = 1000; // Very tight budget: 1ms
+    let config = SelfModConfig {
+        enabled: true,
+        cycle_budget_us: 1000, // Very tight budget: 1ms
+        ..SelfModConfig::default()
+    };
 
     let mut cycle = MutationCycle::new(config, (5000, 1024))?;
 
@@ -64,9 +65,11 @@ fn adr0002_rail2_bounded_budget() -> Result<(), NtgError> {
 /// Rail 3: Automatic rollback on regression (via fitness gate)
 #[test]
 fn adr0002_rail3_auto_rollback_on_regression() -> Result<(), NtgError> {
-    let mut config = SelfModConfig::default();
-    config.enabled = true;
-    config.fitness_improvement_threshold = 1.01; // 1% improvement required
+    let config = SelfModConfig {
+        enabled: true,
+        fitness_improvement_threshold: 1.01, // 1% improvement required
+        ..SelfModConfig::default()
+    };
 
     let baseline = (5000, 1024);
     let cycle = MutationCycle::new(config, baseline)?;
@@ -177,18 +180,18 @@ fn adr0002_rail5_every_mutation_is_ledger_logged() -> Result<(), NtgError> {
 fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
     use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
 
-    // Setup: create a graph
-    let mut graph = Graph::new();
     let baseline_fitness = (5000, 1024);
 
     // Setup: create ledger
     let mut ledger = TamperEvidentLedger::new(None)?;
 
     // Setup: create a mutation cycle
-    let mut config = SelfModConfig::default();
-    config.enabled = true;
-    config.cycle_budget_us = 1_000_000; // 1ms
-    config.max_mutations_per_cycle = 5;
+    let config = SelfModConfig {
+        enabled: true,
+        cycle_budget_us: 1_000_000, // 1ms
+        max_mutations_per_cycle: 5,
+        ..SelfModConfig::default()
+    };
 
     let mut cycle = MutationCycle::new(config, baseline_fitness)?;
 

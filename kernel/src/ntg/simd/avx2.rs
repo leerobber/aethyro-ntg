@@ -9,6 +9,11 @@ use super::super::error::NtgError;
 
 /// AVX2 matmul: (m x k) @ (k x n) -> m x n
 /// Requires: x86_64 with AVX2 support
+///
+/// # Safety
+/// Caller must ensure the AVX2 target feature is actually available on the
+/// current CPU (e.g. via `is_x86_feature_detected!("avx2")`) before calling —
+/// `#[target_feature(enable = "avx2")]` does not itself check this at runtime.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub unsafe fn matmul_avx2_inner(

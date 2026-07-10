@@ -69,6 +69,25 @@ pub enum MutationOutcome {
     RejectedFitnessGate,
 }
 
+/// Escape a string for embedding in the ledger's hand-built JSON entries.
+/// Handles the characters that would otherwise break the surrounding
+/// `"..."` (quote, backslash, and control characters).
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// The ledger: combines CryptoChainLog (sequence), SignedEntry (content),
 /// StateSlots (state), and ExecutionTrace (reproducibility).
 #[derive(Clone, Debug)]
@@ -98,6 +117,11 @@ impl TamperEvidentLedger {
     }
 
     /// Log a completed mutation cycle. Returns the entry's position in the ledger.
+    ///
+    /// One call per logged event by design (mirrors the ledger's JSON
+    /// entry shape 1:1) — bundling these into a struct would just move the
+    /// field list, not shorten it, so the arg count is accepted here.
+    #[allow(clippy::too_many_arguments)]
     pub fn log_mutation(
         &mut self,
         description: impl Into<String>,
@@ -113,16 +137,20 @@ impl TamperEvidentLedger {
         let mutation_id = self.next_mutation_id;
         self.next_mutation_id += 1;
 
-        // Create the entry
+        // Create the entry. `desc` is caller-controlled free text (unlike the
+        // other fields, which are numeric or Debug-formatted enums), so it
+        // must be JSON-escaped — otherwise a description containing `"` or
+        // `\` would corrupt this entry's JSON, breaking any downstream
+        // parser and undermining the ledger's audit guarantees.
         let entry_json = format!(
-            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{}","budget_ns":{},"timestamp":{}}}"#,
+            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{:?}","budget_ns":{},"timestamp":{}}}"#,
             mutation_id,
-            desc,
+            json_escape(&desc),
             pre_fingerprint,
             post_fingerprint,
             fitness.latency_us,
             fitness.memory_bytes,
-            format!("{:?}", outcome),
+            outcome,
             budget_consumed_ns,
             timestamp
         );
