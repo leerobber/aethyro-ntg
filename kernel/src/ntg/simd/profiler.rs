@@ -1,10 +1,9 @@
 //! SIMD path profiling and benchmarking.
 //!
-//! Measures real performance of each SIMD path:
-//! - Wall-clock latency
-//! - Throughput (ops/sec)
-//! - Memory bandwidth used
-//! - Relative speedup vs. scalar
+//! `benchmark_matmul` below does real wall-clock measurement and is used
+//! by density_bench. `profile_simd_path` is not wired up yet: it's a
+//! stub returning a fixed placeholder (see its own doc), not an actual
+//! per-path measurement of latency / throughput / memory bandwidth.
 
 use super::dispatcher::SIMDPath;
 use std::time::Instant;

@@ -1,10 +1,17 @@
-//! SIMD path dispatcher: CPU feature detection + profiling + selection.
+//! SIMD path dispatcher: CPU feature detection + selection.
 //!
-//! At startup:
-//! 1. Detect available CPU features (AVX2, NEON, etc.)
-//! 2. Profile each available path (wall-clock + cache behavior)
-//! 3. Select the best-performing path for this hardware
-//! 4. Route all matmul calls through the selected path
+//! At startup, detects available CPU features (AVX2, NEON, etc.) and
+//! selects a path by static preference (AVX2 > NEON > scalar) — matmul()
+//! also re-checks the feature at call time before dispatching.
+//!
+//! **Not yet real:** `profile_all` calls [`profile_simd_path`] per
+//! available path, but `profile_simd_path` is a stub that returns a fixed
+//! placeholder (`latency_us: 0.0`) rather than measuring anything, and
+//! `profile_all`'s own results are discarded before `select_best` runs
+//! (see the comment in `profile_all`) — path selection is feature
+//! detection only, not benchmark-driven, despite this module's name.
+//! Wiring real measurement into selection (e.g. via interior mutability
+//! on `profiles`) is open work, not yet done.
 //!
 //! Gracefully falls back to scalar if SIMD unavailable or fails.
 
