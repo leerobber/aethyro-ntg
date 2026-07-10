@@ -60,19 +60,30 @@ impl SignedEntry {
 
     /// Extract the mutation outcome from the entry's JSON content.
     /// (Helper for audit_summary and other queries.)
+    ///
+    /// Reads the `"outcome":"..."` field specifically rather than
+    /// substring-searching the whole entry: the entry also embeds a
+    /// free-text `description`, and a description that happens to contain
+    /// one of the outcome names (e.g. "...previously Accepted...") would
+    /// silently misclassify the entry under a blind `contains()` search,
+    /// corrupting `audit_summary()`'s compliance counts.
     pub fn get_outcome(&self) -> Result<super::MutationOutcome, NtgError> {
-        if self.content.contains("Accepted") {
-            Ok(super::MutationOutcome::Accepted)
-        } else if self.content.contains("RejectedRegression") {
-            Ok(super::MutationOutcome::RejectedRegression)
-        } else if self.content.contains("RejectedBudgetExceeded") {
-            Ok(super::MutationOutcome::RejectedBudgetExceeded)
-        } else if self.content.contains("RejectedFitnessGate") {
-            Ok(super::MutationOutcome::RejectedFitnessGate)
-        } else {
-            Err(NtgError::InvalidInput(
-                "Unknown outcome in entry".to_string(),
-            ))
+        const MARKER: &str = "\"outcome\":\"";
+        let start = self.content.find(MARKER).map(|i| i + MARKER.len());
+        let value = start.and_then(|start| {
+            self.content[start..]
+                .find('"')
+                .map(|end| &self.content[start..start + end])
+        });
+
+        match value {
+            Some("Accepted") => Ok(super::MutationOutcome::Accepted),
+            Some("RejectedRegression") => Ok(super::MutationOutcome::RejectedRegression),
+            Some("RejectedBudgetExceeded") => Ok(super::MutationOutcome::RejectedBudgetExceeded),
+            Some("RejectedFitnessGate") => Ok(super::MutationOutcome::RejectedFitnessGate),
+            _ => Err(NtgError::InvalidInput(
+                "Unknown or missing outcome field in entry".to_string(),
+            )),
         }
     }
 }
@@ -126,6 +137,24 @@ mod tests {
     fn extract_outcome_accepted() -> Result<(), NtgError> {
         let entry = SignedEntry::new(r#"{"outcome":"Accepted"}"#, 0, 1000)?;
         assert_eq!(entry.get_outcome()?, super::super::MutationOutcome::Accepted);
+        Ok(())
+    }
+
+    #[test]
+    fn extract_outcome_ignores_matching_words_in_description() -> Result<(), NtgError> {
+        // A free-text description mentioning a *different* outcome name than
+        // the real `outcome` field must not confuse the parser — regression
+        // test for a bug where `get_outcome` substring-searched the whole
+        // entry instead of reading the `outcome` field specifically.
+        let entry = SignedEntry::new(
+            r#"{"description":"supersedes the previously Accepted candidate","outcome":"RejectedRegression"}"#,
+            0,
+            1000,
+        )?;
+        assert_eq!(
+            entry.get_outcome()?,
+            super::super::MutationOutcome::RejectedRegression
+        );
         Ok(())
     }
 
