@@ -771,7 +771,7 @@ pub fn optional_self_mod_probe(
 
     let config = SelfModConfig {
         enabled: true,
-        cycle_budget_us: 5_000_000, // 5ms budget for probe
+        cycle_budget_us: 5_000, // 5ms budget for probe
         max_mutations_per_cycle: 1,
         ..SelfModConfig::default()
     };

@@ -68,15 +68,7 @@ impl SignedEntry {
     /// silently misclassify the entry under a blind `contains()` search,
     /// corrupting `audit_summary()`'s compliance counts.
     pub fn get_outcome(&self) -> Result<super::MutationOutcome, NtgError> {
-        const MARKER: &str = "\"outcome\":\"";
-        let start = self.content.find(MARKER).map(|i| i + MARKER.len());
-        let value = start.and_then(|start| {
-            self.content[start..]
-                .find('"')
-                .map(|end| &self.content[start..start + end])
-        });
-
-        match value {
+        match Self::extract_outcome_field(&self.content).as_deref() {
             Some("Accepted") => Ok(super::MutationOutcome::Accepted),
             Some("RejectedRegression") => Ok(super::MutationOutcome::RejectedRegression),
             Some("RejectedBudgetExceeded") => Ok(super::MutationOutcome::RejectedBudgetExceeded),
@@ -85,6 +77,21 @@ impl SignedEntry {
                 "Unknown or missing outcome field in entry".to_string(),
             )),
         }
+    }
+
+    /// Find the `"outcome"` key and read its string value, tolerating the
+    /// whitespace JSON permits around `:` (this ledger's own writer emits
+    /// compact JSON with none, but a tolerant reader is cheap insurance
+    /// against a differently-formatted entry without pulling in a full
+    /// JSON parser as a dependency for one field read).
+    fn extract_outcome_field(content: &str) -> Option<String> {
+        const KEY: &str = "\"outcome\"";
+        let after_key = content.find(KEY)? + KEY.len();
+        let rest = content[after_key..].trim_start();
+        let rest = rest.strip_prefix(':')?.trim_start();
+        let rest = rest.strip_prefix('"')?;
+        let end = rest.find('"')?;
+        Some(rest[..end].to_string())
     }
 }
 
@@ -137,6 +144,22 @@ mod tests {
     fn extract_outcome_accepted() -> Result<(), NtgError> {
         let entry = SignedEntry::new(r#"{"outcome":"Accepted"}"#, 0, 1000)?;
         assert_eq!(entry.get_outcome()?, super::super::MutationOutcome::Accepted);
+        Ok(())
+    }
+
+    #[test]
+    fn extract_outcome_tolerates_whitespace_around_colon() -> Result<(), NtgError> {
+        // The ledger's own writer emits compact JSON, but the reader
+        // shouldn't break if an entry is pretty-printed or reformatted.
+        let entry = SignedEntry::new(
+            "{\n  \"outcome\" :  \"RejectedFitnessGate\"\n}",
+            0,
+            1000,
+        )?;
+        assert_eq!(
+            entry.get_outcome()?,
+            super::super::MutationOutcome::RejectedFitnessGate
+        );
         Ok(())
     }
 

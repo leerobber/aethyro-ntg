@@ -188,7 +188,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
     // Setup: create a mutation cycle
     let config = SelfModConfig {
         enabled: true,
-        cycle_budget_us: 1_000_000, // 1ms
+        cycle_budget_us: 1_000_000, // 1s (headroom for the 100ms consumption simulated below)
         max_mutations_per_cycle: 5,
         ..SelfModConfig::default()
     };
