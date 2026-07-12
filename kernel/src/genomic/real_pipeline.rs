@@ -4,8 +4,8 @@
 /// Phase C's real synthetic genome for chromosome N" and were duplicating
 /// this glue.
 use crate::genomic::chromosome_brain::{init_chromosome_brain, ChromosomeBrain, ChromosomeId};
-use crate::genomic::ld_compute::{LdComputer, LdPair};
 use crate::genomic::haplotype_blocks::BlockDetector;
+use crate::genomic::ld_compute::{LdComputer, LdPair};
 use crate::genomic::synthesis::{Genome, GenomeSampler};
 use crate::genomic::validation::{ReferenceGenome, SyntheticGenome};
 use crate::genomic::vcf_stream::VcfParser;
@@ -31,6 +31,11 @@ pub struct RealChromosomeData {
     pub ld_pairs: Vec<LdPair>,
     pub snp_order: Vec<String>,
     pub brain: ChromosomeBrain,
+    /// Whether the synthetic genome was sampled using real haplotype
+    /// pools (`GenomeSampler::from_brain_with_haplotypes`) or independent
+    /// per-locus draws (`GenomeSampler::from_brain`). See
+    /// `build_real_chromosome`'s `use_haplotypes` parameter.
+    pub used_haplotype_sampling: bool,
 }
 
 /// Parse a real chromosome VCF, compute real LD, build the real brain, and
@@ -38,14 +43,28 @@ pub struct RealChromosomeData {
 /// brain's real allele frequencies. `max_variants` bounds the parse to a
 /// leading slice of the chromosome (real 1000G chromosomes run into the
 /// millions of variants).
+///
+/// `use_haplotypes`: if true, parses phased genotype data (real 1000G
+/// VCFs are phased) and samples via `GenomeSampler::from_brain_with_haplotypes`,
+/// which preserves real within-block LD by resampling real observed
+/// haplotype fragments instead of drawing each locus independently. Costs
+/// roughly 2x the parse time/memory of the `false` path (see
+/// `VcfParser::parse_vcf_phased_limited`).
 pub fn build_real_chromosome(
     vcf_path: &str,
     chr: u8,
     max_variants: Option<usize>,
     synthetic_n_samples: usize,
     seed: u64,
+    use_haplotypes: bool,
 ) -> Result<RealChromosomeData, String> {
-    let chromosome = VcfParser::new(false).parse_vcf_limited(vcf_path, chr, max_variants)?;
+    let parser = VcfParser::new(false);
+    let chromosome = if use_haplotypes {
+        parser.parse_vcf_phased_limited(vcf_path, chr, max_variants)?
+    } else {
+        parser.parse_vcf_limited(vcf_path, chr, max_variants)?
+    };
+
     let positions: Vec<u32> = chromosome.snps.iter().map(|s| s.position).collect();
     let ld_matrix = LdComputer::new(false, 0.5).compute_ld(&chromosome.genotypes, &positions)?;
 
@@ -70,7 +89,19 @@ pub fn build_real_chromosome(
     }
     reference.finalize();
 
-    let sampler = GenomeSampler::from_brain(&brain, synthetic_n_samples, seed);
+    let n_real_samples = chromosome.sample_names.len();
+    let sampler = if use_haplotypes {
+        GenomeSampler::from_brain_with_haplotypes(
+            &brain,
+            &chromosome.hap_a,
+            &chromosome.hap_b,
+            n_real_samples,
+            synthetic_n_samples,
+            seed,
+        )
+    } else {
+        GenomeSampler::from_brain(&brain, synthetic_n_samples, seed)
+    };
     let sampled_genome = sampler.sample(0);
 
     let mut synthetic = SyntheticGenome::new(synthetic_n_samples);
@@ -88,12 +119,13 @@ pub fn build_real_chromosome(
 
     Ok(RealChromosomeData {
         chr: ChromosomeId(chr),
-        n_real_samples: chromosome.sample_names.len(),
+        n_real_samples,
         reference,
         synthetic,
         sampled_genome,
         ld_pairs: ld_matrix.pairs,
         snp_order,
         brain,
+        used_haplotype_sampling: use_haplotypes,
     })
 }

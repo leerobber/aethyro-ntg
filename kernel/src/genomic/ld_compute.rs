@@ -127,8 +127,22 @@ impl LdComputer {
         })
     }
 
-    /// Compute Pearson correlation (r²) between two SNPs
-    /// Using bitsliced genotype data for efficiency
+    /// Compute r² (squared Pearson correlation) between genotype dosages
+    /// (0/1/2 alt-allele count per sample, 3=missing/excluded) for two
+    /// SNPs. This is the standard genotypic r², equal in expectation to
+    /// haplotype-level r² under random mating, and matches
+    /// `synthesis::Genome::ld_r2`'s approach.
+    ///
+    /// A prior version derived (n_00, n_01, n_10, n_11) counts via
+    /// `genotype & 1`, which collapses genotype 2 (homozygous alt) to the
+    /// same bit as genotype 0 (homozygous ref) -- every homozygous-alt
+    /// sample was silently counted as if it carried no alt allele at all.
+    /// That inflated or distorted every r² this LD computer ever produced
+    /// for a SNP with any homozygous-alt carriers (i.e. essentially every
+    /// common SNP), and went undetected because the one test exercising
+    /// it used `if let Some(r_sq) = ...`, which silently skips the
+    /// assertion when the buggy formula happened to return `None` (which
+    /// it did for that test's exact input) instead of failing.
     fn compute_r_squared(
         &self,
         geno1: &BitstreamGenotypes,
@@ -139,88 +153,46 @@ impl LdComputer {
         }
 
         let n = geno1.len();
-
-        // Compute allele counts
-        let (n_00, n_01, n_10, n_11) = self.count_genotype_pairs(geno1, geno2, n);
-
-        // Total samples (excluding missing)
-        let total = (n_00 + n_01 + n_10 + n_11) as f64;
-        if total < 10.0 {
-            // Too few samples for reliable correlation
-            return None;
-        }
-
-        // Allele frequencies
-        let p_snp1 = ((n_10 + n_11) as f64 * 2.0 + (n_01 + n_11) as f64) / (total * 2.0);
-        let p_snp2 = ((n_01 + n_11) as f64 * 2.0 + (n_10 + n_11) as f64) / (total * 2.0);
-        let q_snp1 = 1.0 - p_snp1;
-        let q_snp2 = 1.0 - p_snp2;
-
-        // Avoid division by zero
-        if q_snp1 == 0.0 || q_snp2 == 0.0 {
-            return None;
-        }
-
-        // D' (coefficient of linkage disequilibrium)
-        // D = P_AB - p_A * p_B
-        let p_ab = (n_11 as f64) / total;
-        let d = p_ab - (p_snp1 * p_snp2);
-
-        // D_max
-        let d_max = if d > 0.0 {
-            (p_snp1 * p_snp2).min(q_snp1 * q_snp2)
-        } else {
-            (p_snp1 * q_snp2).min(q_snp1 * p_snp2)
-        };
-
-        // r² = D² / (p_A * q_A * p_B * q_B)
-        let r_squared = if d_max > 0.0 {
-            (d * d) / (p_snp1 * q_snp1 * p_snp2 * q_snp2)
-        } else {
-            return None;
-        };
-
-        // Convert to f32 and clamp to [0, 1]
-        Some((r_squared as f32).max(0.0).min(1.0))
-    }
-
-    /// Count genotype pairs between two SNPs
-    /// Returns (n_00, n_01, n_10, n_11)
-    /// Where 0 = ref allele, 1 = alt allele
-    fn count_genotype_pairs(
-        &self,
-        geno1: &BitstreamGenotypes,
-        geno2: &BitstreamGenotypes,
-        n: usize,
-    ) -> (u32, u32, u32, u32) {
-        let mut n_00 = 0u32;
-        let mut n_01 = 0u32;
-        let mut n_10 = 0u32;
-        let mut n_11 = 0u32;
+        let mut sum_x = 0.0f64;
+        let mut sum_y = 0.0f64;
+        let mut sum_xy = 0.0f64;
+        let mut sum_x2 = 0.0f64;
+        let mut sum_y2 = 0.0f64;
+        let mut valid = 0.0f64;
 
         for i in 0..n {
             let g1 = geno1.get(i);
             let g2 = geno2.get(i);
-
-            // Skip missing genotypes
             if g1 == 3 || g2 == 3 {
-                continue;
+                continue; // missing
             }
 
-            // Extract alleles (only use first allele for simplicity, can use both)
-            let a1 = g1 & 1;  // 0 or 1
-            let a2 = g2 & 1;  // 0 or 1
-
-            match (a1, a2) {
-                (0, 0) => n_00 += 1,
-                (0, 1) => n_01 += 1,
-                (1, 0) => n_10 += 1,
-                (1, 1) => n_11 += 1,
-                _ => {}
-            }
+            let x = g1 as f64;
+            let y = g2 as f64;
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_x2 += x * x;
+            sum_y2 += y * y;
+            valid += 1.0;
         }
 
-        (n_00, n_01, n_10, n_11)
+        if valid < 10.0 {
+            // Too few samples for reliable correlation
+            return None;
+        }
+
+        let num = valid * sum_xy - sum_x * sum_y;
+        let den = ((valid * sum_x2 - sum_x * sum_x) * (valid * sum_y2 - sum_y * sum_y)).sqrt();
+
+        if den <= 0.0 {
+            // No variance at one (or both) loci in this sample -- r² is
+            // undefined, not zero.
+            return None;
+        }
+
+        let r = num / den;
+        Some(((r * r) as f32).max(0.0).min(1.0))
     }
 }
 
@@ -309,12 +281,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ld_computation() {
+    fn test_ld_computation_perfect_correlation() {
         // Create test genotypes
         let mut geno1 = BitstreamGenotypes::new(100);
         let mut geno2 = BitstreamGenotypes::new(100);
 
-        // Set up perfect LD (r² = 1.0)
+        // Set up perfect LD (r² = 1.0): identical dosage pattern at both loci.
         for i in 0..100 {
             let gt = if i % 2 == 0 { 0 } else { 2 };
             geno1.set(i, gt);
@@ -322,10 +294,74 @@ mod tests {
         }
 
         let computer = LdComputer::new(false, 0.5);
-        if let Some(r_sq) = computer.compute_r_squared(&geno1, &geno2) {
-            // Perfect correlation should give r² close to 1.0
-            assert!(r_sq > 0.9, "Expected r² > 0.9, got {}", r_sq);
+        let r_sq = computer
+            .compute_r_squared(&geno1, &geno2)
+            .expect("perfectly correlated dosages must yield Some(r_sq), not None");
+        assert!(r_sq > 0.9, "Expected r² > 0.9, got {}", r_sq);
+    }
+
+    /// Regression test for the genotype & 1 bug: homozygous alt (2) was
+    /// bitwise-collapsed to the same value as homozygous ref (0), so a
+    /// SNP with homozygous-alt carriers had its correlation with another
+    /// SNP silently mismeasured. This constructs a case where the
+    /// dosages are ANTI-correlated (one locus high when the other is
+    /// low) using genotype value 2 specifically, which the old
+    /// `g & 1`-based formula could not distinguish from genotype 0.
+    #[test]
+    fn test_ld_computation_distinguishes_homozygous_alt_from_homozygous_ref() {
+        let mut geno1 = BitstreamGenotypes::new(60);
+        let mut geno2 = BitstreamGenotypes::new(60);
+
+        for i in 0..60 {
+            if i < 30 {
+                geno1.set(i, 2); // homozygous alt
+                geno2.set(i, 0); // homozygous ref
+            } else {
+                geno1.set(i, 0);
+                geno2.set(i, 2);
+            }
         }
+
+        let computer = LdComputer::new(false, 0.5);
+        let r_sq = computer
+            .compute_r_squared(&geno1, &geno2)
+            .expect("perfectly anti-correlated dosages must yield Some(r_sq)");
+
+        // Perfect anti-correlation still gives r² near 1.0 (r² is
+        // sign-blind). The old buggy formula, given only genotypes 0 and
+        // 2, saw every sample as (0, 0) after `& 1` and returned None.
+        assert!(r_sq > 0.9, "Expected r² > 0.9 for perfect anti-correlation, got {}", r_sq);
+    }
+
+    #[test]
+    fn test_ld_computation_uncorrelated_dosages_score_low() {
+        let mut geno1 = BitstreamGenotypes::new(60);
+        let mut geno2 = BitstreamGenotypes::new(60);
+
+        // Alternating 0/1/2 vs. a fixed unrelated pattern with no
+        // consistent relationship to geno1.
+        let pattern2 = [0u8, 2, 1, 1, 0, 2, 2, 0, 1, 0];
+        for i in 0..60 {
+            geno1.set(i, (i % 3) as u8);
+            geno2.set(i, pattern2[i % pattern2.len()]);
+        }
+
+        let computer = LdComputer::new(false, 0.5);
+        let r_sq = computer.compute_r_squared(&geno1, &geno2).unwrap_or(0.0);
+        assert!(r_sq < 0.3, "Expected low r² for unrelated dosage patterns, got {}", r_sq);
+    }
+
+    #[test]
+    fn test_ld_computation_too_few_samples_returns_none() {
+        let mut geno1 = BitstreamGenotypes::new(5);
+        let mut geno2 = BitstreamGenotypes::new(5);
+        for i in 0..5 {
+            geno1.set(i, (i % 2) as u8);
+            geno2.set(i, (i % 2) as u8);
+        }
+
+        let computer = LdComputer::new(false, 0.5);
+        assert!(computer.compute_r_squared(&geno1, &geno2).is_none());
     }
 
     #[test]

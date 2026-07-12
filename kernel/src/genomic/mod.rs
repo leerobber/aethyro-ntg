@@ -32,7 +32,7 @@ pub use chromosome_brain::{ChromosomeBrain, ChromosomeId, NeuronId, Synapse, Gen
 pub use agents::{ChromosomeAgent, AgentQuery, AgentResponse, AgentCoordinator, CoordinatorResponse};
 pub use domain_agents::{DomainAgent, DomainType, DomainQuery, DiseaseDiagnosis, PatternSignature, RiskSeverity};
 pub use report_gen::{TestResults, DomainResult, AggregateStats};
-pub use synthesis::{Genome, GenomeSampler};
+pub use synthesis::{Genome, GenomeSampler, HaplotypePool};
 pub use evolution::{EvolutionSim, FitnessModel, DefaultFitnessModel, GenerationStats};
 pub use phenotype::{PhenotypeHead, Environment, GxEEngine};
 pub use quality_control::{GenomeValidator, LocusStats, PopulationStats, QCMetrics};

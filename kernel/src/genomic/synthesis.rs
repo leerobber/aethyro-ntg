@@ -1,18 +1,107 @@
 /// Phase C: Synthetic Genome Synthesis
-/// Samples each locus independently under Hardy-Weinberg equilibrium at
-/// that locus's own real allele frequency (via `from_brain`). Does NOT
-/// currently preserve LD/haplotype structure -- sampling is per-SNP with
-/// no cross-locus correlation, so a synthesized genome will match a real
-/// reference's allele frequencies but not its LD pattern. Phase D's
-/// real-vs-synthetic validation (phase_d_quality_control) surfaces this
-/// directly: allele-frequency RMSE is small, LD correlation is not.
-/// Fixing that would mean sampling haplotypes (using `HaplotypeBlock`
-/// membership) instead of independent per-SNP draws -- not yet
-/// implemented.
+///
+/// Two sampling modes:
+/// - Independent per-locus (the original approach, still the fallback):
+///   each SNP drawn under Hardy-Weinberg at its own real allele frequency
+///   (via `from_brain`), with no cross-locus correlation. Matches a real
+///   reference's allele frequencies but not its LD pattern -- Phase D's
+///   real-vs-synthetic validation surfaced this directly (allele-frequency
+///   RMSE small, LD correlation near zero).
+/// - Haplotype-block-based (`from_brain_with_haplotypes`, using
+///   `HaplotypePool`): real 1000 Genomes VCFs are phased ("0|1", not
+///   "0/1" -- see `VcfParser::parse_vcf_phased_limited`), so for each
+///   `HaplotypeBlock` we can extract the *actual* observed haplotype
+///   fragments real samples carry across that block's SNPs, and
+///   synthesize new individuals by drawing two real fragments (with
+///   replacement) per block, the same way a real diploid genome is two
+///   inherited chromosome copies. This preserves real within-block LD by
+///   construction, because it isn't modeling LD from summary statistics
+///   at all -- it's recombining real co-inherited fragments. SNPs not
+///   covered by any block (or when no phased data was supplied) still
+///   fall back to independent per-locus sampling. Cross-block LD is not
+///   modeled either way; blocks are themselves defined as maximal
+///   LD-connected components, so that's a reasonable simplification, not
+///   an omission of anything the block structure itself would capture.
 /// Pure Rust implementation
 
+use crate::genomic::bitsliced_genotypes::BitstreamGenotypes;
 use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
+use crate::genomic::haplotype_blocks::HaplotypeBlock;
 use std::collections::HashMap;
+
+/// Real observed haplotype fragments for one `HaplotypeBlock`, used to
+/// synthesize genomes that preserve that block's real LD structure
+/// instead of sampling each locus independently.
+#[derive(Clone, Debug)]
+pub struct HaplotypePool {
+    /// Global SNP indices covered by this pool, in the same order as
+    /// each entry in `observed_haplotypes`.
+    pub snp_indices: Vec<usize>,
+    /// Each entry is one real chromosome copy's alleles (0/1) across
+    /// `snp_indices`, drawn from real phased samples. Up to
+    /// `2 * n_real_samples` entries; a copy is skipped entirely (not
+    /// filled with a guess) if it had a missing call anywhere in this
+    /// block's SNPs.
+    pub observed_haplotypes: Vec<Vec<u8>>,
+}
+
+impl HaplotypePool {
+    /// Build a pool for one block from phased VCF data (`hap_a`/`hap_b`:
+    /// one `BitstreamGenotypes` per SNP, indexed the same way as
+    /// `VcfChromosome::genotypes`).
+    pub fn from_phased(
+        block: &HaplotypeBlock,
+        hap_a: &[BitstreamGenotypes],
+        hap_b: &[BitstreamGenotypes],
+        n_real_samples: usize,
+    ) -> Self {
+        let snp_indices: Vec<usize> = block.snp_indices.iter().map(|&i| i as usize).collect();
+        let mut observed_haplotypes = Vec::new();
+
+        for sample_idx in 0..n_real_samples {
+            for hap in [hap_a, hap_b] {
+                let mut fragment = Vec::with_capacity(snp_indices.len());
+                let mut ok = true;
+                for &snp_idx in &snp_indices {
+                    let Some(snp_hap) = hap.get(snp_idx) else {
+                        ok = false;
+                        break;
+                    };
+                    let allele = snp_hap.get(sample_idx);
+                    if allele > 1 {
+                        // 3 = missing on this copy (2 is never written by
+                        // the phased parser for a single haplotype strand).
+                        ok = false;
+                        break;
+                    }
+                    fragment.push(allele);
+                }
+                if ok {
+                    observed_haplotypes.push(fragment);
+                }
+            }
+        }
+
+        HaplotypePool {
+            snp_indices,
+            observed_haplotypes,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.observed_haplotypes.is_empty()
+    }
+
+    /// Pick one observed haplotype fragment via an external draw in
+    /// [0, 1); the caller supplies randomness so this stays deterministic
+    /// and reproducible given the same seed, matching the rest of this
+    /// module.
+    pub fn pick(&self, unit_draw: f32) -> &[u8] {
+        let n = self.observed_haplotypes.len();
+        let idx = ((unit_draw.clamp(0.0, 0.999_999) * n as f32) as usize).min(n.saturating_sub(1));
+        &self.observed_haplotypes[idx]
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Genome {
@@ -108,6 +197,10 @@ pub struct GenomeSampler {
     /// and every locus falls back to a flat 0.3 (the old behavior, kept for
     /// callers that only want a synthetic population with no reference).
     pub allele_freqs: Vec<f32>,
+    /// Real-haplotype pools for LD-preserving sampling (see module doc).
+    /// Empty means "no phased data supplied" -- every locus falls back to
+    /// independent per-locus sampling, the original behavior.
+    pub haplotype_pools: Vec<HaplotypePool>,
 }
 
 impl GenomeSampler {
@@ -117,13 +210,29 @@ impl GenomeSampler {
             n_samples,
             seed,
             allele_freqs: Vec::new(),
+            haplotype_pools: Vec::new(),
+        }
+    }
+
+    /// Build a sampler with explicit per-locus allele frequencies (and no
+    /// haplotype pools). Mainly for tests; `from_brain`/
+    /// `from_brain_with_haplotypes` are the real-data constructors.
+    pub fn with_allele_freqs(n_samples: usize, seed: u64, allele_freqs: Vec<f32>) -> Self {
+        Self {
+            n_snps: allele_freqs.len(),
+            n_samples,
+            seed,
+            allele_freqs,
+            haplotype_pools: Vec::new(),
         }
     }
 
     /// Build a sampler whose per-locus allele frequencies come from a real
     /// `ChromosomeBrain` (i.e. the real 1000 Genomes-derived MAF at each
     /// SNP, via `GenomicNeuron::allele_freq`), instead of one flat
-    /// assumed frequency for the whole chromosome.
+    /// assumed frequency for the whole chromosome. Samples each locus
+    /// independently -- use `from_brain_with_haplotypes` to also preserve
+    /// real LD structure within haplotype blocks.
     pub fn from_brain(brain: &ChromosomeBrain, n_samples: usize, seed: u64) -> Self {
         let allele_freqs: Vec<f32> = brain.neurons.iter().map(|n| n.allele_freq).collect();
         Self {
@@ -131,6 +240,38 @@ impl GenomeSampler {
             n_samples,
             seed,
             allele_freqs,
+            haplotype_pools: Vec::new(),
+        }
+    }
+
+    /// Same as `from_brain`, but also builds a `HaplotypePool` per block
+    /// from real phased VCF data (`hap_a`/`hap_b`, from
+    /// `VcfParser::parse_vcf_phased_limited`), so SNPs inside a block are
+    /// sampled by drawing real haplotype fragments instead of
+    /// independently. SNPs the brain's blocks don't cover still fall back
+    /// to independent per-locus sampling.
+    pub fn from_brain_with_haplotypes(
+        brain: &ChromosomeBrain,
+        hap_a: &[BitstreamGenotypes],
+        hap_b: &[BitstreamGenotypes],
+        n_real_samples: usize,
+        n_samples: usize,
+        seed: u64,
+    ) -> Self {
+        let allele_freqs: Vec<f32> = brain.neurons.iter().map(|n| n.allele_freq).collect();
+        let haplotype_pools: Vec<HaplotypePool> = brain
+            .blocks
+            .iter()
+            .filter(|b| b.snp_indices.len() > 1) // singleton blocks carry no LD to preserve
+            .map(|b| HaplotypePool::from_phased(b, hap_a, hap_b, n_real_samples))
+            .filter(|p| !p.is_empty())
+            .collect();
+        Self {
+            n_snps: allele_freqs.len(),
+            n_samples,
+            seed,
+            allele_freqs,
+            haplotype_pools,
         }
     }
 
@@ -166,8 +307,51 @@ impl GenomeSampler {
     /// Sample a single synthetic genome
     pub fn sample(&self, genome_id: u32) -> Genome {
         let mut genome = Genome::new(genome_id, self.n_snps, self.n_samples);
+        let mut covered = vec![false; self.n_snps];
 
+        // Haplotype-block-based sampling first: draw two real observed
+        // haplotype fragments per synthetic sample per block (mirroring
+        // diploid inheritance), preserving that block's real LD by
+        // construction. Pool draws use a SNP-index namespace disjoint
+        // from real SNP indices (counting down from u32::MAX) so they
+        // never coincide with the independent-locus draws below, which
+        // would otherwise silently correlate two unrelated loci.
+        for (pool_idx, pool) in self.haplotype_pools.iter().enumerate() {
+            if pool.is_empty() {
+                continue;
+            }
+            let salt_a = u32::MAX - (pool_idx as u32) * 2;
+            let salt_b = salt_a - 1;
+
+            for &snp_idx in &pool.snp_indices {
+                if snp_idx < covered.len() {
+                    covered[snp_idx] = true;
+                }
+            }
+
+            for sample_idx in 0..self.n_samples {
+                let draw_a = Self::hash_unit_interval(self.seed, genome_id, salt_a, sample_idx as u32);
+                let draw_b = Self::hash_unit_interval(self.seed, genome_id, salt_b, sample_idx as u32);
+
+                let hap_a = pool.pick(draw_a);
+                let hap_b = pool.pick(draw_b);
+
+                for (local_idx, &snp_idx) in pool.snp_indices.iter().enumerate() {
+                    if snp_idx >= self.n_snps {
+                        continue;
+                    }
+                    genome.genotypes[snp_idx][sample_idx] = hap_a[local_idx] + hap_b[local_idx];
+                }
+            }
+        }
+
+        // Independent per-locus fallback for everything a pool didn't
+        // cover (no phased data supplied, or a singleton SNP outside any
+        // block).
         for snp_idx in 0..self.n_snps {
+            if covered[snp_idx] {
+                continue;
+            }
             let allele_freq = self.allele_freq_for(snp_idx);
 
             // allele_freq is the ALT-allele frequency (VCF AF convention,
@@ -244,12 +428,8 @@ mod tests {
 
     #[test]
     fn test_sampler_uses_per_locus_allele_frequency() {
-        let sampler = GenomeSampler {
-            n_snps: 2,
-            n_samples: 2000,
-            seed: 7,
-            allele_freqs: vec![0.05, 0.95], // rare vs. common, not the old flat 0.3
-        };
+        // rare vs. common, not the old flat 0.3
+        let sampler = GenomeSampler::with_allele_freqs(2000, 7, vec![0.05, 0.95]);
 
         let genome = sampler.sample(0);
 
@@ -301,5 +481,147 @@ mod tests {
 
         assert_eq!(sampler.n_snps, 2);
         assert_eq!(sampler.allele_freqs, vec![0.05, 0.9]);
+    }
+
+    fn perfectly_linked_block() -> (HaplotypeBlock, Vec<BitstreamGenotypes>, Vec<BitstreamGenotypes>) {
+        // 8 real samples (16 haplotype copies). Every real copy is either
+        // ref/ref at both SNPs or alt/alt at both -- the two loci always
+        // travel together, i.e. perfect LD (r² = 1) in the real data.
+        let n_samples = 8;
+        let mut hap_a0 = BitstreamGenotypes::new(n_samples);
+        let mut hap_b0 = BitstreamGenotypes::new(n_samples);
+        let mut hap_a1 = BitstreamGenotypes::new(n_samples);
+        let mut hap_b1 = BitstreamGenotypes::new(n_samples);
+
+        for sample_idx in 0..n_samples {
+            // Alternate ref-carrying / alt-carrying samples so the pool
+            // has real variety in both directions, not a monomorphic site.
+            let carries_alt = sample_idx % 2 == 0;
+            let allele = if carries_alt { 1 } else { 0 };
+            hap_a0.set(sample_idx, allele);
+            hap_b0.set(sample_idx, allele);
+            hap_a1.set(sample_idx, allele); // SNP1 always matches SNP0
+            hap_b1.set(sample_idx, allele);
+        }
+
+        let block = HaplotypeBlock {
+            id: 0,
+            snp_indices: vec![0, 1],
+            mean_r_squared: 1.0,
+            start_position: 100,
+            end_position: 200,
+            size: 2,
+        };
+
+        (block, vec![hap_a0, hap_a1], vec![hap_b0, hap_b1])
+    }
+
+    #[test]
+    fn test_haplotype_pool_from_phased_extracts_real_fragments() {
+        let (block, hap_a, hap_b) = perfectly_linked_block();
+        let pool = HaplotypePool::from_phased(&block, &hap_a, &hap_b, 8);
+
+        assert_eq!(pool.snp_indices, vec![0, 1]);
+        // 8 samples * 2 copies = 16 real haplotype fragments, none missing.
+        assert_eq!(pool.observed_haplotypes.len(), 16);
+        // Every fragment has the two loci matching (perfectly linked).
+        for frag in &pool.observed_haplotypes {
+            assert_eq!(frag.len(), 2);
+            assert_eq!(frag[0], frag[1], "fragment {:?} breaks perfect linkage", frag);
+        }
+    }
+
+    #[test]
+    fn test_haplotype_pool_skips_missing_calls() {
+        let n_samples = 4;
+        let mut hap_a0 = BitstreamGenotypes::new(n_samples);
+        let mut hap_b0 = BitstreamGenotypes::new(n_samples);
+        for i in 0..n_samples {
+            hap_a0.set(i, 0);
+            hap_b0.set(i, 0);
+        }
+        hap_a0.set(1, 3); // missing on this copy for sample 1
+
+        let block = HaplotypeBlock {
+            id: 0,
+            snp_indices: vec![0],
+            mean_r_squared: 0.0,
+            start_position: 0,
+            end_position: 0,
+            size: 1,
+        };
+
+        let pool = HaplotypePool::from_phased(&block, &[hap_a0], &[hap_b0], n_samples);
+        // 4 samples * 2 copies = 8, minus the 1 missing copy = 7.
+        assert_eq!(pool.observed_haplotypes.len(), 7);
+    }
+
+    #[test]
+    fn test_haplotype_based_sampling_preserves_real_ld() {
+        let (block, hap_a, hap_b) = perfectly_linked_block();
+
+        let mut sampler = GenomeSampler::with_allele_freqs(300, 11, vec![0.5, 0.5]);
+        sampler.haplotype_pools = vec![HaplotypePool::from_phased(&block, &hap_a, &hap_b, 8)];
+
+        let genome = sampler.sample(0);
+        let ld = genome.ld_r2(0, 1);
+
+        assert!(ld > 0.9, "expected near-perfect LD preserved from real haplotypes, got {ld}");
+    }
+
+    #[test]
+    fn test_independent_sampling_without_pools_does_not_preserve_ld() {
+        // Same target allele frequencies as the perfectly-linked block
+        // above, but with no haplotype pool -- this is the pre-existing
+        // behavior, kept as a contrast so the difference above is
+        // attributable to the new mechanism, not to the specific
+        // frequencies chosen.
+        let sampler = GenomeSampler::with_allele_freqs(300, 11, vec![0.5, 0.5]);
+        let genome = sampler.sample(0);
+        let ld = genome.ld_r2(0, 1);
+
+        assert!(ld < 0.3, "expected near-zero LD from independent sampling, got {ld}");
+    }
+
+    #[test]
+    fn test_from_brain_with_haplotypes_skips_singleton_blocks() {
+        use crate::genomic::chromosome_brain::{
+            ChromosomeId as ChrId, EmbeddingLayer, GenomicNeuron, KairosState, NeuronId as NId,
+        };
+
+        let (block, hap_a, hap_b) = perfectly_linked_block();
+        let singleton = HaplotypeBlock {
+            id: 1,
+            snp_indices: vec![2],
+            mean_r_squared: 0.0,
+            start_position: 300,
+            end_position: 300,
+            size: 1,
+        };
+
+        let brain = ChromosomeBrain {
+            chr: ChrId(1),
+            neurons: vec![
+                GenomicNeuron { id: NId(0), snp_index: 0, position_bp: 100, allele_freq: 0.5, maf: 0.5, is_rare: false },
+                GenomicNeuron { id: NId(1), snp_index: 1, position_bp: 200, allele_freq: 0.5, maf: 0.5, is_rare: false },
+                GenomicNeuron { id: NId(2), snp_index: 2, position_bp: 300, allele_freq: 0.5, maf: 0.5, is_rare: false },
+            ],
+            synapses: vec![],
+            blocks: vec![block, singleton],
+            embeddings: EmbeddingLayer { snp_embeddings: vec![], block_embeddings: vec![], consolidated: vec![] },
+            training_cycles: 0,
+            kairos_state: KairosState::default(),
+        };
+
+        let sampler = GenomeSampler::from_brain_with_haplotypes(&brain, &hap_a, &hap_b, 8, 300, 11);
+
+        assert_eq!(sampler.haplotype_pools.len(), 1, "singleton block should not produce a pool");
+        assert_eq!(sampler.haplotype_pools[0].snp_indices, vec![0, 1]);
+
+        // SNP 2 (the singleton) isn't pool-covered, so it must still fall
+        // back to independent sampling rather than being left at zero.
+        let genome = sampler.sample(0);
+        let freq2 = genome.allele_freq(2);
+        assert!((freq2 - 0.5).abs() < 0.15, "expected fallback sampling near target freq, got {freq2}");
     }
 }

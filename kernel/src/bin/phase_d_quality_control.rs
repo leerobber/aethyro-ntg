@@ -1,6 +1,9 @@
 /// Phase D: Quality Control & Validation
 /// Statistical validation of Phase C's synthetic genomes against a real
-/// 1000 Genomes reference built from actual chr1 VCF data.
+/// 1000 Genomes reference built from actual chr1 VCF data. Phase C
+/// synthesizes via haplotype-block resampling (real observed haplotype
+/// fragments, not independent per-locus draws), so this now validates
+/// both allele-frequency matching and LD/haplotype-structure matching.
 /// Pure Rust implementation
 ///
 /// Usage: cargo run --release --bin phase_d_quality_control [-- <max_variants>]
@@ -23,14 +26,14 @@ fn main() {
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
     let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
-    let synthetic_n_samples = 200;
+    let synthetic_n_samples = 2000;
 
     // ========== STEP 1/2: Build real reference + Phase C synthetic genome ==========
     println!("\n[Step 1/6] Loading real 1000 Genomes chr1 data...");
     println!("[Step 2/6] Synthesizing a genome from Phase C (real per-locus frequencies)...");
 
     let chr_path = vcf_path("1");
-    let data = build_real_chromosome(&chr_path, 1, max_variants, synthetic_n_samples, 42)
+    let data = build_real_chromosome(&chr_path, 1, max_variants, synthetic_n_samples, 42, true)
         .expect("failed to build real chromosome data");
 
     println!(
@@ -41,9 +44,11 @@ fn main() {
     );
     println!("✓ Reference LD r² mean: {:.3}", data.reference.mean_ld_r2);
     println!(
-        "✓ Sampled 1 synthetic genome: {} SNPs, {} samples (targets = real chr1 allele frequencies)",
+        "✓ Sampled 1 synthetic genome via haplotype-block resampling: {} SNPs, {} samples\n  \
+         (allele-frequency targets AND within-block LD both from real chr1 data, {} haplotype pools)",
         data.sampled_genome.genotypes.len(),
-        synthetic_n_samples
+        synthetic_n_samples,
+        data.brain.blocks.len()
     );
 
     // ========== STEP 3: Quality Control on the synthetic genome's own genotypes ==========
@@ -154,6 +159,9 @@ fn main() {
     println!("✓ Zero dependencies");
     println!("✓ Ready for Phase E (Extended Validation)");
 
+    let af_ok = validation.allele_freq_rmse < 0.05;
+    let ld_ok = validation.ld_pearson_r.abs() > 0.5;
+
     println!("\n📋 Recommendation:");
     if validation.overall_similarity > 0.90 {
         println!("  PASS: Synthetic genomes highly similar to reference (similarity={:.2}%)",
@@ -166,17 +174,20 @@ fn main() {
         println!(
             "    Allele frequency RMSE {:.4} ({}), LD correlation {:.4} ({}).",
             validation.allele_freq_rmse,
-            if validation.allele_freq_rmse < 0.05 { "good match" } else { "poor match" },
+            if af_ok { "good match" } else { "poor match" },
             validation.ld_pearson_r,
-            if validation.ld_pearson_r.abs() > 0.5 { "good match" } else { "poor match" },
+            if ld_ok { "good match" } else { "poor match" },
         );
-        if validation.allele_freq_rmse < 0.05 && validation.ld_pearson_r.abs() < 0.5 {
+        if af_ok && !ld_ok {
             println!(
-                "    Diagnosis: GenomeSampler targets real per-locus allele frequencies correctly,\n\
-                 \x20   but samples each locus independently and does not model haplotype/LD\n\
-                 \x20   structure (see synthesis.rs module doc). That is the gap to close next,\n\
-                 \x20   not a data-wiring problem."
+                "    Diagnosis: allele frequencies match but LD does not, even with haplotype-\n\
+                 \x20   block resampling enabled. Likely cause: too few haplotype pools relative to\n\
+                 \x20   the number of LD pairs being compared (singleton/small blocks fall back to\n\
+                 \x20   independent sampling, which cannot reproduce LD by construction) -- check\n\
+                 \x20   data.brain.blocks.len() vs data.ld_pairs.len() above."
             );
+        } else if !af_ok && !ld_ok {
+            println!("    Diagnosis: both allele frequency and LD are off -- check upstream data wiring.");
         }
     }
 }

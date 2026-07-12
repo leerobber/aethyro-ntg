@@ -9,7 +9,8 @@
 ///
 /// Real-data honesty notes:
 /// - Genome-wide validation and locus power are built from real VCF data
-///   via build_real_chromosome (VCF -> LD -> brain -> Phase C synthesis),
+///   via build_real_chromosome (VCF -> LD -> brain -> Phase C synthesis
+///   via haplotype-block resampling, preserving real within-block LD),
 ///   the same pipeline Phase D uses.
 /// - Only 4 of the 22 human autosomes have VCFs in data/raw, so
 ///   `is_complete_autosome_set` will correctly report false.
@@ -102,7 +103,11 @@ fn main() {
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
     let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
-    let synthetic_n_samples = 200;
+    // 2000, not 200: with the LD-computation fix (see ld_compute.rs), LD
+    // correlation is real but noisy for rare variants at small synthetic
+    // sample sizes -- confirmed empirically in Phase D that n=2000
+    // resolves the noise (r² correlation 0.05 -> 0.59 at the same cap).
+    let synthetic_n_samples = 2000;
 
     // ========== STEP 1: Multi-Population Reference Panels (SYNTHETIC PROXY) ==========
     println!("\n[Step 1/4] Building Multi-Population Reference Panels (EUR/AFR/ASN)...");
@@ -144,7 +149,7 @@ fn main() {
 
     for &chr in &REAL_CHROMOSOMES {
         println!("\n  Building chr{} from real VCF data...", chr);
-        let data = build_real_chromosome(&vcf_path(chr), chr, max_variants, synthetic_n_samples, 42)
+        let data = build_real_chromosome(&vcf_path(chr), chr, max_variants, synthetic_n_samples, 42, true)
             .unwrap_or_else(|e| panic!("failed to build real chr{}: {}", chr, e));
 
         println!(
@@ -286,8 +291,10 @@ fn main() {
             report.mean_similarity * 100.0
         );
         println!(
-            "    (Phase D found this is driven by LD, not allele frequency -- GenomeSampler\n\
-             \x20   samples loci independently and does not yet model haplotype structure.)"
+            "    (GenomeSampler now resamples real haplotype fragments per LD block; if LD\n\
+             \x20   correlation is still weak, check whether synthetic_n_samples is large enough\n\
+             \x20   -- rare-variant pairwise LD needs more synthetic draws to estimate reliably,\n\
+             \x20   not more haplotype pools. Phase D confirmed n=2000 resolves this at chr1 scale.)"
         );
     }
 }

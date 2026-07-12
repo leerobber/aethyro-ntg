@@ -5,8 +5,10 @@
 /// Usage: cargo run --release --bin phase_c_synthesis [-- <max_variants>]
 /// Builds a real ChromosomeBrain from data/raw/1000g chr1 (optionally
 /// capped to a leading slice of variants) and synthesizes a population
-/// whose per-locus allele frequencies come from that brain instead of a
-/// single assumed frequency for the whole chromosome.
+/// via haplotype-block resampling: real per-locus allele frequencies AND
+/// real within-block LD, both from actual observed haplotypes (real VCFs
+/// are phased) instead of independent per-locus draws at an assumed
+/// frequency. See genomic::synthesis module doc for the mechanism.
 
 use ntg_kernel::genomic::{
     BlockDetector, ChromosomeId, DefaultFitnessModel, Environment, EvolutionSim, GenomeSampler,
@@ -33,11 +35,11 @@ fn main() {
     let n_generations = 10;
 
     // ========== STEP 1: Build a real Chromosome Brain (Phase A + B) ==========
-    println!("\n[Step 1/4] Building chromosome brain from real chr1 VCF data...");
+    println!("\n[Step 1/4] Building chromosome brain from real chr1 VCF data (phased)...");
     let chr_path = vcf_path("1");
     let vcf_parser = VcfParser::new(false);
     let chromosome = vcf_parser
-        .parse_vcf_limited(&chr_path, 1, max_variants)
+        .parse_vcf_phased_limited(&chr_path, 1, max_variants)
         .expect("failed to parse real VCF data");
     let positions: Vec<u32> = chromosome.snps.iter().map(|s| s.position).collect();
     let ld_matrix = LdComputer::new(false, 0.5)
@@ -68,14 +70,22 @@ fn main() {
         brain.neurons.iter().map(|n| n.allele_freq).sum::<f32>() / brain.neurons.len().max(1) as f32;
     println!("✓ Mean real alt-allele frequency across these loci: {:.4}", mean_real_af);
 
-    // ========== STEP 2: Generate Initial Population from real allele frequencies ==========
-    println!("\n[Step 2/4] Generating Initial Population from real per-locus frequencies...");
-    let sampler = GenomeSampler::from_brain(&brain, n_samples, 42);
+    // ========== STEP 2: Generate Initial Population via haplotype-block resampling ==========
+    println!("\n[Step 2/4] Generating Initial Population from real per-locus frequencies + LD...");
+    let sampler = GenomeSampler::from_brain_with_haplotypes(
+        &brain,
+        &chromosome.hap_a,
+        &chromosome.hap_b,
+        chromosome.sample_names.len(),
+        n_samples,
+        42,
+    );
     let initial_pop = sampler.generate_population(population_size);
     println!(
-        "✓ Generated {} genomes with {} variants each",
+        "✓ Generated {} genomes with {} variants each ({} haplotype pools preserving real LD)",
         initial_pop.len(),
-        sampler.n_snps
+        sampler.n_snps,
+        sampler.haplotype_pools.len()
     );
 
     // ========== STEP 3: Evolution Simulation ==========
