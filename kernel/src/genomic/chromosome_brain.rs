@@ -108,8 +108,11 @@ pub fn init_chromosome_brain(
 fn init_neurons(snps: &[BitstreamGenotypes], snp_records: &[SnpRecord]) -> Vec<GenomicNeuron> {
     snps.iter()
         .enumerate()
-        .map(|(idx, _snp)| {
-            let allele_freq: f32 = 0.25; // Default anchor for rare SNPs
+        .map(|(idx, snp)| {
+            // Alternate-allele frequency computed from the real genotype
+            // calls for this SNP (VCF "AF" convention), not a fixed stand-in.
+            let (_freq_ref, freq_alt, _freq_missing) = snp.allele_frequencies();
+            let allele_freq = freq_alt as f32;
             let maf = allele_freq.min(1.0 - allele_freq);
             let is_rare = maf < 0.05;
             let position_bp = snp_records.get(idx).map(|r| r.position).unwrap_or(0);
@@ -305,6 +308,59 @@ mod tests {
         let snp_records = vec![];
         let neurons = init_neurons(&snps, &snp_records);
         assert_eq!(neurons.len(), 0);
+    }
+
+    fn snp_record(id: &str, position: u32) -> SnpRecord {
+        SnpRecord {
+            id: id.to_string(),
+            position,
+            ref_allele: "A".to_string(),
+            alt_allele: "G".to_string(),
+            qual: 100.0,
+            info: String::new(),
+        }
+    }
+
+    #[test]
+    fn test_neuron_init_uses_real_allele_frequencies() {
+        // rs0: all ref/ref -> alt freq 0.0 (rare)
+        let mut snp0 = BitstreamGenotypes::new(4);
+        for i in 0..4 {
+            snp0.set(i, 0);
+        }
+
+        // rs1: all alt/alt -> alt freq 1.0 (rare, monomorphic the other way)
+        let mut snp1 = BitstreamGenotypes::new(4);
+        for i in 0..4 {
+            snp1.set(i, 2);
+        }
+
+        // rs2: half het, half ref/ref -> alt freq 0.25
+        let mut snp2 = BitstreamGenotypes::new(4);
+        snp2.set(0, 1);
+        snp2.set(1, 1);
+        snp2.set(2, 0);
+        snp2.set(3, 0);
+
+        let snps = vec![snp0, snp1, snp2];
+        let snp_records = vec![
+            snp_record("rs0", 100),
+            snp_record("rs1", 200),
+            snp_record("rs2", 300),
+        ];
+
+        let neurons = init_neurons(&snps, &snp_records);
+
+        assert_eq!(neurons.len(), 3);
+        assert!((neurons[0].allele_freq - 0.0).abs() < 1e-6);
+        assert!((neurons[1].allele_freq - 1.0).abs() < 1e-6);
+        assert!((neurons[2].allele_freq - 0.25).abs() < 1e-6);
+
+        // Not every neuron collapses to the same constant anymore.
+        assert!(neurons[0].allele_freq != neurons[2].allele_freq);
+        assert!(neurons[0].is_rare); // MAF 0.0
+        assert!(neurons[1].is_rare); // MAF 0.0 (monomorphic alt)
+        assert!(!neurons[2].is_rare); // MAF 0.25, common
     }
 
     #[test]
