@@ -1,9 +1,11 @@
 /// VCF Streaming Parser
-/// Handles gzipped VCF files with streaming genotype encoding
-/// Target: 201K SNPs/sec throughput
+/// Handles gzipped (BGZF multi-member) VCF files with streaming genotype
+/// encoding. Measured on real 1000 Genomes chr1-3/22 VCFs (2504 samples):
+/// ~14K variants/sec parsing; LD computation downstream is the actual
+/// bottleneck at ~500 SNPs/sec (sliding-window r² over 2504 samples/SNP).
 
 use std::io::{BufRead, BufReader};
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 use std::fs::File;
 use std::path::Path;
 use crate::genomic::bitsliced_genotypes::BitstreamGenotypes;
@@ -43,16 +45,34 @@ impl VcfParser {
         vcf_path: P,
         chr_id: u8,
     ) -> Result<VcfChromosome, String> {
+        self.parse_vcf_limited(vcf_path, chr_id, None)
+    }
+
+    /// Same as `parse_vcf`, but stops after `max_variants` records for the
+    /// target chromosome. A full 1000-Genomes chromosome file can carry
+    /// millions of variants; this bounds a real-data run to a tractable
+    /// slice without needing a separate synthetic path.
+    pub fn parse_vcf_limited<P: AsRef<Path>>(
+        &self,
+        vcf_path: P,
+        chr_id: u8,
+        max_variants: Option<usize>,
+    ) -> Result<VcfChromosome, String> {
         let path = vcf_path.as_ref();
 
         if self.verbose {
             println!("[*] Opening VCF: {}", path.display());
         }
 
-        // Open and decompress
+        // Open and decompress. Real VCF.gz distributions (including
+        // 1000 Genomes) are BGZF: many concatenated gzip members, not one
+        // stream. A plain GzDecoder silently stops at the end of the
+        // first member (a few KB in, right after the header) and reports
+        // success with only a handful of records parsed — MultiGzDecoder
+        // is required to read the whole file.
         let file = File::open(path)
             .map_err(|e| format!("Failed to open VCF: {}", e))?;
-        let decoder = GzDecoder::new(file);
+        let decoder = MultiGzDecoder::new(file);
         let reader = BufReader::new(decoder);
 
         let mut sample_names = Vec::new();
@@ -164,6 +184,15 @@ impl VcfParser {
             }
 
             line_count += 1;
+
+            if let Some(limit) = max_variants {
+                if snp_count as usize >= limit {
+                    if self.verbose {
+                        println!("[*] Reached max_variants={}, stopping early", limit);
+                    }
+                    break;
+                }
+            }
         }
 
         // Trim unused genotype storage
@@ -268,6 +297,49 @@ impl VcfChromosome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Real VCF.gz distributions (1000 Genomes included) are BGZF: many
+    /// concatenated gzip members, not a single stream. A GzDecoder alone
+    /// silently stops after the first member; this constructs a two-member
+    /// gzip file the same way and asserts both members get read.
+    #[test]
+    fn test_multi_member_gzip_is_fully_decoded() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let header = "##fileformat=VCFv4.1\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n";
+        let data_line = "1\t100\trs1\tA\tG\t100\tPASS\t.\tGT\t0/1\n";
+
+        let mut member1 = Vec::new();
+        {
+            let mut enc = GzEncoder::new(&mut member1, Compression::default());
+            enc.write_all(header.as_bytes()).unwrap();
+            enc.finish().unwrap();
+        }
+
+        let mut member2 = Vec::new();
+        {
+            let mut enc = GzEncoder::new(&mut member2, Compression::default());
+            enc.write_all(data_line.as_bytes()).unwrap();
+            enc.finish().unwrap();
+        }
+
+        let mut combined = member1;
+        combined.extend_from_slice(&member2);
+
+        let tmp_path = std::env::temp_dir().join("ntg_kernel_test_multimember.vcf.gz");
+        std::fs::write(&tmp_path, &combined).unwrap();
+
+        let parser = VcfParser::new(false);
+        let chromosome = parser.parse_vcf(&tmp_path, 1).unwrap();
+
+        std::fs::remove_file(&tmp_path).ok();
+
+        assert_eq!(chromosome.sample_names, vec!["S1".to_string()]);
+        assert_eq!(chromosome.snps.len(), 1, "data line from the second gzip member was not read");
+        assert_eq!(chromosome.snps[0].id, "rs1");
+    }
 
     #[test]
     fn test_genotype_parsing() {

@@ -1,8 +1,21 @@
 /// LD Computation Test - End-to-End Phase A Integration
 /// VCF Parse → Bitsliced Genotypes → LD Computation
+///
+/// Usage: cargo run --release --bin ld_compute_test [-- <max_variants>]
+/// With no argument, parses each full chromosome file (can take a long
+/// time on the real 1000 Genomes files in data/raw). Pass a variant cap
+/// to bound the run to a leading slice of the real data.
 
 use ntg_kernel::genomic::{VcfParser, LdComputer};
 use std::path::Path;
+
+fn vcf_path(chr: &str) -> String {
+    format!(
+        "{}/../data/raw/1000g/ALL.chr{}.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz",
+        env!("CARGO_MANIFEST_DIR"),
+        chr
+    )
+}
 
 fn main() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -10,16 +23,22 @@ fn main() {
     println!("║  Pipeline: VCF → Bitsliced Genotypes → LD Matrix            ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
+    let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
+    if let Some(limit) = max_variants {
+        println!("\n[*] Bounding each chromosome to the first {} variants", limit);
+    }
+
     let test_cases = vec![
-        ("1", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr1.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
-        ("2", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr2.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
-        ("3", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr3.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
+        ("1", vcf_path("1")),
+        ("2", vcf_path("2")),
+        ("3", vcf_path("3")),
     ];
 
     let vcf_parser = VcfParser::new(true);
     let ld_computer = LdComputer::new(true, 0.5);  // Keep r² > 0.5
 
     for (chr_id, vcf_path) in test_cases {
+        let vcf_path = vcf_path.as_str();
         println!("\n╔─────────────────────────────────────────────────────────────╗");
         println!("║ Chr{} End-to-End Test", chr_id);
         println!("╚─────────────────────────────────────────────────────────────╝");
@@ -34,7 +53,7 @@ fn main() {
 
         // Step 1: Parse VCF
         println!("\n[Step 1] Parsing VCF and encoding genotypes...");
-        match vcf_parser.parse_vcf(vcf_path, chr_num) {
+        match vcf_parser.parse_vcf_limited(vcf_path, chr_num, max_variants) {
             Ok(chromosome) => {
                 println!("[✓] VCF parsing succeeded");
 

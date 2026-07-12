@@ -4,16 +4,29 @@
 use ntg_kernel::genomic::{VcfParser, LdComputer, BlockDetector, compute_block_statistics};
 use std::path::Path;
 
+fn vcf_path(chr: &str) -> String {
+    format!(
+        "{}/../data/raw/1000g/ALL.chr{}.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz",
+        env!("CARGO_MANIFEST_DIR"),
+        chr
+    )
+}
+
 fn main() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
     println!("║  Phase A Complete Pipeline Test                             ║");
     println!("║  VCF → Genotypes → LD → Haplotype Blocks                    ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
+    let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
+    if let Some(limit) = max_variants {
+        println!("\n[*] Bounding each chromosome to the first {} variants", limit);
+    }
+
     let test_cases = vec![
-        ("1", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr1.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
-        ("2", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr2.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
-        ("3", "C:\\Users\\leer4\\aethyro-ntg\\data\\raw\\1000g\\ALL.chr3.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz"),
+        ("1", vcf_path("1")),
+        ("2", vcf_path("2")),
+        ("3", vcf_path("3")),
     ];
 
     let vcf_parser = VcfParser::new(true);
@@ -21,6 +34,7 @@ fn main() {
     let block_detector = BlockDetector::new(true);
 
     for (chr_id, vcf_path) in test_cases {
+        let vcf_path = vcf_path.as_str();
         println!("\n╔═════════════════════════════════════════════════════════════╗");
         println!("║  Chr{} - Full Phase A Pipeline", chr_id);
         println!("╚═════════════════════════════════════════════════════════════╝");
@@ -35,7 +49,7 @@ fn main() {
 
         // Step 1: Parse VCF
         println!("\n[Step 1/4] Parsing VCF and encoding genotypes...");
-        let chromosome = match vcf_parser.parse_vcf(vcf_path, chr_num) {
+        let chromosome = match vcf_parser.parse_vcf_limited(vcf_path, chr_num, max_variants) {
             Ok(chr) => {
                 match chr.validate() {
                     Ok(_) => {
