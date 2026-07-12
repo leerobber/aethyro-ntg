@@ -37,4 +37,6 @@ pub use validation::{GenomeComparator, ReferenceGenome, SyntheticGenome, Validat
 pub use extended_validation::{
     Population, MultiPopulationReference, ChromosomeValidation, GenomeWideValidation,
     LocusPower, LocusPowerAnalyzer, ExtendedValidationReport,
+    RecombinationMap, RecombinationComparator, RecombinationComparison,
+    HaplotypeBlockComparator, HaplotypeBlockComparison,
 };

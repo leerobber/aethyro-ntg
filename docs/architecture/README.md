@@ -13,6 +13,7 @@ it in [STATUS.md](../STATUS.md).
 | [0005](0005-canonical-ternary-storage.md) | Canonical ternary storage types | **Accepted** |
 | [0006](0006-phase4-calibration-task.md) | Phase 4 doc-graph calibration task | **Accepted + implemented** |
 | [0007](0007-observability-genome-prototype.md) | Stats collector + ternary DNA genome prototype | **Accepted (prototype)** |
+| [0008](0008-phase-f-vision-and-cross-phase-recommendations.md) | Phase F direction: cross-phase recommendations, real-time self-awareness instrumentation, self-healing, synthetic-biology/robotics vision | **Proposed** (ideas only, except the Phase E recombination/haplotype-block work it documents, which is implemented — see `PHASE_E_EXTENDED_VALIDATION_COMPLETE.md`) |
 
 ## How to add a new ADR
 

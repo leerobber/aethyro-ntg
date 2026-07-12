@@ -22,6 +22,8 @@ pub use genomic::{
     RiskSeverity, TestResults, DomainResult, AggregateStats,
     Genome, GenomeSampler, EvolutionSim, FitnessModel, DefaultFitnessModel, GenerationStats,
     PhenotypeHead, Environment, GxEEngine,
+    RecombinationMap, RecombinationComparator, RecombinationComparison,
+    HaplotypeBlockComparator, HaplotypeBlockComparison,
 };
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;

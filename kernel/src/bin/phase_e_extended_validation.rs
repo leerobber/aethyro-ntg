@@ -5,8 +5,9 @@
 
 use ntg_kernel::genomic::{
     ChromosomeId, ChromosomeValidation, ExtendedValidationReport, GenomeComparator,
-    GenomeValidator, GenomeWideValidation, LocusPowerAnalyzer, MultiPopulationReference,
-    Population, ReferenceGenome, SyntheticGenome,
+    GenomeValidator, GenomeWideValidation, HaplotypeBlockComparator, LocusPowerAnalyzer,
+    MultiPopulationReference, Population, RecombinationComparator, RecombinationMap,
+    ReferenceGenome, SyntheticGenome,
 };
 
 const N_SNPS_PER_CHROMOSOME: usize = 10;
@@ -55,6 +56,28 @@ fn build_synthetic(chr: u8, n_samples: usize) -> SyntheticGenome {
 
     synthetic.finalize();
     synthetic
+}
+
+/// Deterministic per-(chromosome, interval) recombination rate in cM/Mb,
+/// standing in for a real genetic map until one is wired to `data/`.
+fn synthetic_recomb_rate(chr: u8, interval_idx: usize, drift: f32) -> f32 {
+    let base = ((chr as f32 * 5.0 + interval_idx as f32 * 11.0).cos() + 1.0) / 2.0;
+    (0.2 + base * 2.0 + drift).max(0.05)
+}
+
+fn build_recombination_map(chr: u8, drift: f32) -> RecombinationMap {
+    let mut map = RecombinationMap::new(format!("chr{}", chr));
+    for i in 0..N_SNPS_PER_CHROMOSOME - 1 {
+        let rate = synthetic_recomb_rate(chr, i, drift);
+        map.add_interval(format!("chr{}_rs{}", chr, i), format!("chr{}_rs{}", chr, i + 1), rate);
+    }
+    map
+}
+
+fn snp_order(chr: u8) -> Vec<String> {
+    (0..N_SNPS_PER_CHROMOSOME)
+        .map(|i| format!("chr{}_rs{}", chr, i))
+        .collect()
 }
 
 /// Approximate genotype counts consistent with a target allele frequency,
@@ -119,11 +142,19 @@ fn main() {
         let qc = GenomeValidator::generate_report(&loci, synthetic.mean_ld_r2);
         let validation = GenomeComparator::validate(&reference, &synthetic);
 
+        let reference_recomb = build_recombination_map(chr, 0.0);
+        let synthetic_recomb = build_recombination_map(chr, 0.05);
+        let recombination = RecombinationComparator::compare(&reference_recomb, &synthetic_recomb);
+        let haplotype_blocks =
+            HaplotypeBlockComparator::compare(&reference, &synthetic, &snp_order(chr));
+
         genome_wide.add_chromosome(ChromosomeValidation {
             chr: ChromosomeId(chr),
             n_loci: loci.len(),
             qc,
             validation,
+            recombination,
+            haplotype_blocks,
         });
     }
 
