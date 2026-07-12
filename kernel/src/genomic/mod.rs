@@ -21,6 +21,7 @@ pub mod quality_control;
 pub mod validation;
 pub mod extended_validation;
 pub mod real_pipeline;
+pub mod epigenetic_engine;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -42,3 +43,4 @@ pub use extended_validation::{
     HaplotypeBlockComparator, HaplotypeBlockComparison,
 };
 pub use real_pipeline::{RealChromosomeData, build_real_chromosome, snp_key};
+pub use epigenetic_engine::{EpigeneticEngine, GeneticExpressionBlock, StrategyFn};

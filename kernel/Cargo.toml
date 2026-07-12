@@ -98,3 +98,7 @@ path = "src/bin/phase_d_quality_control.rs"
 [[bin]]
 name = "phase_e_extended_validation"
 path = "src/bin/phase_e_extended_validation.rs"
+
+[[bin]]
+name = "system_evolution_node"
+path = "src/bin/system_evolution_node.rs"
