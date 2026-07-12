@@ -1,11 +1,26 @@
 /// Phase D: Quality Control & Validation
-/// Statistical validation of synthetic genomes against 1000 Genomes reference
+/// Statistical validation of Phase C's synthetic genomes against a real
+/// 1000 Genomes reference built from actual chr1 VCF data.
 /// Pure Rust implementation
+///
+/// Usage: cargo run --release --bin phase_d_quality_control [-- <max_variants>]
 
 use ntg_kernel::genomic::{
-    GenomeValidator, LocusStats, QCMetrics,
-    GenomeComparator, ReferenceGenome, SyntheticGenome, PowerAnalysis,
+    init_chromosome_brain, BlockDetector, ChromosomeId, GenomeComparator, GenomeSampler,
+    GenomeValidator, LdComputer, PowerAnalysis, ReferenceGenome, SyntheticGenome, VcfParser,
 };
+
+fn vcf_path(chr: &str) -> String {
+    format!(
+        "{}/../data/raw/1000g/ALL.chr{}.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz",
+        env!("CARGO_MANIFEST_DIR"),
+        chr
+    )
+}
+
+fn snp_key(idx: u32) -> String {
+    format!("snp{}", idx)
+}
 
 fn main() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -14,68 +29,95 @@ fn main() {
     println!("║  Pure Rust | No Dependencies | Production Ready             ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
-    // ========== STEP 1: Initialize Reference Genome ==========
-    println!("\n[Step 1/5] Loading 1000 Genomes Reference Data...");
+    let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
+    let synthetic_n_samples = 200;
 
-    let mut reference = ReferenceGenome::new("1000G-EUR".to_string(), 503);
+    // ========== STEP 1: Build Reference Genome from real chr1 VCF ==========
+    println!("\n[Step 1/6] Loading real 1000 Genomes chr1 data...");
 
-    // Simulate reference allele frequencies (CEU population)
-    let ref_snps = vec![
-        ("rs1", 0.45, 0.55),
-        ("rs2", 0.32, 0.68),
-        ("rs3", 0.58, 0.42),
-        ("rs4", 0.10, 0.90),
-        ("rs5", 0.65, 0.35),
-        ("rs6", 0.28, 0.72),
-        ("rs7", 0.51, 0.49),
-        ("rs8", 0.39, 0.61),
-        ("rs9", 0.73, 0.27),
-        ("rs10", 0.15, 0.85),
-    ];
+    let chr_path = vcf_path("1");
+    let chromosome = VcfParser::new(false)
+        .parse_vcf_limited(&chr_path, 1, max_variants)
+        .expect("failed to parse real VCF data");
+    let positions: Vec<u32> = chromosome.snps.iter().map(|s| s.position).collect();
+    let ld_matrix = LdComputer::new(false, 0.5)
+        .compute_ld(&chromosome.genotypes, &positions)
+        .expect("LD computation failed");
 
-    for (snp_id, freq_a, freq_b) in ref_snps.iter() {
-        reference.add_snp(snp_id.to_string(), *freq_a, *freq_b);
+    let mut reference = ReferenceGenome::new("1000G-chr1".to_string(), chromosome.sample_names.len());
+    for (idx, snp) in chromosome.genotypes.iter().enumerate() {
+        let (freq_ref, freq_alt, _freq_missing) = snp.allele_frequencies();
+        reference.add_snp(snp_key(idx as u32), freq_alt as f32, freq_ref as f32);
     }
-
-    // Add reference LD pairs (r² values)
-    reference.add_ld_pair("rs1".to_string(), "rs2".to_string(), 0.42);
-    reference.add_ld_pair("rs2".to_string(), "rs3".to_string(), 0.38);
-    reference.add_ld_pair("rs3".to_string(), "rs4".to_string(), 0.25);
-    reference.add_ld_pair("rs4".to_string(), "rs5".to_string(), 0.15);
-    reference.add_ld_pair("rs5".to_string(), "rs6".to_string(), 0.52);
-    reference.add_ld_pair("rs6".to_string(), "rs7".to_string(), 0.35);
-    reference.add_ld_pair("rs7".to_string(), "rs8".to_string(), 0.48);
-    reference.add_ld_pair("rs8".to_string(), "rs9".to_string(), 0.18);
-    reference.add_ld_pair("rs9".to_string(), "rs10".to_string(), 0.31);
-
+    for pair in &ld_matrix.pairs {
+        reference.add_ld_pair(snp_key(pair.snp1_idx), snp_key(pair.snp2_idx), pair.r_squared);
+    }
     reference.finalize();
-    println!("✓ Reference: 1000 Genomes (n={}, SNPs={})", reference.n_samples, reference.allele_frequencies.len());
+
+    println!(
+        "✓ Reference: real 1000 Genomes chr1 (n={}, SNPs={}, LD pairs={})",
+        reference.n_samples,
+        reference.allele_frequencies.len(),
+        ld_matrix.pairs.len()
+    );
     println!("✓ Reference LD r² mean: {:.3}", reference.mean_ld_r2);
 
-    // ========== STEP 2: Quality Control on Synthetic Genomes ==========
-    println!("\n[Step 2/5] Computing Quality Control Metrics...");
+    // ========== STEP 2: Build blocks + brain, then sample Phase C's synthetic genome ==========
+    println!("\n[Step 2/6] Synthesizing a genome from Phase C (real per-locus frequencies)...");
 
+    let mut blocks = BlockDetector::new(false)
+        .detect_blocks(&ld_matrix.pairs, chromosome.snps.len())
+        .expect("block detection failed");
+    BlockDetector::new(false)
+        .annotate_blocks(&mut blocks, &positions)
+        .expect("block annotation failed");
+    let brain = init_chromosome_brain(
+        ChromosomeId(1),
+        &chromosome.genotypes,
+        &chromosome.snps,
+        &ld_matrix.pairs,
+        &blocks,
+    )
+    .expect("brain initialization failed");
+
+    let sampler = GenomeSampler::from_brain(&brain, synthetic_n_samples, 42);
+    let sampled_genome = sampler.sample(0);
+    println!(
+        "✓ Sampled 1 synthetic genome: {} SNPs, {} samples (targets = real chr1 allele frequencies)",
+        sampled_genome.genotypes.len(),
+        synthetic_n_samples
+    );
+
+    // ========== STEP 3: Quality Control on the synthetic genome's own genotypes ==========
+    println!("\n[Step 3/6] Computing Quality Control Metrics on synthesized genotypes...");
+
+    let n_qc_loci = sampled_genome.genotypes.len().min(200);
     let mut loci = Vec::new();
-
-    let syn_snps = vec![
-        ("rs1", (85, 40, 10)),
-        ("rs2", (60, 75, 30)),
-        ("rs3", (95, 32, 8)),
-        ("rs4", (15, 25, 135)),
-        ("rs5", (110, 45, 5)),
-        ("rs6", (50, 80, 35)),
-        ("rs7", (90, 38, 12)),
-        ("rs8", (70, 65, 25)),
-        ("rs9", (120, 30, 5)),
-        ("rs10", (25, 40, 110)),
-    ];
-
-    for (snp_id, counts) in syn_snps.iter() {
-        let locus = GenomeValidator::validate_locus(snp_id.to_string(), *counts);
-        loci.push(locus);
+    for idx in 0..n_qc_loci {
+        let mut counts = (0usize, 0usize, 0usize);
+        for &g in &sampled_genome.genotypes[idx] {
+            match g {
+                0 => counts.0 += 1,
+                1 => counts.1 += 1,
+                2 => counts.2 += 1,
+                _ => {} // missing
+            }
+        }
+        loci.push(GenomeValidator::validate_locus(snp_key(idx as u32), counts));
     }
 
-    let qc_report = GenomeValidator::generate_report(&loci, 0.38);
+    let synthetic_mean_ld_r2: f32 = if ld_matrix.pairs.is_empty() {
+        0.0
+    } else {
+        let sum: f32 = ld_matrix
+            .pairs
+            .iter()
+            .map(|p| sampled_genome.ld_r2(p.snp1_idx as usize, p.snp2_idx as usize))
+            .sum();
+        sum / ld_matrix.pairs.len() as f32
+    };
+
+    let qc_report = GenomeValidator::generate_report(&loci, synthetic_mean_ld_r2);
 
     println!("✓ Population Statistics:");
     println!("  Samples: {}", qc_report.population_stats.n_samples);
@@ -89,36 +131,19 @@ fn main() {
     println!("  Mean LD r²: {:.4}", qc_report.mean_ld_r2);
     println!("  Quality score: {:.4}", qc_report.quality_score);
 
-    // ========== STEP 3: Compare to Reference ==========
-    println!("\n[Step 3/5] Validating Against Reference Genome...");
+    // ========== STEP 4: Compare synthetic genome to the real reference ==========
+    println!("\n[Step 4/6] Validating synthetic genome against real reference...");
 
-    let mut synthetic = SyntheticGenome::new(135);
-
-    for (snp_id, freq_a, freq_b) in vec![
-        ("rs1", 0.48, 0.52),
-        ("rs2", 0.30, 0.70),
-        ("rs3", 0.60, 0.40),
-        ("rs4", 0.12, 0.88),
-        ("rs5", 0.63, 0.37),
-        ("rs6", 0.30, 0.70),
-        ("rs7", 0.50, 0.50),
-        ("rs8", 0.41, 0.59),
-        ("rs9", 0.71, 0.29),
-        ("rs10", 0.17, 0.83),
-    ] {
-        synthetic.add_snp(snp_id.to_string(), freq_a, freq_b);
+    let mut synthetic = SyntheticGenome::new(synthetic_n_samples);
+    for idx in 0..sampled_genome.genotypes.len() {
+        let freq_alt = sampled_genome.allele_freq(idx);
+        // Same (alt, ref) convention as the reference above.
+        synthetic.add_snp(snp_key(idx as u32), freq_alt, 1.0 - freq_alt);
     }
-
-    synthetic.add_ld_pair("rs1".to_string(), "rs2".to_string(), 0.40);
-    synthetic.add_ld_pair("rs2".to_string(), "rs3".to_string(), 0.37);
-    synthetic.add_ld_pair("rs3".to_string(), "rs4".to_string(), 0.24);
-    synthetic.add_ld_pair("rs4".to_string(), "rs5".to_string(), 0.14);
-    synthetic.add_ld_pair("rs5".to_string(), "rs6".to_string(), 0.51);
-    synthetic.add_ld_pair("rs6".to_string(), "rs7".to_string(), 0.36);
-    synthetic.add_ld_pair("rs7".to_string(), "rs8".to_string(), 0.47);
-    synthetic.add_ld_pair("rs8".to_string(), "rs9".to_string(), 0.17);
-    synthetic.add_ld_pair("rs9".to_string(), "rs10".to_string(), 0.30);
-
+    for pair in &ld_matrix.pairs {
+        let r2 = sampled_genome.ld_r2(pair.snp1_idx as usize, pair.snp2_idx as usize);
+        synthetic.add_ld_pair(snp_key(pair.snp1_idx), snp_key(pair.snp2_idx), r2);
+    }
     synthetic.finalize();
 
     let validation = GenomeComparator::validate(&reference, &synthetic);
@@ -131,10 +156,9 @@ fn main() {
     println!("  LD distance: {:.4}", validation.ld_distance);
     println!("  Overall similarity: {:.4}", validation.overall_similarity);
 
-    // ========== STEP 4: Power Analysis ==========
-    println!("\n[Step 4/5] Computing Statistical Power Analysis...");
+    // ========== STEP 5: Power Analysis ==========
+    println!("\n[Step 5/6] Computing Statistical Power Analysis...");
 
-    let n_samples = 135;
     let effect_sizes = vec![0.05, 0.1, 0.2];
     let alpha = 0.05;
 
@@ -158,15 +182,15 @@ fn main() {
         );
     }
 
-    // ========== STEP 5: Summary Report ==========
-    println!("\n[Step 5/5] Generating Quality Control Report...\n");
+    // ========== STEP 6: Summary Report ==========
+    println!("\n[Step 6/6] Generating Quality Control Report...\n");
 
     println!("╔═══════════════════════════════════════════════════════════════╗");
     println!("║  PHASE D QUALITY CONTROL COMPLETE                           ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
     println!("\n📊 Quality Control Summary:");
-    println!("  ✓ Synthetic genome generation: {}", loci.len());
+    println!("  ✓ Synthetic genome: 1 genome, {} loci QC'd", loci.len());
     println!("  ✓ Hardy-Weinberg validation: {} SNPs pass (p > 0.05)", {
         loci.iter().filter(|l| l.hardy_weinberg_p > 0.05).count()
     });
@@ -192,7 +216,21 @@ fn main() {
         println!("  PASS: Synthetic genomes reasonably similar to reference (similarity={:.2}%)",
                  validation.overall_similarity * 100.0);
     } else {
-        println!("  REVIEW: Consider re-tuning parameters (similarity={:.2}%)",
-                 validation.overall_similarity * 100.0);
+        println!("  REVIEW: overall similarity {:.2}% is below threshold.", validation.overall_similarity * 100.0);
+        println!(
+            "    Allele frequency RMSE {:.4} ({}), LD correlation {:.4} ({}).",
+            validation.allele_freq_rmse,
+            if validation.allele_freq_rmse < 0.05 { "good match" } else { "poor match" },
+            validation.ld_pearson_r,
+            if validation.ld_pearson_r.abs() > 0.5 { "good match" } else { "poor match" },
+        );
+        if validation.allele_freq_rmse < 0.05 && validation.ld_pearson_r.abs() < 0.5 {
+            println!(
+                "    Diagnosis: GenomeSampler targets real per-locus allele frequencies correctly,\n\
+                 \x20   but samples each locus independently and does not model haplotype/LD\n\
+                 \x20   structure (see synthesis.rs module doc). That is the gap to close next,\n\
+                 \x20   not a data-wiring problem."
+            );
+        }
     }
 }

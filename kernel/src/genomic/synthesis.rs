@@ -1,5 +1,14 @@
 /// Phase C: Synthetic Genome Synthesis
-/// Generates synthetic genomes preserving LD structure from haplotype blocks
+/// Samples each locus independently under Hardy-Weinberg equilibrium at
+/// that locus's own real allele frequency (via `from_brain`). Does NOT
+/// currently preserve LD/haplotype structure -- sampling is per-SNP with
+/// no cross-locus correlation, so a synthesized genome will match a real
+/// reference's allele frequencies but not its LD pattern. Phase D's
+/// real-vs-synthetic validation (phase_d_quality_control) surfaces this
+/// directly: allele-frequency RMSE is small, LD correlation is not.
+/// Fixing that would mean sampling haplotypes (using `HaplotypeBlock`
+/// membership) instead of independent per-SNP draws -- not yet
+/// implemented.
 /// Pure Rust implementation
 
 use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
