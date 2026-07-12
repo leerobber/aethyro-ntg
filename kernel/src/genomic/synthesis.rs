@@ -29,6 +29,13 @@ use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
 use crate::genomic::haplotype_blocks::HaplotypeBlock;
 use std::collections::HashMap;
 
+/// Probability that a haplotype copy continues with the same real donor
+/// when moving from one block to the genomically-next one, rather than
+/// drawing a fresh independent donor (see `GenomeSampler::sample`'s
+/// donor-persistence logic). A tunable heuristic, not derived from any
+/// real recombination-rate data.
+const DONOR_PERSISTENCE: f32 = 0.7;
+
 /// Real observed haplotype fragments for one `HaplotypeBlock`, used to
 /// synthesize genomes that preserve that block's real LD structure
 /// instead of sampling each locus independently.
@@ -43,6 +50,14 @@ pub struct HaplotypePool {
     /// filled with a guess) if it had a missing call anywhere in this
     /// block's SNPs.
     pub observed_haplotypes: Vec<Vec<u8>>,
+    /// Real (sample_idx, is_copy_b) provenance for each entry in
+    /// `observed_haplotypes`, same order/index. Used by
+    /// `GenomeSampler::sample`'s donor-persistence logic to let adjacent
+    /// blocks continue with the same real donor instead of always
+    /// resampling independently at every block boundary (which mimics an
+    /// artificial recombination event at every single boundary).
+    pub donor_ids: Vec<(usize, bool)>,
+    donor_index: HashMap<(usize, bool), usize>,
 }
 
 impl HaplotypePool {
@@ -57,9 +72,10 @@ impl HaplotypePool {
     ) -> Self {
         let snp_indices: Vec<usize> = block.snp_indices.iter().map(|&i| i as usize).collect();
         let mut observed_haplotypes = Vec::new();
+        let mut donor_ids = Vec::new();
 
         for sample_idx in 0..n_real_samples {
-            for hap in [hap_a, hap_b] {
+            for (is_b, hap) in [(false, hap_a), (true, hap_b)] {
                 let mut fragment = Vec::with_capacity(snp_indices.len());
                 let mut ok = true;
                 for &snp_idx in &snp_indices {
@@ -78,13 +94,22 @@ impl HaplotypePool {
                 }
                 if ok {
                     observed_haplotypes.push(fragment);
+                    donor_ids.push((sample_idx, is_b));
                 }
             }
         }
 
+        let donor_index: HashMap<(usize, bool), usize> = donor_ids
+            .iter()
+            .enumerate()
+            .map(|(idx, &donor)| (donor, idx))
+            .collect();
+
         HaplotypePool {
             snp_indices,
             observed_haplotypes,
+            donor_ids,
+            donor_index,
         }
     }
 
@@ -92,14 +117,24 @@ impl HaplotypePool {
         self.observed_haplotypes.is_empty()
     }
 
+    fn pick_index(&self, unit_draw: f32) -> usize {
+        let n = self.observed_haplotypes.len();
+        ((unit_draw.clamp(0.0, 0.999_999) * n as f32) as usize).min(n.saturating_sub(1))
+    }
+
     /// Pick one observed haplotype fragment via an external draw in
     /// [0, 1); the caller supplies randomness so this stays deterministic
     /// and reproducible given the same seed, matching the rest of this
     /// module.
     pub fn pick(&self, unit_draw: f32) -> &[u8] {
-        let n = self.observed_haplotypes.len();
-        let idx = ((unit_draw.clamp(0.0, 0.999_999) * n as f32) as usize).min(n.saturating_sub(1));
-        &self.observed_haplotypes[idx]
+        &self.observed_haplotypes[self.pick_index(unit_draw)]
+    }
+
+    /// Fragment index contributed by real donor (sample_idx, is_copy_b),
+    /// if this pool has one (it won't if that copy had a missing call
+    /// anywhere in this block, or the donor doesn't exist at this scale).
+    pub fn find_donor(&self, donor: (usize, bool)) -> Option<usize> {
+        self.donor_index.get(&donor).copied()
     }
 }
 
@@ -304,37 +339,111 @@ impl GenomeSampler {
         (x >> 40) as f32 / (1u64 << 24) as f32
     }
 
+    /// Choose a fragment for one haplotype copy within a pool. With
+    /// `DONOR_PERSISTENCE` probability, continues with `current_donor` if
+    /// that real donor also has a fragment in this pool; otherwise (no
+    /// current donor, donor absent from this pool, or the persistence
+    /// roll fails) draws a fresh fragment. Returns the chosen fragment's
+    /// index and its donor identity, so the caller can carry it forward
+    /// into the next pool.
+    fn choose_fragment(
+        pool: &HaplotypePool,
+        current_donor: Option<(usize, bool)>,
+        seed: u64,
+        genome_id: u32,
+        draw_salt: u32,
+        persist_salt: u32,
+        sample_idx: u32,
+    ) -> (usize, (usize, bool)) {
+        if let Some(donor) = current_donor {
+            if let Some(frag_idx) = pool.find_donor(donor) {
+                let persist_draw = Self::hash_unit_interval(seed, genome_id, persist_salt, sample_idx);
+                if persist_draw < DONOR_PERSISTENCE {
+                    return (frag_idx, donor);
+                }
+            }
+        }
+        let draw = Self::hash_unit_interval(seed, genome_id, draw_salt, sample_idx);
+        let frag_idx = pool.pick_index(draw);
+        (frag_idx, pool.donor_ids[frag_idx])
+    }
+
     /// Sample a single synthetic genome
     pub fn sample(&self, genome_id: u32) -> Genome {
         let mut genome = Genome::new(genome_id, self.n_snps, self.n_samples);
         let mut covered = vec![false; self.n_snps];
 
-        // Haplotype-block-based sampling first: draw two real observed
+        // Process non-empty pools in genomic order (by their smallest SNP
+        // index) so donor persistence (below) means "the block
+        // immediately before this one," not an arbitrary construction
+        // order.
+        let mut pool_order: Vec<usize> = (0..self.haplotype_pools.len())
+            .filter(|&i| !self.haplotype_pools[i].is_empty())
+            .collect();
+        pool_order.sort_by_key(|&i| {
+            self.haplotype_pools[i]
+                .snp_indices
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(usize::MAX)
+        });
+
+        for &pool_idx in &pool_order {
+            for &snp_idx in &self.haplotype_pools[pool_idx].snp_indices {
+                if snp_idx < covered.len() {
+                    covered[snp_idx] = true;
+                }
+            }
+        }
+
+        // Haplotype-block-based sampling: draw two real observed
         // haplotype fragments per synthetic sample per block (mirroring
         // diploid inheritance), preserving that block's real LD by
         // construction. Pool draws use a SNP-index namespace disjoint
         // from real SNP indices (counting down from u32::MAX) so they
         // never coincide with the independent-locus draws below, which
         // would otherwise silently correlate two unrelated loci.
-        for (pool_idx, pool) in self.haplotype_pools.iter().enumerate() {
-            if pool.is_empty() {
-                continue;
-            }
-            let salt_a = u32::MAX - (pool_idx as u32) * 2;
-            let salt_b = salt_a - 1;
+        //
+        // Donor persistence: resampling a fully independent donor at
+        // every block boundary mimics an artificial recombination event
+        // at every single boundary, even where the real chromosome had
+        // none. With DONOR_PERSISTENCE probability, each haplotype copy
+        // continues with the same real donor into the next block (when
+        // that donor also has a fragment there) instead of always
+        // drawing fresh. This is a heuristic, not derived from any real
+        // recombination-rate data (no genetic map is available in this
+        // pipeline -- same caveat as extended_validation.rs's
+        // recombination-rate proxy).
+        for sample_idx in 0..self.n_samples {
+            let mut current_donor_a: Option<(usize, bool)> = None;
+            let mut current_donor_b: Option<(usize, bool)> = None;
 
-            for &snp_idx in &pool.snp_indices {
-                if snp_idx < covered.len() {
-                    covered[snp_idx] = true;
-                }
-            }
+            for &pool_idx in &pool_order {
+                let pool = &self.haplotype_pools[pool_idx];
+                let salt_base = u32::MAX - (pool_idx as u32) * 4;
 
-            for sample_idx in 0..self.n_samples {
-                let draw_a = Self::hash_unit_interval(self.seed, genome_id, salt_a, sample_idx as u32);
-                let draw_b = Self::hash_unit_interval(self.seed, genome_id, salt_b, sample_idx as u32);
+                let (idx_a, donor_a) = Self::choose_fragment(
+                    pool,
+                    current_donor_a,
+                    self.seed,
+                    genome_id,
+                    salt_base,
+                    salt_base.wrapping_sub(1),
+                    sample_idx as u32,
+                );
+                let (idx_b, donor_b) = Self::choose_fragment(
+                    pool,
+                    current_donor_b,
+                    self.seed,
+                    genome_id,
+                    salt_base.wrapping_sub(2),
+                    salt_base.wrapping_sub(3),
+                    sample_idx as u32,
+                );
 
-                let hap_a = pool.pick(draw_a);
-                let hap_b = pool.pick(draw_b);
+                let hap_a = &pool.observed_haplotypes[idx_a];
+                let hap_b = &pool.observed_haplotypes[idx_b];
 
                 for (local_idx, &snp_idx) in pool.snp_indices.iter().enumerate() {
                     if snp_idx >= self.n_snps {
@@ -342,6 +451,9 @@ impl GenomeSampler {
                     }
                     genome.genotypes[snp_idx][sample_idx] = hap_a[local_idx] + hap_b[local_idx];
                 }
+
+                current_donor_a = Some(donor_a);
+                current_donor_b = Some(donor_b);
             }
         }
 
@@ -623,5 +735,149 @@ mod tests {
         let genome = sampler.sample(0);
         let freq2 = genome.allele_freq(2);
         assert!((freq2 - 0.5).abs() < 0.15, "expected fallback sampling near target freq, got {freq2}");
+    }
+
+    fn two_donor_pool() -> HaplotypePool {
+        let donor_ids = vec![(0usize, false), (1usize, false)];
+        let donor_index = donor_ids.iter().copied().enumerate().map(|(i, d)| (d, i)).collect();
+        HaplotypePool {
+            snp_indices: vec![0],
+            observed_haplotypes: vec![vec![0u8], vec![1u8]],
+            donor_ids,
+            donor_index,
+        }
+    }
+
+    #[test]
+    fn test_find_donor() {
+        let pool = two_donor_pool();
+        assert_eq!(pool.find_donor((0, false)), Some(0));
+        assert_eq!(pool.find_donor((1, false)), Some(1));
+        assert_eq!(pool.find_donor((2, false)), None);
+        assert_eq!(pool.find_donor((0, true)), None); // different copy, not in this pool
+    }
+
+    #[test]
+    fn test_choose_fragment_no_current_donor_draws_fresh() {
+        let pool = two_donor_pool();
+        // No current donor: must draw via draw_salt, never touch persist_salt's path.
+        let (frag_idx, donor) = GenomeSampler::choose_fragment(&pool, None, 42, 0, 100, 101, 0);
+        assert_eq!(pool.donor_ids[frag_idx], donor);
+    }
+
+    #[test]
+    fn test_choose_fragment_absent_donor_falls_back_to_fresh_draw() {
+        let pool = two_donor_pool();
+        // current_donor (5, false) doesn't exist in this pool.
+        let (frag_idx, donor) = GenomeSampler::choose_fragment(&pool, Some((5, false)), 42, 0, 100, 101, 0);
+        assert_eq!(pool.donor_ids[frag_idx], donor);
+        assert_ne!(donor, (5, false));
+    }
+
+    #[test]
+    fn test_choose_fragment_persists_at_expected_rate() {
+        // 100 donors: a "fresh" fallback draw has only ~1% chance of
+        // coincidentally landing back on the same donor, so the observed
+        // rate closely tracks DONOR_PERSISTENCE itself rather than being
+        // inflated by chance re-picks (as it would be with very few
+        // donors -- e.g. 2 donors gives a fresh-draw coincidence rate of
+        // 50%, which dominates the measurement).
+        let n_donors = 100;
+        let donor_ids: Vec<(usize, bool)> = (0..n_donors).map(|i| (i, false)).collect();
+        let donor_index = donor_ids.iter().copied().enumerate().map(|(i, d)| (d, i)).collect();
+        let pool = HaplotypePool {
+            snp_indices: vec![0],
+            observed_haplotypes: (0..n_donors).map(|i| vec![(i % 2) as u8]).collect(),
+            donor_ids,
+            donor_index,
+        };
+
+        let seed = 99u64;
+        let genome_id = 0u32;
+        let n = 5000u32;
+        let mut persisted = 0u32;
+
+        for sample_idx in 0..n {
+            let (_, donor) =
+                GenomeSampler::choose_fragment(&pool, Some((0, false)), seed, genome_id, 100, 101, sample_idx);
+            if donor == (0, false) {
+                persisted += 1;
+            }
+        }
+
+        let rate = persisted as f32 / n as f32;
+        assert!(
+            (rate - DONOR_PERSISTENCE).abs() < 0.05,
+            "expected persistence rate near {DONOR_PERSISTENCE}, got {rate}"
+        );
+    }
+
+    #[test]
+    fn test_donor_persistence_reduces_switch_rate_across_adjacent_blocks() {
+        // Two adjacent blocks where every real donor has a fragment in
+        // both -- the scenario donor persistence exists for.
+        let n_samples = 40;
+        let mut hap_a0 = BitstreamGenotypes::new(n_samples);
+        let mut hap_b0 = BitstreamGenotypes::new(n_samples);
+        let mut hap_a1 = BitstreamGenotypes::new(n_samples);
+        let mut hap_b1 = BitstreamGenotypes::new(n_samples);
+        for i in 0..n_samples {
+            let v = (i % 2) as u8;
+            hap_a0.set(i, v);
+            hap_b0.set(i, v);
+            hap_a1.set(i, v);
+            hap_b1.set(i, v);
+        }
+
+        let block0 = HaplotypeBlock {
+            id: 0,
+            snp_indices: vec![0, 1],
+            mean_r_squared: 1.0,
+            start_position: 0,
+            end_position: 100,
+            size: 2,
+        };
+        let block1 = HaplotypeBlock {
+            id: 1,
+            snp_indices: vec![2, 3],
+            mean_r_squared: 1.0,
+            start_position: 200,
+            end_position: 300,
+            size: 2,
+        };
+
+        let hap_a = vec![hap_a0.clone(), hap_a0, hap_a1.clone(), hap_a1];
+        let hap_b = vec![hap_b0.clone(), hap_b0, hap_b1.clone(), hap_b1];
+
+        let pool0 = HaplotypePool::from_phased(&block0, &hap_a, &hap_b, n_samples);
+        let pool1 = HaplotypePool::from_phased(&block1, &hap_a, &hap_b, n_samples);
+
+        let n_trials = 3000u32;
+        let mut same_donor_count = 0u32;
+        for sample_idx in 0..n_trials {
+            let (_, donor0) =
+                GenomeSampler::choose_fragment(&pool0, None, 7, 0, 200, 201, sample_idx);
+            let (_, donor1) =
+                GenomeSampler::choose_fragment(&pool1, Some(donor0), 7, 0, 300, 301, sample_idx);
+            if donor0 == donor1 {
+                same_donor_count += 1;
+            }
+        }
+
+        let observed_rate = same_donor_count as f32 / n_trials as f32;
+        // With full donor overlap between pools, observed same-donor rate
+        // should track persistence + the small chance a fresh draw lands
+        // on the same donor by chance (~1/(2*n_samples) here) -- well
+        // above what a fully independent draw (no persistence) would give.
+        assert!(
+            observed_rate > DONOR_PERSISTENCE * 0.8,
+            "expected same-donor rate near {DONOR_PERSISTENCE}, got {observed_rate}"
+        );
+
+        let independent_baseline = 1.0 / (2.0 * n_samples as f32);
+        assert!(
+            observed_rate > independent_baseline * 5.0,
+            "persistence should be clearly better than independent resampling's baseline {independent_baseline}, got {observed_rate}"
+        );
     }
 }
