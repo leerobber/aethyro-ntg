@@ -5,10 +5,7 @@
 ///
 /// Usage: cargo run --release --bin phase_d_quality_control [-- <max_variants>]
 
-use ntg_kernel::genomic::{
-    init_chromosome_brain, BlockDetector, ChromosomeId, GenomeComparator, GenomeSampler,
-    GenomeValidator, LdComputer, PowerAnalysis, ReferenceGenome, SyntheticGenome, VcfParser,
-};
+use ntg_kernel::genomic::{build_real_chromosome, GenomeComparator, GenomeValidator, PowerAnalysis};
 
 fn vcf_path(chr: &str) -> String {
     format!(
@@ -16,10 +13,6 @@ fn vcf_path(chr: &str) -> String {
         env!("CARGO_MANIFEST_DIR"),
         chr
     )
-}
-
-fn snp_key(idx: u32) -> String {
-    format!("snp{}", idx)
 }
 
 fn main() {
@@ -32,70 +25,35 @@ fn main() {
     let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
     let synthetic_n_samples = 200;
 
-    // ========== STEP 1: Build Reference Genome from real chr1 VCF ==========
+    // ========== STEP 1/2: Build real reference + Phase C synthetic genome ==========
     println!("\n[Step 1/6] Loading real 1000 Genomes chr1 data...");
+    println!("[Step 2/6] Synthesizing a genome from Phase C (real per-locus frequencies)...");
 
     let chr_path = vcf_path("1");
-    let chromosome = VcfParser::new(false)
-        .parse_vcf_limited(&chr_path, 1, max_variants)
-        .expect("failed to parse real VCF data");
-    let positions: Vec<u32> = chromosome.snps.iter().map(|s| s.position).collect();
-    let ld_matrix = LdComputer::new(false, 0.5)
-        .compute_ld(&chromosome.genotypes, &positions)
-        .expect("LD computation failed");
-
-    let mut reference = ReferenceGenome::new("1000G-chr1".to_string(), chromosome.sample_names.len());
-    for (idx, snp) in chromosome.genotypes.iter().enumerate() {
-        let (freq_ref, freq_alt, _freq_missing) = snp.allele_frequencies();
-        reference.add_snp(snp_key(idx as u32), freq_alt as f32, freq_ref as f32);
-    }
-    for pair in &ld_matrix.pairs {
-        reference.add_ld_pair(snp_key(pair.snp1_idx), snp_key(pair.snp2_idx), pair.r_squared);
-    }
-    reference.finalize();
+    let data = build_real_chromosome(&chr_path, 1, max_variants, synthetic_n_samples, 42)
+        .expect("failed to build real chromosome data");
 
     println!(
         "✓ Reference: real 1000 Genomes chr1 (n={}, SNPs={}, LD pairs={})",
-        reference.n_samples,
-        reference.allele_frequencies.len(),
-        ld_matrix.pairs.len()
+        data.n_real_samples,
+        data.reference.allele_frequencies.len(),
+        data.ld_pairs.len()
     );
-    println!("✓ Reference LD r² mean: {:.3}", reference.mean_ld_r2);
-
-    // ========== STEP 2: Build blocks + brain, then sample Phase C's synthetic genome ==========
-    println!("\n[Step 2/6] Synthesizing a genome from Phase C (real per-locus frequencies)...");
-
-    let mut blocks = BlockDetector::new(false)
-        .detect_blocks(&ld_matrix.pairs, chromosome.snps.len())
-        .expect("block detection failed");
-    BlockDetector::new(false)
-        .annotate_blocks(&mut blocks, &positions)
-        .expect("block annotation failed");
-    let brain = init_chromosome_brain(
-        ChromosomeId(1),
-        &chromosome.genotypes,
-        &chromosome.snps,
-        &ld_matrix.pairs,
-        &blocks,
-    )
-    .expect("brain initialization failed");
-
-    let sampler = GenomeSampler::from_brain(&brain, synthetic_n_samples, 42);
-    let sampled_genome = sampler.sample(0);
+    println!("✓ Reference LD r² mean: {:.3}", data.reference.mean_ld_r2);
     println!(
         "✓ Sampled 1 synthetic genome: {} SNPs, {} samples (targets = real chr1 allele frequencies)",
-        sampled_genome.genotypes.len(),
+        data.sampled_genome.genotypes.len(),
         synthetic_n_samples
     );
 
     // ========== STEP 3: Quality Control on the synthetic genome's own genotypes ==========
     println!("\n[Step 3/6] Computing Quality Control Metrics on synthesized genotypes...");
 
-    let n_qc_loci = sampled_genome.genotypes.len().min(200);
+    let n_qc_loci = data.sampled_genome.genotypes.len().min(200);
     let mut loci = Vec::new();
     for idx in 0..n_qc_loci {
         let mut counts = (0usize, 0usize, 0usize);
-        for &g in &sampled_genome.genotypes[idx] {
+        for &g in &data.sampled_genome.genotypes[idx] {
             match g {
                 0 => counts.0 += 1,
                 1 => counts.1 += 1,
@@ -103,18 +61,18 @@ fn main() {
                 _ => {} // missing
             }
         }
-        loci.push(GenomeValidator::validate_locus(snp_key(idx as u32), counts));
+        loci.push(GenomeValidator::validate_locus(format!("snp{}", idx), counts));
     }
 
-    let synthetic_mean_ld_r2: f32 = if ld_matrix.pairs.is_empty() {
+    let synthetic_mean_ld_r2: f32 = if data.ld_pairs.is_empty() {
         0.0
     } else {
-        let sum: f32 = ld_matrix
-            .pairs
+        let sum: f32 = data
+            .ld_pairs
             .iter()
-            .map(|p| sampled_genome.ld_r2(p.snp1_idx as usize, p.snp2_idx as usize))
+            .map(|p| data.sampled_genome.ld_r2(p.snp1_idx as usize, p.snp2_idx as usize))
             .sum();
-        sum / ld_matrix.pairs.len() as f32
+        sum / data.ld_pairs.len() as f32
     };
 
     let qc_report = GenomeValidator::generate_report(&loci, synthetic_mean_ld_r2);
@@ -134,19 +92,7 @@ fn main() {
     // ========== STEP 4: Compare synthetic genome to the real reference ==========
     println!("\n[Step 4/6] Validating synthetic genome against real reference...");
 
-    let mut synthetic = SyntheticGenome::new(synthetic_n_samples);
-    for idx in 0..sampled_genome.genotypes.len() {
-        let freq_alt = sampled_genome.allele_freq(idx);
-        // Same (alt, ref) convention as the reference above.
-        synthetic.add_snp(snp_key(idx as u32), freq_alt, 1.0 - freq_alt);
-    }
-    for pair in &ld_matrix.pairs {
-        let r2 = sampled_genome.ld_r2(pair.snp1_idx as usize, pair.snp2_idx as usize);
-        synthetic.add_ld_pair(snp_key(pair.snp1_idx), snp_key(pair.snp2_idx), r2);
-    }
-    synthetic.finalize();
-
-    let validation = GenomeComparator::validate(&reference, &synthetic);
+    let validation = GenomeComparator::validate(&data.reference, &data.synthetic);
 
     println!("✓ Validation Results:");
     println!("  Reference population: {}", validation.ref_population);

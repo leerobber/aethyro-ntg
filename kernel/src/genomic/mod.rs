@@ -20,6 +20,7 @@ pub mod phenotype;
 pub mod quality_control;
 pub mod validation;
 pub mod extended_validation;
+pub mod real_pipeline;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -40,3 +41,4 @@ pub use extended_validation::{
     RecombinationMap, RecombinationComparator, RecombinationComparison,
     HaplotypeBlockComparator, HaplotypeBlockComparison,
 };
+pub use real_pipeline::{RealChromosomeData, build_real_chromosome, snp_key};
