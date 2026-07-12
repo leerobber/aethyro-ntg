@@ -1,12 +1,25 @@
 /// Phase C: Synthetic Genome Synthesis & Evolution
-/// Complete pipeline: Synthesis → Evolution → Phenotype Prediction
+/// Complete pipeline: real chromosome brain -> Synthesis -> Evolution -> Phenotype Prediction
 /// Pure Rust implementation
+///
+/// Usage: cargo run --release --bin phase_c_synthesis [-- <max_variants>]
+/// Builds a real ChromosomeBrain from data/raw/1000g chr1 (optionally
+/// capped to a leading slice of variants) and synthesizes a population
+/// whose per-locus allele frequencies come from that brain instead of a
+/// single assumed frequency for the whole chromosome.
 
 use ntg_kernel::genomic::{
-    GenomeSampler, EvolutionSim, DefaultFitnessModel,
-    Environment, GxEEngine, PhenotypeHead,
-    ChromosomeBrain, ChromosomeId, KairosState, EmbeddingLayer,
+    BlockDetector, ChromosomeId, DefaultFitnessModel, Environment, EvolutionSim, GenomeSampler,
+    GxEEngine, LdComputer, PhenotypeHead, VcfParser, init_chromosome_brain,
 };
+
+fn vcf_path(chr: &str) -> String {
+    format!(
+        "{}/../data/raw/1000g/ALL.chr{}.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz",
+        env!("CARGO_MANIFEST_DIR"),
+        chr
+    )
+}
 
 fn main() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
@@ -14,30 +27,62 @@ fn main() {
     println!("║  Pure Rust | No Dependencies | Production Ready             ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
-    let n_snps = 1000;
+    let max_variants: Option<usize> = std::env::args().nth(1).and_then(|s| s.parse().ok());
     let n_samples = 100;
     let population_size = 50;
     let n_generations = 10;
 
-    // ========== STEP 1: Initialization ==========
-    println!("\n[Step 1/4] Initializing Genome Sampler...");
-    let sampler = GenomeSampler::new(n_snps, n_samples, 42);
-    println!("✓ Sampler configured: {} SNPs, {} samples", n_snps, n_samples);
+    // ========== STEP 1: Build a real Chromosome Brain (Phase A + B) ==========
+    println!("\n[Step 1/4] Building chromosome brain from real chr1 VCF data...");
+    let chr_path = vcf_path("1");
+    let vcf_parser = VcfParser::new(false);
+    let chromosome = vcf_parser
+        .parse_vcf_limited(&chr_path, 1, max_variants)
+        .expect("failed to parse real VCF data");
+    let positions: Vec<u32> = chromosome.snps.iter().map(|s| s.position).collect();
+    let ld_matrix = LdComputer::new(false, 0.5)
+        .compute_ld(&chromosome.genotypes, &positions)
+        .expect("LD computation failed");
+    let mut blocks = BlockDetector::new(false)
+        .detect_blocks(&ld_matrix.pairs, chromosome.snps.len())
+        .expect("block detection failed");
+    BlockDetector::new(false)
+        .annotate_blocks(&mut blocks, &positions)
+        .expect("block annotation failed");
+    let brain = init_chromosome_brain(
+        ChromosomeId(1),
+        &chromosome.genotypes,
+        &chromosome.snps,
+        &ld_matrix.pairs,
+        &blocks,
+    )
+    .expect("brain initialization failed");
+    println!(
+        "✓ Brain built from real data: {} SNPs, {} LD pairs, {} haplotype blocks",
+        brain.neurons.len(),
+        ld_matrix.pairs.len(),
+        blocks.len()
+    );
 
-    // ========== STEP 2: Generate Initial Population ==========
-    println!("\n[Step 2/4] Generating Initial Population...");
+    let mean_real_af: f32 =
+        brain.neurons.iter().map(|n| n.allele_freq).sum::<f32>() / brain.neurons.len().max(1) as f32;
+    println!("✓ Mean real alt-allele frequency across these loci: {:.4}", mean_real_af);
+
+    // ========== STEP 2: Generate Initial Population from real allele frequencies ==========
+    println!("\n[Step 2/4] Generating Initial Population from real per-locus frequencies...");
+    let sampler = GenomeSampler::from_brain(&brain, n_samples, 42);
     let initial_pop = sampler.generate_population(population_size);
     println!(
         "✓ Generated {} genomes with {} variants each",
         initial_pop.len(),
-        n_snps
+        sampler.n_snps
     );
 
     // ========== STEP 3: Evolution Simulation ==========
     println!("\n[Step 3/4] Running Evolution Simulation ({} generations)...\n", n_generations);
 
     let fitness_model = Box::new(DefaultFitnessModel {
-        target_allele_freq: 0.3,
+        target_allele_freq: mean_real_af,
         selection_strength: 2.0,
     });
 
