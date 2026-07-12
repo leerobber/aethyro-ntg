@@ -102,3 +102,7 @@ path = "src/bin/phase_e_extended_validation.rs"
 [[bin]]
 name = "system_evolution_node"
 path = "src/bin/system_evolution_node.rs"
+
+[[bin]]
+name = "optimized_core_demo"
+path = "src/bin/optimized_core_demo.rs"

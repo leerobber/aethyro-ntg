@@ -22,6 +22,7 @@ pub mod validation;
 pub mod extended_validation;
 pub mod real_pipeline;
 pub mod epigenetic_engine;
+pub mod optimized_core;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -44,3 +45,7 @@ pub use extended_validation::{
 };
 pub use real_pipeline::{RealChromosomeData, build_real_chromosome, snp_key};
 pub use epigenetic_engine::{EpigeneticEngine, GeneticExpressionBlock, StrategyFn};
+pub use optimized_core::{
+    SovereignEpigeneticEngine, GeneTable, GeneIndex, MAX_GENES, FitnessBenchmark,
+    SelectionOutcome, Telemetry4D, kimura_fixation_probability,
+};
