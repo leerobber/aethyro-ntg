@@ -1,0 +1,55 @@
+{
+  "test_date": "2026-07-12T14:30:00Z",
+  "total_domains": 6,
+  "mean_score": 0.000,
+  "critical_count": 0,
+  "high_count": 0,
+  "medium_count": 2,
+  "low_count": 3,
+  "total_latency_ms": 0,
+  "domains": [
+    {
+      "name": "Genomic",
+      "severity": "NONE",
+      "score": 0.000,
+      "patterns": 0,
+      "modules": 0
+    },
+    {
+      "name": "Code Quality",
+      "severity": "LOW",
+      "score": 0.000,
+      "patterns": 1,
+      "modules": 0
+    },
+    {
+      "name": "Malware",
+      "severity": "LOW",
+      "score": 0.000,
+      "patterns": 0,
+      "modules": 0
+    },
+    {
+      "name": "Injection Risk",
+      "severity": "LOW",
+      "score": 0.000,
+      "patterns": 0,
+      "modules": 0
+    },
+    {
+      "name": "Supply Chain",
+      "severity": "MEDIUM",
+      "score": 0.000,
+      "patterns": 0,
+      "modules": 0
+    },
+    {
+      "name": "Cryptographic",
+      "severity": "MEDIUM",
+      "score": 0.000,
+      "patterns": 0,
+      "modules": 0
+    }
+
+  ]
+}

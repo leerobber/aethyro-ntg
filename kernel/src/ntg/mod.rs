@@ -22,3 +22,4 @@ pub mod calib;
 pub mod schooling;
 pub mod observability;
 pub mod genome;
+pub mod operators;

@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 sha2 = "0.10"
 memmap2 = "0.9"
+flate2 = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rayon = "1.7"
 
 [lib]
 name = "ntg_kernel"
@@ -30,3 +34,67 @@ path = "src/bin/phase4_calib.rs"
 [[bin]]
 name = "ntg_school"
 path = "src/bin/ntg_school.rs"
+
+[[bin]]
+name = "vcf_to_csv"
+path = "src/bin/vcf_to_csv.rs"
+
+[[bin]]
+name = "compute_ld"
+path = "src/bin/compute_ld.rs"
+
+[[bin]]
+name = "compute_ld_fast"
+path = "src/bin/compute_ld_fast.rs"
+
+[[bin]]
+name = "genomic_brain"
+path = "src/bin/genomic_brain.rs"
+
+[[bin]]
+name = "load_brain_from_csv"
+path = "src/bin/load_brain_from_csv.rs"
+
+[[bin]]
+name = "train_genomic_brain"
+path = "src/bin/train_genomic_brain.rs"
+
+[[bin]]
+name = "orchestrator"
+path = "src/bin/orchestrator.rs"
+
+[[bin]]
+name = "vcf_stream_test"
+path = "src/bin/vcf_stream_test.rs"
+
+[[bin]]
+name = "ld_compute_test"
+path = "src/bin/ld_compute_test.rs"
+
+[[bin]]
+name = "haplotype_blocks_test"
+path = "src/bin/haplotype_blocks_test.rs"
+
+[[bin]]
+name = "chromosome_brain_test"
+path = "src/bin/chromosome_brain_test.rs"
+
+[[bin]]
+name = "domain_disease_test"
+path = "src/bin/domain_disease_test.rs"
+
+[[bin]]
+name = "domain_disease_complete"
+path = "src/bin/domain_disease_complete.rs"
+
+[[bin]]
+name = "phase_c_synthesis"
+path = "src/bin/phase_c_synthesis.rs"
+
+[[bin]]
+name = "phase_d_quality_control"
+path = "src/bin/phase_d_quality_control.rs"
+
+[[bin]]
+name = "phase_e_extended_validation"
+path = "src/bin/phase_e_extended_validation.rs"

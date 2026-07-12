@@ -20,6 +20,12 @@ artifacts/models/*
 # Schooling per-run JSON can be large; keep notebooks + latest master
 # (commit MASTER + RUN notebooks for evidence; ignore nothing by default)
 
+# Raw/processed genomic datasets (3.8G+) — too large for git, kept local-only
+data/
+
+# Local cargo build log dumps
+kernel/build.log
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

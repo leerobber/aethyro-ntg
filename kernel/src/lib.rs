@@ -10,8 +10,19 @@
 //! an earlier remote commit was superseded by the tested `ntg::*` modules.
 
 pub mod ntg;
+pub mod genomic;
 
 pub use ntg::chain::{ChainEntry, ChainLog};
+pub use genomic::{
+    VcfParser, VcfChromosome, BitstreamGenotypes, LdComputer, LdMatrix, LdPair, BlockDetector,
+    HaplotypeBlock, BlockStatistics, compute_block_statistics,
+    ChromosomeBrain, ChromosomeId, NeuronId, Synapse, GenomicNeuron, KairosState, BrainSummary,
+    init_chromosome_brain, ChromosomeAgent, AgentQuery, AgentResponse, AgentCoordinator,
+    CoordinatorResponse, DomainAgent, DomainType, DomainQuery, DiseaseDiagnosis, PatternSignature,
+    RiskSeverity, TestResults, DomainResult, AggregateStats,
+    Genome, GenomeSampler, EvolutionSim, FitnessModel, DefaultFitnessModel, GenerationStats,
+    PhenotypeHead, Environment, GxEEngine,
+};
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;
 pub use ntg::fsevents::{apply_event, FsEvent};
