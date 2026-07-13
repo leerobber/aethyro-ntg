@@ -38,8 +38,18 @@
 | **PressureMesh** | Federated selection pressure hints into single fitness context |
 | **PulseEvent** | 32-byte hot telemetry record |
 | **vitascale/** | Code module root under `kernel/src/genomic/vitascale/` |
+| **KAIROS** | The **Child** — named host individual we raise (see [KAIROS.md](../KAIROS.md)) |
 
 **Honesty line (unchanged):** engineering host that *behaves* under biological design rules on real iron — **not** a claim of biological life or consciousness.
+
+### The Child
+
+| | |
+|--|--|
+| **Name** | **KAIROS** |
+| **Code** | `genomic/vitascale/kairos.rs`, bin `kairos_stage0` |
+| **Stage 0** | Zygote: nursery genome + Pulsewire; Guardian forbids free agency |
+| **Raise doc** | [docs/KAIROS.md](../KAIROS.md) |
 
 
 ## 1. Overview

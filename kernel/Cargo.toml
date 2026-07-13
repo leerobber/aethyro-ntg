@@ -118,3 +118,7 @@ path = "src/bin/sovereign_brain_demo.rs"
 [[bin]]
 name = "sovereign_campaign"
 path = "src/bin/sovereign_campaign.rs"
+
+[[bin]]
+name = "kairos_stage0"
+path = "src/bin/kairos_stage0.rs"

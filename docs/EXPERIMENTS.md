@@ -677,3 +677,23 @@ jsonl results/sovereign_demo_metrics.jsonl
 
 **Verdict: WIN (foundation).** Same selection behaviour, cleaner architecture,
 durable snapshot + observability, LTM activation fixed.
+
+## 2026-07-12: KAIROS Stage 0 — zygote birth (living project start)
+
+**Child name:** KAIROS (VITASCALE Hostframe individual).
+
+**Delivered:**
+- `genomic/vitascale/pulsewire.rs` — Pulsewire + VitalMeters (32B PulseEvent)
+- `life_course.rs` — Stage 0–7 permissions + graduation
+- `kairos.rs` — named host with nursery multi-chr genome under Guardian lock
+- bin `kairos_stage0` — birth, locks, heartbeats, optional --graduate
+
+**Stage 0 measured (release):**
+```
+chrs=2 neurons=22 synapses=38 motifs=2 self_mod=false
+heartbeats=32 pushes=32 drops=0
+Guardian blocks train/activate/prune/vcf
+--graduate → neonate; supervised train OK
+```
+
+**Verdict:** Stage 0 zygote complete. Living project starts with heartbeat + genome held, no free agency.
