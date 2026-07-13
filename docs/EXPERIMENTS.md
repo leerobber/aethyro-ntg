@@ -588,3 +588,29 @@ mean_w 0.801 → 0.850  (plateau after step 4 — honest rejects)
 **Verdict: WIN (foundation).** Real multi-axis selection improves utility
 and compresses structure without biology collapse. Not LLM-level
 intelligence yet. Next: Phase E biology scores + ledger safety axes.
+
+## 2026-07-12: Real multi-axis scorers (biology + agent task + ledger safety)
+
+**Why:** After Rung 1-2, selection used structure proxies. Next best step
+is wiring real axes so accept/reject tracks biology fidelity, agent task
+signal, and tamper-evident safety.
+
+**Implemented:** `genomic::sovereign_fitness::SovereignFitnessContext`
+- Biology: Phase D GenomeComparator vs frozen references + r2-weighted LD coverage
+- Task: ChromosomeAgent DiseaseRisk + PopulationSignal + connectivity
+- Safety: TamperEvidentLedger log every decision + verify_full_ledger
+- Operators: train (KAIROS) and prune; select_child logs accept/reject
+
+**Unit tests:** sovereign_fitness suite; full lib 326 pass.
+
+**Demo measured (synthetic, release):**
+```
+axes0: u=0.8098 task=0.550 bio=1.000 cost=0.218 safety=1.0 cov=1.0
+train steps: 4/4 accepted  |  u 0.810->0.832  cost 0.218->0.073  bio stays 1.0
+prune steps: 0/4 accepted  |  bio 1.0->0.917 (LD cov 1.0->0.834) correctly rejected
+ledger entries=8 verify=OK  mean_w 0.280->0.765
+```
+
+**Verdict: WIN.** Real axes change selection behaviour: learning mutations
+pass; destructive LD loss fails the biology gate; every decision is
+ledger-audited. Proxies alone could not express this.
