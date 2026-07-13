@@ -25,7 +25,8 @@ pub use genomic::{
     RecombinationMap, RecombinationComparator, RecombinationComparison,
     HaplotypeBlockComparator, HaplotypeBlockComparison,
     SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
-    ConsolidateReport,
+    ConsolidateReport, SovereignFitnessContext, reference_from_brain, synthetic_from_brain,
+    ld_coverage,
 };
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;

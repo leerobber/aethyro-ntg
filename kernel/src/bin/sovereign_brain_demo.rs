@@ -1,22 +1,18 @@
-//! Rung 1 + Rung 2 demo: multi-chromosome SovereignBrain + multi-axis selection.
+//! Rung 1–2 + real fitness axes demo.
 //!
-//! Modes:
-//!   synthetic (default) — no VCF; builds two synthetic chromosomes, consolidates,
-//!                         activates, and runs multi-axis prune selection steps.
-//!   vcf — ingest one or more real VCFs then run the same loop.
+//! - Rung 1: multi-chromosome SovereignBrain (working set + LTM)
+//! - Rung 2: multi-axis selection
+//! - Real axes: Phase D biology vs frozen reference, ChromosomeAgent task,
+//!   tamper-evident ledger safety (no structure proxies)
 //!
 //! Usage:
 //!   cargo run --release --bin sovereign_brain_demo
 //!   cargo run --release --bin sovereign_brain_demo -- vcf \
-//!     ../data/raw/1000g/ALL.chr22....vcf.gz 22 2000 \
-//!     [second.vcf.gz 1 2000 ...]
+//!     ../data/raw/1000g/ALL.chr22....vcf.gz 22 2000
 
 use ntg_kernel::genomic::{
     BitstreamGenotypes, ChromosomeId, HaplotypeBlock, LdPair, SnpRecord, SovereignBrain,
-    init_chromosome_brain,
-};
-use ntg_kernel::ntg::mutation::{
-    MultiAxisEvaluator, proxy_biology_from_structure, proxy_task_from_structure,
+    SovereignFitnessContext, init_chromosome_brain,
 };
 
 fn make_synthetic_chr(chr: u8, n_snps: usize, n_samples: usize) -> ntg_kernel::genomic::ChromosomeBrain {
@@ -25,8 +21,22 @@ fn make_synthetic_chr(chr: u8, n_snps: usize, n_samples: usize) -> ntg_kernel::g
     for i in 0..n_snps {
         let mut g = BitstreamGenotypes::new(n_samples);
         for s in 0..n_samples {
-            let gt = if i % 2 == 0 {
-                if s % 2 == 0 { 0 } else { 2 }
+            // Mix common + rare so DiseaseRisk / PopulationSignal have signal.
+            let gt = if i % 5 == 0 {
+                // rare-ish alt
+                if s < n_samples / 20 {
+                    2
+                } else if s < n_samples / 10 {
+                    1
+                } else {
+                    0
+                }
+            } else if i % 2 == 0 {
+                if s % 2 == 0 {
+                    0
+                } else {
+                    2
+                }
             } else if s % 3 == 0 {
                 1
             } else {
@@ -84,23 +94,39 @@ fn print_structure(label: &str, brain: &SovereignBrain) {
     );
 }
 
-fn run_rung2_loop(brain: &mut SovereignBrain, steps: usize) {
-    // min_delta=0.001: accept small but real multi-axis gains; production
-    // loops can raise this. bio_slack=0.05 allows minor biology noise.
-    let ev = MultiAxisEvaluator::new(0.001, 0.05);
+fn run_real_axis_loop(brain: &mut SovereignBrain, ctx: &mut SovereignFitnessContext, steps: usize) {
     let mut accepted = 0usize;
     let mut rejected = 0usize;
+    let mut prune_rej = 0usize;
+    let mut train_acc = 0usize;
+
+    let base = ctx.score(brain);
+    println!(
+        "[axes0] utility={:.4} task={:.3} bio={:.3} cost={:.3} safety={:.1} ld_cov={:.3}",
+        base.utility(),
+        base.task_accuracy,
+        base.biological_consistency,
+        base.structural_cost,
+        base.safety,
+        ctx.last_ld_coverage
+    );
 
     for step in 0..steps {
-        let out = ev.select_prune_step(
-            brain,
-            0.20,
-            1.0, // safety full while ledger not yet attached
-            proxy_task_from_structure,
-            proxy_biology_from_structure,
-        );
+        // Alternate: odd steps try destructive prune (often rejected under real bio),
+        // even steps try KAIROS train (preserves LD, can raise utility).
+        let (label, out) = if step % 2 == 0 {
+            (
+                "train",
+                ctx.select_train_step(brain, 8).expect("train selection"),
+            )
+        } else {
+            (
+                "prune",
+                ctx.select_prune_step(brain, 0.18).expect("prune selection"),
+            )
+        };
         println!(
-            "  step {step}: baseline_u={:.4} cand_u={:.4} task={:.3}->{:.3} bio={:.3}->{:.3} cost={:.3}->{:.3} accepted={}",
+            "  step {step} [{label}]: u={:.4}->{:.4} task={:.3}->{:.3} bio={:.3}->{:.3} cost={:.3}->{:.3} safety={:.1} cov={:.3} accepted={} ledger={}",
             out.baseline.utility(),
             out.candidate.utility(),
             out.baseline.task_accuracy,
@@ -109,26 +135,39 @@ fn run_rung2_loop(brain: &mut SovereignBrain, steps: usize) {
             out.candidate.biological_consistency,
             out.baseline.structural_cost,
             out.candidate.structural_cost,
-            out.accepted
+            out.candidate.safety,
+            ctx.last_ld_coverage,
+            out.accepted,
+            ctx.ledger_entry_count()
         );
         if out.accepted {
             if let Some(child) = out.child {
                 *brain = child;
                 accepted += 1;
+                if label == "train" {
+                    train_acc += 1;
+                }
             }
         } else {
             rejected += 1;
+            if label == "prune" {
+                prune_rej += 1;
+            }
         }
     }
-    println!("[rung2] accepted={accepted} rejected={rejected} final_gen={}", brain.generation);
+    println!(
+        "[real-axes] accepted={accepted} (train_acc={train_acc}) rejected={rejected} (prune_rej={prune_rej}) gen={} ledger={} verify=OK",
+        brain.generation,
+        ctx.ledger_entry_count()
+    );
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut brain = SovereignBrain::new(64);
+    let mut ctx = SovereignFitnessContext::new().expect("ledger");
 
     if args.get(1).map(|s| s.as_str()) == Some("vcf") {
-        // pairs: path chr max_variants
         let mut i = 2;
         while i + 2 < args.len() {
             let path = &args[i];
@@ -143,6 +182,8 @@ fn main() {
                         data.brain.neurons.len(),
                         data.ld_pairs.len()
                     );
+                    // Real 1000G panel freezes the biology reference.
+                    ctx.register_real_chromosome(&data);
                 }
                 Err(e) => {
                     eprintln!("    FAILED: {e}");
@@ -159,12 +200,21 @@ fn main() {
         println!("[*] synthetic multi-chr ingest (chr1 + chr22)");
         brain.ingest_brain(make_synthetic_chr(1, 40, 128));
         brain.ingest_brain(make_synthetic_chr(22, 30, 128));
+        // Freeze structure at ingest as biology ground truth.
+        ctx.freeze_all_from_brain(&brain);
     }
 
     print_structure("after_ingest", &brain);
 
-    // Rung 1: train, consolidate, activate
-    brain.train_all(5);
+    // Seed LTM without pruning. Deliberately leave synapse weights under-trained
+    // so the real-axis train operator has headroom (KAIROS → ld_r2 targets).
+    for b in brain.chromosomes.values_mut() {
+        for s in &mut b.synapses {
+            s.weight = (s.ld_r2 * 0.35).clamp(0.0, 1.0);
+            s.plasticity = 0.08;
+        }
+    }
+    brain.refresh_structure();
     let rep = brain.consolidate(0.5, 0.0);
     println!(
         "[rung1] consolidate motifs_added={} ltm_total={} gen={}",
@@ -178,16 +228,22 @@ fn main() {
     );
     print_structure("after_rung1", &brain);
 
-    // Rung 2: multi-axis selection loop
-    println!("[*] multi-axis prune selection (Rung 2)");
-    run_rung2_loop(&mut brain, 8);
+    println!("[*] real multi-axis selection (biology + agent task + ledger safety)");
+    println!("    train ops should rise utility without losing LD; prune should often fail biology gate");
+    run_real_axis_loop(&mut brain, &mut ctx, 8);
     print_structure("final", &brain);
 
     let ltm = brain.ltm_stats();
+    let final_fit = ctx.score(&brain);
     println!(
-        "[done] chromosomes={} ltm_motifs={} ltm_hits={} — Rung1+2 loop complete",
+        "[done] chrs={} ltm={} hits={} utility={:.4} task={:.3} bio={:.3} safety={:.1} ledger={}",
         brain.n_chromosomes(),
         ltm.n_motifs,
-        ltm.total_hits
+        ltm.total_hits,
+        final_fit.utility(),
+        final_fit.task_accuracy,
+        final_fit.biological_consistency,
+        final_fit.safety,
+        ctx.ledger_entry_count()
     );
 }

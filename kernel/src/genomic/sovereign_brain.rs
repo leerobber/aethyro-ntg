@@ -480,6 +480,15 @@ impl SovereignBrain {
         child.consolidate(0.5, prune_frac);
         child
     }
+
+    /// Propose a learning delta: extra KAIROS cycles on all chromosomes.
+    /// Preserves LD edges (biology coverage) while shifting weights/task signal.
+    pub fn propose_train_mutant(&self, cycles: u32) -> SovereignBrain {
+        let mut child = self.clone();
+        child.train_all(cycles.max(1));
+        child.generation = child.generation.saturating_add(1);
+        child
+    }
 }
 
 /// Result of a consolidate() call.

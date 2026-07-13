@@ -24,6 +24,7 @@ pub mod real_pipeline;
 pub mod epigenetic_engine;
 pub mod optimized_core;
 pub mod sovereign_brain;
+pub mod sovereign_fitness;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -53,4 +54,7 @@ pub use optimized_core::{
 pub use sovereign_brain::{
     SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
     ConsolidateReport,
+};
+pub use sovereign_fitness::{
+    SovereignFitnessContext, reference_from_brain, synthetic_from_brain, ld_coverage,
 };
