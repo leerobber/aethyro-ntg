@@ -24,6 +24,8 @@ pub use genomic::{
     PhenotypeHead, Environment, GxEEngine,
     RecombinationMap, RecombinationComparator, RecombinationComparison,
     HaplotypeBlockComparator, HaplotypeBlockComparison,
+    SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
+    ConsolidateReport,
 };
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;

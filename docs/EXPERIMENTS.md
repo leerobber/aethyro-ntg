@@ -558,3 +558,33 @@ cargo run --release --bin ld_simd_bench -- \
 
 **Verdict: WIN.** Correctness-preserving ~11× on the LD r² kernel for
 2504-sample 1000G-scale vectors. Production LD path now uses bitparallel.
+
+
+## 2026-07-12: Rung 1 SovereignBrain + Rung 2 multi-axis fitness (first loop)
+
+**Why:** Phase F plan rungs 1–2 — unify multi-chromosome structure with
+working set + LTM, then select structural mutants with multi-axis fitness
+(task, structural cost, biological consistency, safety) instead of
+latency/memory alone.
+
+**Implemented:**
+- `genomic::sovereign_brain::SovereignBrain` — multi-chr map, working set,
+  LTM motifs, ingest (brain / VCF), activate, consolidate, prune mutant
+- `ntg::mutation::multi_axis::{MultiAxisFitness, MultiAxisEvaluator}` —
+  utility scoring, safety/biology gates, select_prune_step
+- Demo: `cargo run --release --bin sovereign_brain_demo`
+
+**Unit tests:** 13 new (6 sovereign + 7 multi_axis); full lib 318 pass.
+
+**Demo measured (synthetic chr1+chr22, release):**
+```
+after_ingest: chrs=2 neurons=70 synapses=198 blocks=2 ltm=2
+activate: working_set=64 motifs_hit=2
+rung2 8 prune steps: accepted=5 rejected=3
+utility 0.8381 → 0.8525  |  synapses 198 → 68  |  mem≈11968 → 7808 B
+mean_w 0.801 → 0.850  (plateau after step 4 — honest rejects)
+```
+
+**Verdict: WIN (foundation).** Real multi-axis selection improves utility
+and compresses structure without biology collapse. Not LLM-level
+intelligence yet. Next: Phase E biology scores + ledger safety axes.

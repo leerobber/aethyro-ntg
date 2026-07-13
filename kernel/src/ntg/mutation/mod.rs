@@ -12,6 +12,12 @@
 pub mod rules;
 pub mod evaluator;
 pub mod budget;
+pub mod multi_axis;
+
+pub use multi_axis::{
+    MultiAxisFitness, MultiAxisEvaluator, SelectionOutcome as MultiAxisSelectionOutcome,
+    proxy_task_from_structure, proxy_biology_from_structure,
+};
 
 use super::error::NtgError;
 use super::graph::Graph;

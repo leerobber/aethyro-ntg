@@ -23,6 +23,7 @@ pub mod extended_validation;
 pub mod real_pipeline;
 pub mod epigenetic_engine;
 pub mod optimized_core;
+pub mod sovereign_brain;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -48,4 +49,8 @@ pub use epigenetic_engine::{EpigeneticEngine, GeneticExpressionBlock, StrategyFn
 pub use optimized_core::{
     SovereignEpigeneticEngine, GeneTable, GeneIndex, MAX_GENES, FitnessBenchmark,
     SelectionOutcome, Telemetry4D, kimura_fixation_probability,
+};
+pub use sovereign_brain::{
+    SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
+    ConsolidateReport,
 };

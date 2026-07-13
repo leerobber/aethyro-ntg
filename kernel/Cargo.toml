@@ -110,3 +110,7 @@ path = "src/bin/system_evolution_node.rs"
 [[bin]]
 name = "optimized_core_demo"
 path = "src/bin/optimized_core_demo.rs"
+
+[[bin]]
+name = "sovereign_brain_demo"
+path = "src/bin/sovereign_brain_demo.rs"
