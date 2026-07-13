@@ -367,7 +367,7 @@ mod tests {
         // Fill with random data
         for snp in 0..50 {
             for ind in 0..1000 {
-                op.set(snp, ind, (((snp + ind) % 3) as u8));
+                op.set(snp, ind, ((snp + ind) % 3) as u8);
             }
         }
 

@@ -2,7 +2,7 @@
 /// Handles genomic diseases, code diseases, data diseases, malware, poisonous injections, etc.
 /// Architecture: Patterns + Connectivity + Blocks → Risk Scores
 
-use crate::genomic::chromosome_brain::{ChromosomeBrain, ChromosomeId, NeuronId};
+use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
 use std::collections::HashMap;
 
 /// Disease domain classification
@@ -605,7 +605,9 @@ impl DomainAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::genomic::chromosome_brain::{ChromosomeBrain, KairosState, EmbeddingLayer};
+    use crate::genomic::chromosome_brain::{
+        ChromosomeBrain, ChromosomeId, EmbeddingLayer, KairosState,
+    };
 
     #[test]
     fn test_domain_agent_creation() {

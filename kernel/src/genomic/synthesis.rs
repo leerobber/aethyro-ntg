@@ -25,7 +25,7 @@
 /// Pure Rust implementation
 
 use crate::genomic::bitsliced_genotypes::BitstreamGenotypes;
-use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
+use crate::genomic::chromosome_brain::ChromosomeBrain;
 use crate::genomic::haplotype_blocks::HaplotypeBlock;
 use std::collections::HashMap;
 

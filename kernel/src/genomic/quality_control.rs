@@ -2,8 +2,6 @@
 /// Compare synthetic genomes to real 1000 Genomes data
 /// Pure Rust, no dependencies
 
-use std::collections::HashMap;
-
 /// Statistics for a single locus
 #[derive(Clone, Debug)]
 pub struct LocusStats {

@@ -2,9 +2,8 @@
 /// Handles ingestion of genomic data from various formats
 /// (VCF, PLINK, CSV, JSON)
 
-use super::genomic::{GenomicOperator, GenomicNode};
+use super::genomic::GenomicNode;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;

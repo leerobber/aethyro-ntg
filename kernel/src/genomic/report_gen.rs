@@ -1,9 +1,7 @@
 /// Report Generation - Pure Rust
 /// Generates CSV, JSON, and HTML reports from domain disease test results
 
-use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 
 #[derive(Clone, Debug)]
 pub struct DomainResult {

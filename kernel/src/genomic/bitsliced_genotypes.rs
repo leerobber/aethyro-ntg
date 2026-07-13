@@ -237,15 +237,14 @@ impl BitstreamGenotypes {
     /// Returns (freq_ref, freq_alt, freq_missing)
     pub fn allele_frequencies(&self) -> (f64, f64, f64) {
         let mut count_ref = 0u64;
-        let mut count_alt = 0u64;
         let mut count_missing = 0u64;
 
         for i in 0..self.n_samples {
             match self.get(i) {
-                0 => count_ref += 2,      // ref/ref: 2 ref alleles
-                1 => count_ref += 1,      // ref/alt: 1 ref, 1 alt
-                2 => count_alt += 2,      // alt/alt: 2 alt alleles
-                _ => count_missing += 1,  // missing
+                0 => count_ref += 2, // ref/ref: 2 ref alleles
+                1 => count_ref += 1, // ref/alt: 1 ref (alt via 1 - freq_ref)
+                2 => {}             // alt/alt: 0 ref alleles; still non-missing
+                _ => count_missing += 1,
             }
         }
 

@@ -113,7 +113,6 @@ impl VcfParser {
         let mut all_genotypes = Vec::new();
         let mut all_hap_a = Vec::new();
         let mut all_hap_b = Vec::new();
-        let mut line_count = 0u64;
         let mut snp_count = 0u64;
 
         let start = Instant::now();
@@ -245,8 +244,6 @@ impl VcfParser {
                 );
                 last_progress = Instant::now();
             }
-
-            line_count += 1;
 
             if let Some(limit) = max_variants {
                 if snp_count as usize >= limit {

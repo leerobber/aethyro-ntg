@@ -2,7 +2,7 @@
 /// Local intelligence handlers for genome queries and decisions
 /// Agents operate on chromosome brains and coordinate multi-brain responses
 
-use crate::genomic::chromosome_brain::{ChromosomeBrain, ChromosomeId, NeuronId};
+use crate::genomic::chromosome_brain::{ChromosomeBrain, ChromosomeId};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -166,7 +166,7 @@ impl ChromosomeAgent {
         let n_rare = self.brain.neurons.iter().filter(|n| n.is_rare).count();
         let rare_frac = n_rare as f32 / (self.brain.neurons.len() as f32 + 1.0);
 
-        let mut score = rare_frac;
+        let score = rare_frac;
         let mut explanation = format!(
             "Chr{} Population Signal: {:.2}% rare alleles ",
             self.brain.chr.0,
