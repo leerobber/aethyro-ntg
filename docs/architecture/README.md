@@ -15,6 +15,7 @@ it in [STATUS.md](../STATUS.md).
 | [0007](0007-observability-genome-prototype.md) | Stats collector + ternary DNA genome prototype | **Accepted (prototype)** |
 | [0008](0008-phase-f-vision-and-cross-phase-recommendations.md) | Phase F direction: cross-phase recommendations, real-time self-awareness instrumentation, self-healing, synthetic-biology/robotics vision | **Proposed** (ideas only, except the Phase E recombination/haplotype-block work it documents, which is implemented — see `PHASE_E_EXTENDED_VALIDATION_COMPLETE.md`) |
 | [0009](0009-sovereign-brain-and-multi-axis-fitness.md) | SovereignBrain multi-organ stack + multi-axis fitness (task/structure/biology/safety) | **Accepted + implemented** (harden pass: organ trait, shared loop, durable snapshot, JSONL) |
+| [0010](0010-living-organism-kernel.md) | Living Organism Kernel (LOK): nano-agents, TelemetryRing, AwarenessBus, Eye, Immune, Body adapters | **Draft (approved for PR-1)** — invent-now L0; neuromorphic/wetware L2–L3 |
 
 ## How to add a new ADR
 
