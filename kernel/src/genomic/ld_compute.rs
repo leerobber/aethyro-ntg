@@ -143,8 +143,26 @@ impl LdComputer {
     /// it used `if let Some(r_sq) = ...`, which silently skips the
     /// assertion when the buggy formula happened to return `None` (which
     /// it did for that test's exact input) instead of failing.
+    ///
+    /// Delegates to `BitstreamGenotypes::pearson_r2_bitparallel`, which
+    /// computes the identical statistic word-parallel over the packed bit
+    /// planes (32 samples per iteration via popcount) rather than one
+    /// `get()` per sample. `compute_r_squared_scalar` below preserves the
+    /// original per-sample reference and exists so a regression test can
+    /// assert the two agree.
     fn compute_r_squared(
         &self,
+        geno1: &BitstreamGenotypes,
+        geno2: &BitstreamGenotypes,
+    ) -> Option<f32> {
+        geno1.pearson_r2_bitparallel(geno2, 10)
+    }
+
+    /// Original scalar, per-sample reference for genotypic r². Retained
+    /// only as the correctness oracle for the word-parallel path in
+    /// `compute_r_squared`; not on the hot path.
+    #[cfg(test)]
+    fn compute_r_squared_scalar(
         geno1: &BitstreamGenotypes,
         geno2: &BitstreamGenotypes,
     ) -> Option<f32> {
@@ -362,6 +380,83 @@ mod tests {
 
         let computer = LdComputer::new(false, 0.5);
         assert!(computer.compute_r_squared(&geno1, &geno2).is_none());
+    }
+
+    /// The word-parallel `pearson_r2_bitparallel` (the hot path) must
+    /// agree with the original scalar per-sample reference across a wide
+    /// range of inputs -- including missing genotypes, monomorphic loci,
+    /// and sample counts that leave a partially-filled final plane word
+    /// (the padding-bit case the tail mask exists for). Uses a small
+    /// deterministic LCG so the test is reproducible without a dep.
+    #[test]
+    fn test_bitparallel_r2_matches_scalar_reference() {
+        let mut rng: u64 = 0x9E3779B97F4A7C15;
+        let mut next = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+
+        // Exercise several sample counts, incl. non-multiples of 32 so the
+        // final word is partially filled with padding bits.
+        for &n_samples in &[10usize, 31, 32, 33, 100, 257, 2504] {
+            for _pair in 0..40 {
+                let mut g1 = BitstreamGenotypes::new(n_samples);
+                let mut g2 = BitstreamGenotypes::new(n_samples);
+                for s in 0..n_samples {
+                    // Genotypes 0/1/2 mostly, with occasional missing (3).
+                    let pick = |v: u64| -> u8 {
+                        match v % 10 {
+                            0 => 3, // ~10% missing
+                            1..=3 => 2,
+                            4..=6 => 1,
+                            _ => 0,
+                        }
+                    };
+                    g1.set(s, pick(next()));
+                    g2.set(s, pick(next()));
+                }
+
+                let fast = g1.pearson_r2_bitparallel(&g2, 10);
+                let slow = LdComputer::compute_r_squared_scalar(&g1, &g2);
+
+                match (fast, slow) {
+                    (Some(a), Some(b)) => assert!(
+                        (a - b).abs() < 1e-5,
+                        "n={} fast={} scalar={} differ beyond f32 tolerance",
+                        n_samples, a, b
+                    ),
+                    (None, None) => {}
+                    (f, s) => panic!(
+                        "n={}: Some/None disagreement fast={:?} scalar={:?}",
+                        n_samples, f, s
+                    ),
+                }
+            }
+        }
+    }
+
+    /// Padding bits in the final word (samples beyond `n_samples`) are all
+    /// zero in both planes, i.e. would read as genotype 0 (valid ref/ref).
+    /// Without the tail mask they would inflate the valid-sample count and
+    /// the moments. This pins that they are excluded: two SNPs whose only
+    /// real sample is far below the word boundary must give the same r² as
+    /// the scalar path, not a padding-contaminated one.
+    #[test]
+    fn test_bitparallel_r2_excludes_padding_samples() {
+        // 33 samples => second word holds sample 32 plus 31 padding bits.
+        let mut g1 = BitstreamGenotypes::new(33);
+        let mut g2 = BitstreamGenotypes::new(33);
+        for s in 0..33 {
+            let gt = if s % 2 == 0 { 0 } else { 2 };
+            g1.set(s, gt);
+            g2.set(s, gt);
+        }
+        let fast = g1.pearson_r2_bitparallel(&g2, 10).unwrap();
+        let slow = LdComputer::compute_r_squared_scalar(&g1, &g2).unwrap();
+        assert!((fast - slow).abs() < 1e-5, "fast={} scalar={}", fast, slow);
+        assert!(fast > 0.9, "perfectly correlated dosages, got {}", fast);
     }
 
     #[test]

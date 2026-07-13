@@ -72,6 +72,10 @@ name = "ld_compute_test"
 path = "src/bin/ld_compute_test.rs"
 
 [[bin]]
+name = "ld_simd_bench"
+path = "src/bin/ld_simd_bench.rs"
+
+[[bin]]
 name = "haplotype_blocks_test"
 path = "src/bin/haplotype_blocks_test.rs"
 

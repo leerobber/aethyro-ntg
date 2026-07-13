@@ -517,3 +517,44 @@ graph≈0.20 µs  static≈0.02 µs  ratio≈10×  (same character as Phase 2)
 `--self-mod`: AddNode proposed, rejected by fitness, ledgered.
 
 **Phase 5 exit criteria:** met — see `docs/phases/PHASE_5_COMPLETE.md`.
+
+
+## 2026-07-12: word-parallel LD r² (bit-plane popcount) vs scalar per-sample
+
+**Why:** LD matrix computation is the Phase A hotspot (windowed pairwise
+genotypic r² over 1000 Genomes dosages). The scalar path walks every
+sample with `BitstreamGenotypes::get()`; the packed bit planes already
+encode dosages as mutually exclusive plane bits, so the same moments
+are popcounts of AND-ed words (32 samples/iteration), matching the
+kernel's `BitSlicedTernary::dot_product_parallel` idiom.
+
+**Change:**
+- `BitstreamGenotypes::pearson_r2_bitparallel` — exact integer moments via
+  plane popcount, final divide in f64, padding masked with `word_sample_mask`
+- `LdComputer::compute_r_squared` hot path delegates to it
+- Scalar path retained as `compute_r_squared_scalar` (test-only oracle)
+- Bench: `cargo run --release --bin ld_simd_bench -- <vcf.gz> <chr> [max_variants] [window]`
+
+**Correctness:** unit tests (`test_bitparallel_r2_matches_scalar_reference`,
+`test_bitparallel_r2_excludes_padding_samples`) plus full-pair bench
+cross-check. Max |Δr²| = 0 on real data (identical within f32).
+
+**Measured (release, host; 1000G phase3 chr22, first 5000 SNPs, window=200):**
+
+| path | wall-clock | pairs | kept | mean r² |
+|------|-----------:|------:|-----:|--------:|
+| scalar `get()` loop | 5.1174 s | 975100 | 964911 | 0.001545 |
+| bitparallel popcount | 0.4774 s | 975100 | 964911 | 0.001545 |
+| **speedup** | **10.72×** | | | max|Δr²| = 0 |
+
+```
+cargo run --release --bin ld_simd_bench -- \
+  data/raw/1000g/ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz \
+  22 5000 200
+# SNPs=5000 samples=2504 pairs=975100
+# scalar 5.1174s  bitparallel 0.4774s  speedup 10.72x
+# max |Δr²| 0.00e0
+```
+
+**Verdict: WIN.** Correctness-preserving ~11× on the LD r² kernel for
+2504-sample 1000G-scale vectors. Production LD path now uses bitparallel.
