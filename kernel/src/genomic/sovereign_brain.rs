@@ -13,7 +13,9 @@ use crate::genomic::chromosome_brain::{
     ChromosomeBrain, ChromosomeId, NeuronId, BrainSummary,
 };
 use crate::genomic::haplotype_blocks::HaplotypeBlock;
+use crate::genomic::language_organ::LanguageOrgan;
 use crate::genomic::real_pipeline::{build_real_chromosome, RealChromosomeData};
+use crate::ntg::graph::NodeId;
 use std::collections::{BTreeMap, HashSet};
 
 /// Global address of a neuron inside the sovereign brain.
@@ -52,6 +54,9 @@ pub struct LtmStats {
 pub struct WorkingSet {
     pub neurons: Vec<GlobalNeuronRef>,
     pub motif_ids: Vec<u64>,
+    /// Language/SIS graph nodes co-activated (Rung 3).
+    pub language_nodes: Vec<NodeId>,
+    pub language_query: String,
     pub capacity: usize,
 }
 
@@ -60,6 +65,8 @@ impl WorkingSet {
         Self {
             neurons: Vec::new(),
             motif_ids: Vec::new(),
+            language_nodes: Vec::new(),
+            language_query: String::new(),
             capacity,
         }
     }
@@ -69,7 +76,7 @@ impl WorkingSet {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.neurons.is_empty()
+        self.neurons.is_empty() && self.language_nodes.is_empty()
     }
 }
 
@@ -79,6 +86,8 @@ pub struct SovereignBrain {
     pub chromosomes: BTreeMap<u8, ChromosomeBrain>,
     pub working_set: WorkingSet,
     pub ltm: Vec<LtmMotif>,
+    /// Optional language/SIS organ (Rung 3).
+    pub language: Option<LanguageOrgan>,
     next_motif_id: u64,
     /// Generation counter for evolution / fitness loops (Rung 2).
     pub generation: u64,
@@ -116,10 +125,25 @@ impl SovereignBrain {
             chromosomes: BTreeMap::new(),
             working_set: WorkingSet::new(working_set_capacity.max(1)),
             ltm: Vec::new(),
+            language: None,
             next_motif_id: 1,
             generation: 0,
             last_structural: StructuralMetrics::default(),
         }
+    }
+
+    /// Attach or replace the language/SIS organ.
+    pub fn attach_language(&mut self, organ: LanguageOrgan) {
+        self.language = Some(organ);
+    }
+
+    /// Language organ mut access.
+    pub fn language_mut(&mut self) -> Option<&mut LanguageOrgan> {
+        self.language.as_mut()
+    }
+
+    pub fn language(&self) -> Option<&LanguageOrgan> {
+        self.language.as_ref()
     }
 
     /// Insert or replace a chromosome brain. Returns previous if any.
@@ -428,6 +452,37 @@ impl SovereignBrain {
 
         self.working_set.neurons = neurons;
         self.working_set.motif_ids = motif_ids;
+        // Preserve any prior language activation unless cleared by caller.
+        self.refresh_structure();
+        &self.working_set
+    }
+
+    /// Rung 3: map free text → signature, activate genomic working set + language nodes.
+    pub fn activate_from_text(&mut self, query: &str) -> &WorkingSet {
+        let lang_budget = (self.working_set.capacity / 4).max(4);
+        let (sig, lang_nodes, lang_query) = if let Some(organ) = self.language.as_mut() {
+            organ.activate_nodes(query, lang_budget);
+            (
+                organ.last_signature,
+                organ.last_active_nodes.clone(),
+                organ.last_query.clone(),
+            )
+        } else {
+            (
+                LanguageOrgan::text_to_signature(query),
+                Vec::new(),
+                query.to_string(),
+            )
+        };
+        // Optional chr filter from signature slot 3.
+        let chr_filter = if sig[3] > 0.02 {
+            Some(((sig[3] * 22.0).round() as u8).clamp(1, 22))
+        } else {
+            None
+        };
+        self.activate(&sig, chr_filter);
+        self.working_set.language_nodes = lang_nodes;
+        self.working_set.language_query = lang_query;
         self.refresh_structure();
         &self.working_set
     }
@@ -672,6 +727,21 @@ mod tests {
         assert_eq!(parent_syn, parent_syn_after);
         assert!(child_syn < parent_syn);
         assert!(child.generation > parent.generation);
+    }
+
+    #[test]
+    fn activate_from_text_fills_language_and_genomic() {
+        use crate::genomic::language_organ::{fixture_docs, LanguageOrgan};
+        let mut brain = synthetic_test_brain();
+        let mut organ = LanguageOrgan::new();
+        organ.ingest_documents(&fixture_docs());
+        organ.train_calib_fixtures(15).unwrap();
+        brain.attach_language(organ);
+        brain.activate_from_text("haplotype LD on chromosome 22 with fn main");
+        assert!(!brain.working_set.language_nodes.is_empty());
+        assert!(!brain.working_set.language_query.is_empty());
+        // Genomic side should also light up.
+        assert!(!brain.working_set.neurons.is_empty() || !brain.ltm.is_empty());
     }
 
 }

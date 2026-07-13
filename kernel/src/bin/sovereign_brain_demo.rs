@@ -11,8 +11,8 @@
 //!     ../data/raw/1000g/ALL.chr22....vcf.gz 22 2000
 
 use ntg_kernel::genomic::{
-    BitstreamGenotypes, ChromosomeId, HaplotypeBlock, LdPair, SnpRecord, SovereignBrain,
-    SovereignFitnessContext, init_chromosome_brain,
+    BitstreamGenotypes, ChromosomeId, HaplotypeBlock, LdPair, LanguageOrgan, SnpRecord,
+    SovereignBrain, SovereignFitnessContext, fixture_docs, init_chromosome_brain,
 };
 
 fn make_synthetic_chr(chr: u8, n_snps: usize, n_samples: usize) -> ntg_kernel::genomic::ChromosomeBrain {
@@ -102,9 +102,11 @@ fn run_real_axis_loop(brain: &mut SovereignBrain, ctx: &mut SovereignFitnessCont
 
     let base = ctx.score(brain);
     println!(
-        "[axes0] utility={:.4} task={:.3} bio={:.3} cost={:.3} safety={:.1} ld_cov={:.3}",
+        "[axes0] utility={:.4} task={:.3} (calib={:.3} genomic={:.3}) bio={:.3} cost={:.3} safety={:.1} ld_cov={:.3}",
         base.utility(),
         base.task_accuracy,
+        ctx.last_calib_task,
+        ctx.last_genomic_task,
         base.biological_consistency,
         base.structural_cost,
         base.safety,
@@ -206,6 +208,22 @@ fn main() {
 
     print_structure("after_ingest", &brain);
 
+    // Rung 3: language organ + Phase 4 calib → task axis
+    let mut organ = LanguageOrgan::new();
+    organ.ingest_documents(&fixture_docs());
+    match organ.train_calib_fixtures(25) {
+        Ok(r) => println!(
+            "[rung3] language calib: samples={} test_bal={:.3} win={}",
+            r.n_samples, r.test_metrics.balanced_accuracy, r.is_win
+        ),
+        Err(e) => eprintln!("[rung3] calib failed: {e}"),
+    }
+    if let Err(e) = ctx.install_calib_from_language(&organ) {
+        let _ = ctx.install_calib_from_fixtures(20);
+        eprintln!("[rung3] install from organ: {e} (used fixtures fallback)");
+    }
+    brain.attach_language(organ);
+
     // Seed LTM without pruning. Deliberately leave synapse weights under-trained
     // so the real-axis train operator has headroom (KAIROS → ld_r2 targets).
     for b in brain.chromosomes.values_mut() {
@@ -220,15 +238,17 @@ fn main() {
         "[rung1] consolidate motifs_added={} ltm_total={} gen={}",
         rep.motifs_added, rep.ltm_total, rep.generation
     );
-    let ws = brain.activate(&[0.85, 1.2, 1.0, 0.05, 0.0, 0.0, 1.0, 1.0], None);
+    let ws = brain.activate_from_text("haplotype LD chr22 and fn main ternary kernel");
     println!(
-        "[rung1] activate working_set={} motifs_hit={}",
-        ws.len(),
-        ws.motif_ids.len()
+        "[rung3] activate_from_text: genomic={} lang_nodes={} motifs={} query={:?}",
+        ws.neurons.len(),
+        ws.language_nodes.len(),
+        ws.motif_ids.len(),
+        ws.language_query
     );
-    print_structure("after_rung1", &brain);
+    print_structure("after_rung1_3", &brain);
 
-    println!("[*] real multi-axis selection (biology + agent task + ledger safety)");
+    println!("[*] real multi-axis selection (biology + calib/agent task + ledger safety)");
     println!("    train ops should rise utility without losing LD; prune should often fail biology gate");
     run_real_axis_loop(&mut brain, &mut ctx, 8);
     print_structure("final", &brain);

@@ -25,6 +25,7 @@ pub mod epigenetic_engine;
 pub mod optimized_core;
 pub mod sovereign_brain;
 pub mod sovereign_fitness;
+pub mod language_organ;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -58,3 +59,4 @@ pub use sovereign_brain::{
 pub use sovereign_fitness::{
     SovereignFitnessContext, reference_from_brain, synthetic_from_brain, ld_coverage,
 };
+pub use language_organ::{LanguageOrgan, fixture_docs};

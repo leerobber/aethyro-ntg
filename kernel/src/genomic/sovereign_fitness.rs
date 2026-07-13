@@ -11,11 +11,13 @@
 
 use crate::genomic::agents::{AgentQuery, ChromosomeAgent};
 use crate::genomic::chromosome_brain::ChromosomeBrain;
+use crate::genomic::language_organ::{fixture_docs, LanguageOrgan};
 use crate::genomic::real_pipeline::{snp_key, RealChromosomeData};
 use crate::genomic::sovereign_brain::SovereignBrain;
 use crate::genomic::validation::{
     GenomeComparator, ReferenceGenome, SyntheticGenome, ValidationResults,
 };
+use crate::ntg::calib::{samples_from_documents, CalibModel, Sample};
 use crate::ntg::ledger::replay::ExecutionTrace;
 use crate::ntg::ledger::{
     FitnessMeasure, MutationOutcome, TamperEvidentLedger,
@@ -38,6 +40,14 @@ pub struct SovereignFitnessContext {
     pub last_validation: BTreeMap<u8, ValidationResults>,
     /// Last biology coverage fraction (shared LD pairs / reference LD pairs).
     pub last_ld_coverage: f32,
+    /// Phase 4 calib model for language task axis (optional).
+    pub calib_model: Option<CalibModel>,
+    /// Holdout samples for calib task scoring.
+    pub calib_holdout: Vec<Sample>,
+    /// Last calib balanced accuracy component of task score.
+    pub last_calib_task: f32,
+    /// Last genomic agent component of task score.
+    pub last_genomic_task: f32,
 }
 
 impl SovereignFitnessContext {
@@ -51,7 +61,53 @@ impl SovereignFitnessContext {
             evaluator: MultiAxisEvaluator::new(0.001, 0.08),
             last_validation: BTreeMap::new(),
             last_ld_coverage: 0.0,
+            calib_model: None,
+            calib_holdout: Vec::new(),
+            last_calib_task: 0.0,
+            last_genomic_task: 0.0,
         })
+    }
+
+    /// Install Phase 4 calib model + holdout for the language task axis.
+    pub fn install_calib(&mut self, model: CalibModel, holdout: Vec<Sample>) {
+        self.calib_model = Some(model);
+        self.calib_holdout = holdout;
+    }
+
+    /// Train calib on fixtures; keep a tail slice as holdout for task scoring.
+    pub fn install_calib_from_fixtures(&mut self, epochs: usize) -> Result<f32, String> {
+        let docs = fixture_docs();
+        let samples = samples_from_documents(&docs).map_err(|e| e.to_string())?;
+        if samples.len() < 6 {
+            return Err("fixture samples too few".into());
+        }
+        let split = (samples.len() * 4) / 5;
+        let train = samples[..split].to_vec();
+        let holdout = samples[split..].to_vec();
+        let report = crate::ntg::calib::calibrate(&train, epochs, 0).map_err(|e| e.to_string())?;
+        let bal = report.test_metrics.balanced_accuracy;
+        self.install_calib(CalibModel::from_report(&report), holdout);
+        self.last_calib_task = bal;
+        Ok(bal)
+    }
+
+    /// Wire calib from an already-trained language organ.
+    pub fn install_calib_from_language(&mut self, organ: &LanguageOrgan) -> Result<(), String> {
+        let model = organ
+            .model
+            .clone()
+            .ok_or_else(|| "language organ has no calib model".to_string())?;
+        let samples =
+            crate::ntg::calib::samples_from_graph(&organ.graph).map_err(|e| e.to_string())?;
+        let split = samples.len().saturating_mul(4) / 5;
+        let holdout = if split < samples.len() {
+            samples[split..].to_vec()
+        } else {
+            samples
+        };
+        self.install_calib(model, holdout);
+        self.last_calib_task = organ.last_test_bal;
+        Ok(())
     }
 
     /// Snapshot a chromosome brain as its own reference (synthetic ingest path).
@@ -111,11 +167,8 @@ impl SovereignFitnessContext {
         (0.5 * mean_sim + 0.5 * mean_cov).clamp(0.0, 1.0)
     }
 
-    /// Task axis: average ChromosomeAgent disease-risk + population signal.
-    ///
-    /// Disease-risk targets the highest-MAF loci (always present), not only
-    /// rare calls — so the axis stays informative on common-variant panels.
-    pub fn score_task(&self, brain: &SovereignBrain) -> f32 {
+    /// Genomic agent sub-score (disease risk + population + connectivity).
+    pub fn score_genomic_task(&self, brain: &SovereignBrain) -> f32 {
         if brain.chromosomes.is_empty() {
             return 0.0;
         }
@@ -123,7 +176,6 @@ impl SovereignFitnessContext {
         let mut n = 0u32;
         for chr_brain in brain.chromosomes.values() {
             let agent = ChromosomeAgent::new(chr_brain.clone());
-            // Prefer rare if any; else top-MAF SNPs so the query is never empty.
             let mut idxs: Vec<(u32, f32)> = chr_brain
                 .neurons
                 .iter()
@@ -145,7 +197,6 @@ impl SovereignFitnessContext {
             let risk = if targets.is_empty() {
                 0.0
             } else {
-                // Raw agent scores can exceed 1; normalize softly.
                 let raw = agent
                     .handle_query(&AgentQuery::DiseaseRisk {
                         snp_indices: targets,
@@ -157,7 +208,6 @@ impl SovereignFitnessContext {
                 .handle_query(&AgentQuery::PopulationSignal)
                 .score
                 .clamp(0.0, 1.0);
-            // Connectivity task: fraction of neurons still touched by a synapse.
             let touched: std::collections::HashSet<_> = chr_brain
                 .synapses
                 .iter()
@@ -178,6 +228,61 @@ impl SovereignFitnessContext {
         }
     }
 
+    /// Language/calib sub-score: holdout balanced accuracy when model installed.
+    pub fn score_calib_task(&self) -> f32 {
+        let Some(model) = &self.calib_model else {
+            return 0.0;
+        };
+        if self.calib_holdout.is_empty() {
+            // Fall back to meta test_bal if present.
+            if let Some((_, v)) = model.meta.iter().find(|(k, _)| k == "test_bal") {
+                return v.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0);
+            }
+            return 0.0;
+        }
+        let mut tp = 0usize;
+        let mut tn = 0usize;
+        let mut fp = 0usize;
+        let mut fn_ = 0usize;
+        for s in &self.calib_holdout {
+            let pred = model.predict_execution(&s.label_preview);
+            match (pred, s.is_execution) {
+                (true, true) => tp += 1,
+                (false, false) => tn += 1,
+                (true, false) => fp += 1,
+                (false, true) => fn_ += 1,
+            }
+        }
+        let tpr = if tp + fn_ > 0 {
+            tp as f32 / (tp + fn_) as f32
+        } else {
+            0.0
+        };
+        let tnr = if tn + fp > 0 {
+            tn as f32 / (tn + fp) as f32
+        } else {
+            0.0
+        };
+        (0.5 * (tpr + tnr)).clamp(0.0, 1.0)
+    }
+
+    /// Task axis: blend genomic agents + Phase 4 calib holdout when available.
+    ///
+    /// - Calib installed: `0.55 * calib_bal + 0.45 * genomic`
+    /// - Else: genomic only
+    pub fn score_task(&mut self, brain: &SovereignBrain) -> f32 {
+        let genomic = self.score_genomic_task(brain);
+        self.last_genomic_task = genomic;
+        if self.calib_model.is_some() {
+            let calib = self.score_calib_task();
+            self.last_calib_task = calib;
+            (0.55 * calib + 0.45 * genomic).clamp(0.0, 1.0)
+        } else {
+            self.last_calib_task = 0.0;
+            genomic
+        }
+    }
+
     /// Safety axis: 1.0 if full ledger verifies, else 0.0.
     pub fn score_safety(&self) -> f32 {
         if self.ledger.verify_full_ledger().is_ok() {
@@ -189,7 +294,7 @@ impl SovereignFitnessContext {
 
     /// Full multi-axis score with real axes.
     pub fn score(&mut self, brain: &SovereignBrain) -> MultiAxisFitness {
-        let task = self.score_task(brain);
+        let task = self.score_task(brain); // mut: updates last_* task fields
         let bio = self.score_biology(brain);
         let safety = self.score_safety();
         let structure = brain.measure_structure();
@@ -426,10 +531,27 @@ mod tests {
     #[test]
     fn task_score_positive_with_structure() {
         let brain = synthetic_test_brain();
-        let ctx = SovereignFitnessContext::new().unwrap();
+        let mut ctx = SovereignFitnessContext::new().unwrap();
         let t = ctx.score_task(&brain);
         assert!((0.0..=1.0).contains(&t), "task={t}");
         assert!(t > 0.05, "expected non-trivial task signal, got {t}");
+    }
+
+    #[test]
+    fn calib_task_blends_into_score() {
+        let brain = synthetic_test_brain();
+        let mut ctx = SovereignFitnessContext::new().unwrap();
+        ctx.freeze_all_from_brain(&brain);
+        let without = ctx.score_task(&brain);
+        let bal = ctx.install_calib_from_fixtures(20).unwrap();
+        let with = ctx.score_task(&brain);
+        assert!(ctx.calib_model.is_some());
+        assert!((0.0..=1.0).contains(&bal));
+        assert!((0.0..=1.0).contains(&with));
+        // With calib, last_calib_task should be set.
+        assert!(ctx.last_calib_task >= 0.0);
+        assert!(ctx.last_genomic_task > 0.05);
+        let _ = without;
     }
 
     #[test]

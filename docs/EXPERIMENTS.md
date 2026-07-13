@@ -614,3 +614,38 @@ ledger entries=8 verify=OK  mean_w 0.280->0.765
 **Verdict: WIN.** Real axes change selection behaviour: learning mutations
 pass; destructive LD loss fails the biology gate; every decision is
 ledger-audited. Proxies alone could not express this.
+
+## 2026-07-12: Rung 3 language organ + calib task + multi-chr real VCF campaign
+
+**Why:** Complete the next three plan items in order: (1) language/SIS into
+working-set activate, (2) Phase 4 calib on the task axis, (3) multi-chr
+real 1000G campaign with frozen reference panels.
+
+**Implemented:**
+- `genomic::language_organ::LanguageOrgan` — docparse graph, calib train,
+  text→8-d signature, node activate
+- `SovereignBrain::activate_from_text` — co-activates language nodes + genomic WS
+- `SovereignFitnessContext` task blend: 0.55*calib_holdout_bal + 0.45*genomic
+- `bin/sovereign_campaign` — multi-chr VCF ingest + full loop
+
+**Unit tests:** 332 lib pass (language_organ + sovereign suite).
+
+**Synthetic demo (release):**
+```
+language calib test_bal=0.917 win=true
+activate_from_text: genomic=40 lang_nodes=16
+task=0.798 (calib=1.000 genomic=0.550)
+train 4/4 accept; prune 0/4 reject; u 0.896→0.918
+```
+
+**Real VCF campaign (chr22+chr1, max_variants=800, release):**
+```
+snps=800+800 samples=2504 ld_pairs=304+284
+calib_task=0.836 genomic_task=0.538
+train_accepted=3 prune_rejected=3
+utility 0.863→0.881 | cost 0.218→0.102 | bio stays 1.0
+mean_w 0.331→0.716 | ledger=6 verify=OK | elapsed≈0.5s
+```
+
+**Verdict: WIN.** Language organ couples into activation; calib lifts task
+axis; real multi-chr frozen panels drive biology-gated selection.
