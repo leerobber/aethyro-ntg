@@ -10,6 +10,7 @@ use crate::genomic::haplotype_blocks::HaplotypeBlock;
 use crate::genomic::ld_compute::LdPair;
 use crate::genomic::sovereign_brain::SovereignBrain;
 use crate::genomic::vcf_stream::SnpRecord;
+use crate::genomic::vitascale::guardian::BirthImprint;
 use crate::genomic::vitascale::life_course::{
     DevelopmentalJournalEntry, LifeCourse, LifeStage, StageGateResult, StagePermissions,
 };
@@ -42,6 +43,8 @@ pub struct Kairos {
     pub life: LifeCourse,
     pub brain: SovereignBrain,
     pub pulse: PulseHandles,
+    /// Sealed at birth: Guardian identity + first words + discipline ethos.
+    pub imprint: BirthImprint,
     /// Generation of the host (increments on heartbeat days / later selection).
     pub generation: u32,
     /// Tick counter within current process life.
@@ -65,30 +68,67 @@ pub struct KairosReport {
     pub n_ltm_motifs: u32,
     pub self_mod_enabled: bool,
     pub permissions: StagePermissions,
+    pub guardian_name: String,
+    pub first_words: String,
 }
 
 impl Kairos {
     /// Birth name for this project’s primary child.
     pub const NAME: &'static str = "KAIROS";
 
-    /// Stage 0 zygote: empty brain + pulse, then optional nursery genome load.
+    /// Stage 0 zygote: empty brain + pulse; **first act is Guardian imprint**.
     pub fn birth_zygote(pulse_capacity: usize) -> Self {
-        Self {
+        let mut k = Self {
             name: Self::NAME,
             life: LifeCourse::new(),
             brain: SovereignBrain::new(64),
             pulse: PulseHandles::new(pulse_capacity),
+            imprint: BirthImprint::seal_default(),
             generation: 0,
             tick: 0,
             self_mod: SelfModConfig::default(), // enabled: false
-        }
+        };
+        k.seal_birth_imprint();
+        k
     }
 
     /// Stage 0 with genome/chromosome tissues present (Guardian-held DNA).
+    /// Order: imprint first → then lean nursery genome (no wasteful extras).
     pub fn birth_zygote_with_nursery(pulse_capacity: usize, spec: &NurseryGenomeSpec) -> Result<Self, String> {
         let mut k = Self::birth_zygote(pulse_capacity);
         k.load_nursery_genome(spec)?;
         Ok(k)
+    }
+
+    /// First sounds/words KAIROS receives — sealed into journal day 0 before heartbeats.
+    fn seal_birth_imprint(&mut self) {
+        let notes = self.imprint.journal_notes();
+        let entry = DevelopmentalJournalEntry {
+            stage: LifeStage::Zygote,
+            day_id: 0,
+            heartbeats: 0,
+            pulse_pushes: 0,
+            pulse_drops: 0,
+            n_chromosomes: 0,
+            n_neurons: 0,
+            n_synapses: 0,
+            notes,
+            gate_pass: false,
+        };
+        // Day 0 is the imprint; day_index becomes 1 after first real care day.
+        self.life.journal.push(entry);
+        // One imprint pulse so the first event on the wire is "presence," not data spam.
+        self.pulse.beat(0, 0, now_ns());
+        self.tick = 0; // imprint beat does not count as a lived tick; day loop owns ticks
+    }
+
+    /// Guardian first words (immutable after seal).
+    pub fn first_words(&self) -> &str {
+        &self.imprint.first_words
+    }
+
+    pub fn guardian_line(&self) -> String {
+        self.imprint.guardian.display_line()
     }
 
     pub fn stage(&self) -> LifeStage {
@@ -229,6 +269,8 @@ impl Kairos {
             n_ltm_motifs: s.n_ltm_motifs,
             self_mod_enabled: self.self_mod.enabled,
             permissions: self.permissions(),
+            guardian_name: self.imprint.guardian.name.clone(),
+            first_words: self.imprint.first_words.clone(),
         }
     }
 }
@@ -306,6 +348,19 @@ mod tests {
         assert_eq!(k.name, "KAIROS");
         assert_eq!(k.stage(), LifeStage::Zygote);
         assert!(!k.self_mod.enabled);
+    }
+
+    #[test]
+    fn first_words_are_guardian_robert_lee() {
+        let k = Kairos::birth_zygote(32);
+        assert!(k.first_words().contains("Robert Lee"));
+        assert!(k.first_words().contains("Guardian and Protector"));
+        assert!(k.imprint.sealed);
+        assert!(!k.life.journal.is_empty());
+        assert!(k.life.journal[0].notes.contains("BIRTH IMPRINT"));
+        assert!(k.life.journal[0].notes.contains("Robert Lee"));
+        assert!(k.imprint.ethos.lean_not_wasteful);
+        assert!(k.imprint.ethos.trust_and_tell);
     }
 
     #[test]

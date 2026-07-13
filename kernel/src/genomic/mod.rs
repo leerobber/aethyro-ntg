@@ -70,4 +70,5 @@ pub use sovereign_persist::{save_snapshot, load_snapshot_into, SnapshotReport};
 pub use vitascale::{
     Kairos, KairosReport, NurseryGenomeSpec, LifeStage, LifeCourse, StagePermissions,
     StageGateResult, DevelopmentalJournalEntry, Pulsewire, PulseEvent, VitalMeters, PulseHandles,
+    Guardian, DisciplineEthos, BirthImprint, FIRST_WORDS, GUARDIAN_NAME, GUARDIAN_ROLE,
 };

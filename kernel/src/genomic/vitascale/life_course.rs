@@ -252,6 +252,8 @@ impl LifeCourse {
 
     pub fn record_day(&mut self, entry: DevelopmentalJournalEntry) {
         self.day_index = self.day_index.saturating_add(1);
+        let mut entry = entry;
+        entry.day_id = self.day_index;
         self.journal.push(entry);
     }
 
