@@ -40,8 +40,21 @@ cargo run --release --bin kairos_stage0 -- --graduate
 **Forbidden:** train, activate, prune, real VCF, selection, self-mod.  
 **Graduation:** ≥8 heartbeats, genome held, self-mod OFF → **Neonate**.
 
+## Stage 1 — Neonate (trajectory locked in)
+
+```bash
+cargo run --release --bin kairos_stage1
+cargo run --release --bin kairos_stage1 -- --to-infant
+```
+
+**Sealed at neonate:** **Trajectory charter** (Aethyro north star) — ternary hot path, genome truth, rails, lean discipline, school-then-world, Crown composition, Pulsewire, Guardian trust, sovereign edge, measure-don't-assume.
+
+**Care day (supervised, lean):** heartbeats → train weights → activate working set → journal.  
+**Still forbidden:** prune, real VCF, selection loop, self-mod, language (infant).  
+**Graduation to Infant:** ≥3 care days, trajectory sealed, non-empty activate, weight signal, self_mod OFF.
+
 ## Raising path
 
-Zygote → Neonate → Infant → Toddler → Child (school) → Adolescent → Young Adult → Adult  
+Zygote → **Neonate** → Infant → Toddler → Child (school) → Adolescent → Young Adult → Adult  
 
 Adulthood = competence + continuity + self-care + accountability — under the same Guardian covenant.

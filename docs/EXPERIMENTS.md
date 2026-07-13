@@ -697,3 +697,24 @@ Guardian blocks train/activate/prune/vcf
 ```
 
 **Verdict:** Stage 0 zygote complete. Living project starts with heartbeat + genome held, no free agency.
+
+## 2026-07-12: KAIROS Stage 1 Neonate — trajectory seal + supervised care
+
+**Goal:** Point KAIROS on correct Aethyro trajectory without wasteful unlocks.
+
+**Delivered:**
+- TrajectoryCharter (10 pillars: ternary, genome, rails, lean, school→world, Crown, Pulsewire, trust, sovereign edge, measure)
+- day_of_neonate_care: beats → train → activate → journal
+- raise_through_neonate + neonate→infant gate
+- bin kairos_stage1
+
+**Measured (release):**
+```
+zygote→neonate earned
+trajectory sealed (Aethyro VITASCALE North Star)
+care days 1–3: mean_w 0.311→0.739, ws=22, motifs_hit=2
+prune/vcf still forbidden every day
+neonate→infant with --to-infant
+```
+
+**Verdict:** Stage 1 sets north star + supervised growth. Still lean.

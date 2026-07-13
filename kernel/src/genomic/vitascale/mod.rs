@@ -11,6 +11,7 @@
 pub mod pulsewire;
 pub mod life_course;
 pub mod guardian;
+pub mod trajectory;
 pub mod kairos;
 
 pub use pulsewire::{
@@ -23,4 +24,5 @@ pub use life_course::{
 pub use guardian::{
     Guardian, DisciplineEthos, BirthImprint, FIRST_WORDS, GUARDIAN_NAME, GUARDIAN_ROLE,
 };
-pub use kairos::{Kairos, KairosReport, NurseryGenomeSpec};
+pub use trajectory::{TrajectoryCharter, TrajectoryPillar};
+pub use kairos::{Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport};

@@ -122,3 +122,7 @@ path = "src/bin/sovereign_campaign.rs"
 [[bin]]
 name = "kairos_stage0"
 path = "src/bin/kairos_stage0.rs"
+
+[[bin]]
+name = "kairos_stage1"
+path = "src/bin/kairos_stage1.rs"

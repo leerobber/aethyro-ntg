@@ -68,7 +68,8 @@ pub use organ::Organ;
 pub use selection_loop::{run_selection_loop, format_summary, LoopSummary, LoopStepRecord};
 pub use sovereign_persist::{save_snapshot, load_snapshot_into, SnapshotReport};
 pub use vitascale::{
-    Kairos, KairosReport, NurseryGenomeSpec, LifeStage, LifeCourse, StagePermissions,
-    StageGateResult, DevelopmentalJournalEntry, Pulsewire, PulseEvent, VitalMeters, PulseHandles,
-    Guardian, DisciplineEthos, BirthImprint, FIRST_WORDS, GUARDIAN_NAME, GUARDIAN_ROLE,
+    Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport, LifeStage, LifeCourse,
+    StagePermissions, StageGateResult, DevelopmentalJournalEntry, Pulsewire, PulseEvent,
+    VitalMeters, PulseHandles, Guardian, DisciplineEthos, BirthImprint, FIRST_WORDS,
+    GUARDIAN_NAME, GUARDIAN_ROLE, TrajectoryCharter, TrajectoryPillar,
 };
