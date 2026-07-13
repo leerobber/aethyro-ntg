@@ -26,7 +26,8 @@ pub use genomic::{
     HaplotypeBlockComparator, HaplotypeBlockComparison,
     SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
     ConsolidateReport, SovereignFitnessContext, reference_from_brain, synthetic_from_brain,
-    ld_coverage, LanguageOrgan, fixture_docs,
+    ld_coverage, LanguageOrgan, fixture_docs, Organ, run_selection_loop, format_summary,
+    LoopSummary, save_snapshot, load_snapshot_into, SnapshotReport,
 };
 pub use ntg::docparse::parse_into;
 pub use ntg::error::NtgError;

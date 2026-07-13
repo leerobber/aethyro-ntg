@@ -88,7 +88,8 @@ pub struct SovereignBrain {
     pub ltm: Vec<LtmMotif>,
     /// Optional language/SIS organ (Rung 3).
     pub language: Option<LanguageOrgan>,
-    next_motif_id: u64,
+    /// Next LTM motif id (pub(crate) for persistence restore).
+    pub(crate) next_motif_id: u64,
     /// Generation counter for evolution / fitness loops (Rung 2).
     pub generation: u64,
     /// Last multi-axis-friendly structural metrics (filled by measure_structure).
@@ -372,69 +373,45 @@ impl SovereignBrain {
     /// Activate a working set from a query signature (8-dim) + optional
     /// chromosome filter. Fills up to `working_set.capacity` neurons from
     /// top-matching LTM motifs and high-weight synapses on those chromosomes.
+    ///
+    /// Hardening: if a chr filter yields no motif hits, falls back to global
+    /// LTM ranking; if cosine scores are weak, still activates top motifs by
+    /// mean_r² so LTM is never silently unused after consolidate.
     pub fn activate(&mut self, query: &[f32; 8], chr_filter: Option<u8>) -> &WorkingSet {
-        // Score LTM motifs.
-        let mut scored: Vec<(u64, f32, ChromosomeId)> = self
-            .ltm
-            .iter()
-            .filter(|m| chr_filter.map(|c| m.source_chr.0 == c).unwrap_or(true))
-            .map(|m| (m.id, cosine_sim(&m.signature, query), m.source_chr))
-            .collect();
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
         let capacity = self.working_set.capacity;
+
+        // Score motifs (filtered, then global if empty).
+        let mut scored = self.score_motifs(query, chr_filter);
+        if scored.is_empty() && chr_filter.is_some() {
+            scored = self.score_motifs(query, None);
+        }
+        // If cosine is uniformly poor, re-rank by motif strength (mean r²).
+        let best_cos = scored.first().map(|(_, s, _)| *s).unwrap_or(0.0);
+        if !self.ltm.is_empty() && (scored.is_empty() || best_cos < 0.05) {
+            scored = self
+                .ltm
+                .iter()
+                .map(|m| (m.id, m.mean_r_squared, m.source_chr))
+                .collect();
+            scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        }
+
         let mut neurons = Vec::new();
         let mut motif_ids = Vec::new();
         let mut seen: HashSet<GlobalNeuronRef> = HashSet::new();
 
         for (mid, _score, chr) in scored.into_iter().take(capacity.max(1)) {
             if let Some(motif) = self.ltm.iter_mut().find(|m| m.id == mid) {
-                motif.hit_count += 1;
+                motif.hit_count = motif.hit_count.saturating_add(1);
                 motif_ids.push(mid);
             }
-            if let Some(brain) = self.chromosomes.get(&chr.0) {
-                // Prefer neurons that participate in high-weight synapses.
-                let mut syns: Vec<_> = brain.synapses.iter().collect();
-                syns.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
-                for s in syns.into_iter().take(8) {
-                    for nid in [s.from, s.to] {
-                        let g = GlobalNeuronRef {
-                            chr,
-                            neuron: nid,
-                        };
-                        if seen.insert(g) {
-                            neurons.push(g);
-                            if neurons.len() >= capacity {
-                                break;
-                            }
-                        }
-                    }
-                    if neurons.len() >= capacity {
-                        break;
-                    }
-                }
-                // Fallback: first neurons on the chromosome.
-                if neurons.len() < capacity {
-                    for n in &brain.neurons {
-                        let g = GlobalNeuronRef {
-                            chr,
-                            neuron: n.id,
-                        };
-                        if seen.insert(g) {
-                            neurons.push(g);
-                            if neurons.len() >= capacity {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
+            self.fill_neurons_from_chr(chr, capacity, &mut neurons, &mut seen);
             if neurons.len() >= capacity {
                 break;
             }
         }
 
-        // If LTM empty, activate densest chromosome by synapse count.
+        // If LTM empty or still no neurons, densest chromosome by synapses.
         if neurons.is_empty() {
             if let Some((_, brain)) = self
                 .chromosomes
@@ -452,9 +429,60 @@ impl SovereignBrain {
 
         self.working_set.neurons = neurons;
         self.working_set.motif_ids = motif_ids;
-        // Preserve any prior language activation unless cleared by caller.
         self.refresh_structure();
         &self.working_set
+    }
+
+    fn score_motifs(
+        &self,
+        query: &[f32; 8],
+        chr_filter: Option<u8>,
+    ) -> Vec<(u64, f32, ChromosomeId)> {
+        let mut scored: Vec<(u64, f32, ChromosomeId)> = self
+            .ltm
+            .iter()
+            .filter(|m| chr_filter.map(|c| m.source_chr.0 == c).unwrap_or(true))
+            .map(|m| (m.id, cosine_sim(&m.signature, query), m.source_chr))
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored
+    }
+
+    fn fill_neurons_from_chr(
+        &self,
+        chr: ChromosomeId,
+        capacity: usize,
+        neurons: &mut Vec<GlobalNeuronRef>,
+        seen: &mut HashSet<GlobalNeuronRef>,
+    ) {
+        let Some(brain) = self.chromosomes.get(&chr.0) else {
+            return;
+        };
+        let mut syns: Vec<_> = brain.synapses.iter().collect();
+        syns.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+        for s in syns.into_iter().take(8) {
+            for nid in [s.from, s.to] {
+                let g = GlobalNeuronRef { chr, neuron: nid };
+                if seen.insert(g) {
+                    neurons.push(g);
+                    if neurons.len() >= capacity {
+                        return;
+                    }
+                }
+            }
+        }
+        for n in &brain.neurons {
+            let g = GlobalNeuronRef {
+                chr,
+                neuron: n.id,
+            };
+            if seen.insert(g) {
+                neurons.push(g);
+                if neurons.len() >= capacity {
+                    return;
+                }
+            }
+        }
     }
 
     /// Rung 3: map free text → signature, activate genomic working set + language nodes.
@@ -742,6 +770,21 @@ mod tests {
         assert!(!brain.working_set.language_query.is_empty());
         // Genomic side should also light up.
         assert!(!brain.working_set.neurons.is_empty() || !brain.ltm.is_empty());
+    }
+
+    #[test]
+    fn activate_hits_ltm_motifs_after_consolidate() {
+        let mut brain = synthetic_test_brain();
+        assert!(brain.ltm_stats().n_motifs >= 1);
+        brain.consolidate(0.5, 0.0);
+        // Neutral query (weak cosine) must still surface motifs via r² fallback.
+        brain.activate(&[0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01], None);
+        assert!(
+            !brain.working_set.motif_ids.is_empty(),
+            "expected LTM motif hits, got none"
+        );
+        let hits: u64 = brain.ltm.iter().map(|m| m.hit_count).sum();
+        assert!(hits >= 1);
     }
 
 }

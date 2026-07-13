@@ -9,9 +9,9 @@
 //! Proxies in `ntg::mutation::multi_axis` remain available for unit micro-tests;
 //! production selection should use [`SovereignFitnessContext`].
 
-use crate::genomic::agents::{AgentQuery, ChromosomeAgent};
 use crate::genomic::chromosome_brain::ChromosomeBrain;
 use crate::genomic::language_organ::{fixture_docs, LanguageOrgan};
+use crate::genomic::organ::Organ;
 use crate::genomic::real_pipeline::{snp_key, RealChromosomeData};
 use crate::genomic::sovereign_brain::SovereignBrain;
 use crate::genomic::validation::{
@@ -26,6 +26,7 @@ use crate::ntg::mutation::multi_axis::{
     MultiAxisEvaluator, MultiAxisFitness, SelectionOutcome,
 };
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Holds frozen biological references + ledger for real axis scoring.
@@ -168,6 +169,7 @@ impl SovereignFitnessContext {
     }
 
     /// Genomic agent sub-score (disease risk + population + connectivity).
+    /// Uses zero-copy helpers on ChromosomeBrain (no full-brain clone).
     pub fn score_genomic_task(&self, brain: &SovereignBrain) -> f32 {
         if brain.chromosomes.is_empty() {
             return 0.0;
@@ -175,7 +177,6 @@ impl SovereignFitnessContext {
         let mut total = 0.0f32;
         let mut n = 0u32;
         for chr_brain in brain.chromosomes.values() {
-            let agent = ChromosomeAgent::new(chr_brain.clone());
             let mut idxs: Vec<(u32, f32)> = chr_brain
                 .neurons
                 .iter()
@@ -194,30 +195,9 @@ impl SovereignFitnessContext {
             } else {
                 rare_first
             };
-            let risk = if targets.is_empty() {
-                0.0
-            } else {
-                let raw = agent
-                    .handle_query(&AgentQuery::DiseaseRisk {
-                        snp_indices: targets,
-                    })
-                    .score;
-                (raw / 2.0).clamp(0.0, 1.0)
-            };
-            let pop = agent
-                .handle_query(&AgentQuery::PopulationSignal)
-                .score
-                .clamp(0.0, 1.0);
-            let touched: std::collections::HashSet<_> = chr_brain
-                .synapses
-                .iter()
-                .flat_map(|s| [s.from.0, s.to.0])
-                .collect();
-            let connect = if chr_brain.neurons.is_empty() {
-                0.0
-            } else {
-                touched.len() as f32 / chr_brain.neurons.len() as f32
-            };
+            let risk = chr_brain.disease_risk_score(&targets);
+            let pop = chr_brain.population_signal_score();
+            let connect = chr_brain.connectivity_score();
             total += 0.40 * risk + 0.25 * pop + 0.35 * connect;
             n += 1;
         }
@@ -226,6 +206,47 @@ impl SovereignFitnessContext {
         } else {
             (total / n as f32).clamp(0.0, 1.0)
         }
+    }
+
+    /// Install calib using real engineering docs under `docs_dir` (harder task).
+    /// Falls back to fixtures if fewer than 6 samples.
+    pub fn install_calib_from_docs_dir(
+        &mut self,
+        docs_dir: &Path,
+        epochs: usize,
+    ) -> Result<f32, String> {
+        let mut docs: Vec<(String, String)> = Vec::new();
+        for name in [
+            "ROADMAP.md",
+            "STATUS.md",
+            "DESIGN.md",
+            "EXPERIMENTS.md",
+            "LITERATURE.md",
+            "PHASE_GATE_PROTOCOL.md",
+        ] {
+            let p = docs_dir.join(name);
+            if let Ok(text) = std::fs::read_to_string(&p) {
+                // Cap size so calib stays cheap.
+                let clip: String = text.chars().take(12_000).collect();
+                docs.push((name.to_string(), clip));
+            }
+        }
+        if docs.len() < 2 {
+            return self.install_calib_from_fixtures(epochs);
+        }
+        let refs: Vec<(&str, &str)> = docs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let samples = samples_from_documents(&refs).map_err(|e| e.to_string())?;
+        if samples.len() < 6 {
+            return self.install_calib_from_fixtures(epochs);
+        }
+        let split = (samples.len() * 4) / 5;
+        let train = samples[..split].to_vec();
+        let holdout = samples[split..].to_vec();
+        let report = crate::ntg::calib::calibrate(&train, epochs, 0).map_err(|e| e.to_string())?;
+        let bal = report.test_metrics.balanced_accuracy;
+        self.install_calib(CalibModel::from_report(&report), holdout);
+        self.last_calib_task = bal;
+        Ok(bal)
     }
 
     /// Language/calib sub-score: holdout balanced accuracy when model installed.
@@ -312,8 +333,8 @@ impl SovereignFitnessContext {
         let candidate = self.score(&child);
         let accepted = self.evaluator.should_accept(&baseline, &candidate);
 
-        let pre_fp = structure_fingerprint(parent);
-        let post_fp = structure_fingerprint(&child);
+        let pre_fp = parent.structure_fingerprint();
+        let post_fp = child.structure_fingerprint();
         let outcome = if accepted {
             MutationOutcome::Accepted
         } else {
@@ -471,25 +492,6 @@ pub fn ld_coverage(reference: &ReferenceGenome, synthetic: &SyntheticGenome) -> 
     } else {
         (shared_weight / ref_weight).clamp(0.0, 1.0)
     }
-}
-
-fn structure_fingerprint(brain: &SovereignBrain) -> u64 {
-    let s = brain.measure_structure();
-    let mut h = 0xcbf29ce484222325u64; // FNV-ish
-    for x in [
-        s.n_chromosomes as u64,
-        s.n_neurons as u64,
-        s.n_synapses as u64,
-        s.n_blocks as u64,
-        s.n_ltm_motifs as u64,
-        s.approx_memory_bytes,
-        (s.mean_synapse_weight * 1_000_000.0) as u64,
-        brain.generation,
-    ] {
-        h ^= x.wrapping_mul(0x100000001b3);
-        h = h.rotate_left(13);
-    }
-    h
 }
 
 fn now_secs() -> u64 {

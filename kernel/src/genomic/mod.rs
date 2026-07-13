@@ -26,6 +26,9 @@ pub mod optimized_core;
 pub mod sovereign_brain;
 pub mod sovereign_fitness;
 pub mod language_organ;
+pub mod organ;
+pub mod selection_loop;
+pub mod sovereign_persist;
 
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
@@ -60,3 +63,6 @@ pub use sovereign_fitness::{
     SovereignFitnessContext, reference_from_brain, synthetic_from_brain, ld_coverage,
 };
 pub use language_organ::{LanguageOrgan, fixture_docs};
+pub use organ::Organ;
+pub use selection_loop::{run_selection_loop, format_summary, LoopSummary, LoopStepRecord};
+pub use sovereign_persist::{save_snapshot, load_snapshot_into, SnapshotReport};

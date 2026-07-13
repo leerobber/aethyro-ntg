@@ -649,3 +649,31 @@ mean_w 0.331→0.716 | ledger=6 verify=OK | elapsed≈0.5s
 
 **Verdict: WIN.** Language organ couples into activation; calib lifts task
 axis; real multi-chr frozen panels drive biology-gated selection.
+
+## 2026-07-12: Sovereign foundation harden (H1-H4 + A/B/C)
+
+**Why:** Pause feature stacking; review, refactor, optimize, and add
+long-run force multipliers before more organs / Phase 6.
+
+**Delivered:**
+- H1: ADR 0009, STATUS sync, SOVEREIGN_HARDEN.md
+- H2: Organ trait, shared selection_loop, zero-copy genomic task scoring
+- H3: LTM activate fallback (motifs always hit after consolidate)
+- H4: tests/sovereign_integration.rs train-accept/prune-reject regression
+- A: sovereign_persist save/load (ltm.jsonl, calib.wire, language docs, meta)
+- B: install_calib_from_docs_dir harder task gate
+- C: JSONL metrics from selection_loop
+
+**Tests:** 336 lib + 2 integration sovereign tests green.
+
+**Demo (release, post-harden):**
+```
+activate_from_text motifs=2 (was often 0)
+train 4/4 accept, prune 0/4 reject
+utility 0.818→0.840  mean_w 0.28→0.77
+persist snap motifs=2 calib=true
+jsonl results/sovereign_demo_metrics.jsonl
+```
+
+**Verdict: WIN (foundation).** Same selection behaviour, cleaner architecture,
+durable snapshot + observability, LTM activation fixed.

@@ -11,9 +11,11 @@
 //!     ../data/raw/1000g/ALL.chr22....vcf.gz 22 2000
 
 use ntg_kernel::genomic::{
-    BitstreamGenotypes, ChromosomeId, HaplotypeBlock, LdPair, LanguageOrgan, SnpRecord,
-    SovereignBrain, SovereignFitnessContext, fixture_docs, init_chromosome_brain,
+    format_summary, fixture_docs, init_chromosome_brain, run_selection_loop, save_snapshot,
+    BitstreamGenotypes, ChromosomeId, HaplotypeBlock, LanguageOrgan, LdPair, SnpRecord,
+    SovereignBrain, SovereignFitnessContext,
 };
+use std::path::Path;
 
 fn make_synthetic_chr(chr: u8, n_snps: usize, n_samples: usize) -> ntg_kernel::genomic::ChromosomeBrain {
     let mut snps = Vec::new();
@@ -94,76 +96,6 @@ fn print_structure(label: &str, brain: &SovereignBrain) {
     );
 }
 
-fn run_real_axis_loop(brain: &mut SovereignBrain, ctx: &mut SovereignFitnessContext, steps: usize) {
-    let mut accepted = 0usize;
-    let mut rejected = 0usize;
-    let mut prune_rej = 0usize;
-    let mut train_acc = 0usize;
-
-    let base = ctx.score(brain);
-    println!(
-        "[axes0] utility={:.4} task={:.3} (calib={:.3} genomic={:.3}) bio={:.3} cost={:.3} safety={:.1} ld_cov={:.3}",
-        base.utility(),
-        base.task_accuracy,
-        ctx.last_calib_task,
-        ctx.last_genomic_task,
-        base.biological_consistency,
-        base.structural_cost,
-        base.safety,
-        ctx.last_ld_coverage
-    );
-
-    for step in 0..steps {
-        // Alternate: odd steps try destructive prune (often rejected under real bio),
-        // even steps try KAIROS train (preserves LD, can raise utility).
-        let (label, out) = if step % 2 == 0 {
-            (
-                "train",
-                ctx.select_train_step(brain, 8).expect("train selection"),
-            )
-        } else {
-            (
-                "prune",
-                ctx.select_prune_step(brain, 0.18).expect("prune selection"),
-            )
-        };
-        println!(
-            "  step {step} [{label}]: u={:.4}->{:.4} task={:.3}->{:.3} bio={:.3}->{:.3} cost={:.3}->{:.3} safety={:.1} cov={:.3} accepted={} ledger={}",
-            out.baseline.utility(),
-            out.candidate.utility(),
-            out.baseline.task_accuracy,
-            out.candidate.task_accuracy,
-            out.baseline.biological_consistency,
-            out.candidate.biological_consistency,
-            out.baseline.structural_cost,
-            out.candidate.structural_cost,
-            out.candidate.safety,
-            ctx.last_ld_coverage,
-            out.accepted,
-            ctx.ledger_entry_count()
-        );
-        if out.accepted {
-            if let Some(child) = out.child {
-                *brain = child;
-                accepted += 1;
-                if label == "train" {
-                    train_acc += 1;
-                }
-            }
-        } else {
-            rejected += 1;
-            if label == "prune" {
-                prune_rej += 1;
-            }
-        }
-    }
-    println!(
-        "[real-axes] accepted={accepted} (train_acc={train_acc}) rejected={rejected} (prune_rej={prune_rej}) gen={} ledger={} verify=OK",
-        brain.generation,
-        ctx.ledger_entry_count()
-    );
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut brain = SovereignBrain::new(64);
@@ -208,19 +140,28 @@ fn main() {
 
     print_structure("after_ingest", &brain);
 
-    // Rung 3: language organ + Phase 4 calib → task axis
+    // Rung 3: language organ + harder docs-corpus calib when available
     let mut organ = LanguageOrgan::new();
     organ.ingest_documents(&fixture_docs());
     match organ.train_calib_fixtures(25) {
         Ok(r) => println!(
-            "[rung3] language calib: samples={} test_bal={:.3} win={}",
+            "[rung3] language calib fixtures: samples={} test_bal={:.3} win={}",
             r.n_samples, r.test_metrics.balanced_accuracy, r.is_win
         ),
         Err(e) => eprintln!("[rung3] calib failed: {e}"),
     }
-    if let Err(e) = ctx.install_calib_from_language(&organ) {
+    let docs_dir = Path::new("../docs");
+    if docs_dir.is_dir() {
+        match ctx.install_calib_from_docs_dir(docs_dir, 30) {
+            Ok(bal) => println!("[task-gate] docs-corpus calib holdout_bal={bal:.3}"),
+            Err(e) => {
+                eprintln!("[task-gate] docs calib: {e}; using organ model");
+                let _ = ctx.install_calib_from_language(&organ);
+            }
+        }
+    } else if let Err(e) = ctx.install_calib_from_language(&organ) {
         let _ = ctx.install_calib_from_fixtures(20);
-        eprintln!("[rung3] install from organ: {e} (used fixtures fallback)");
+        eprintln!("[rung3] install: {e}");
     }
     brain.attach_language(organ);
 
@@ -248,22 +189,49 @@ fn main() {
     );
     print_structure("after_rung1_3", &brain);
 
-    println!("[*] real multi-axis selection (biology + calib/agent task + ledger safety)");
-    println!("    train ops should rise utility without losing LD; prune should often fail biology gate");
-    run_real_axis_loop(&mut brain, &mut ctx, 8);
+    println!("[*] shared selection loop (biology + calib/agent task + ledger + JSONL)");
+    let jsonl = Path::new("../results/sovereign_demo_metrics.jsonl");
+    let summary = run_selection_loop(&mut brain, &mut ctx, 8, 8, 0.18, Some(jsonl))
+        .expect("selection loop");
+    for rec in &summary.steps {
+        println!(
+            "  step {} [{}]: u={:.4}->{:.4} bio={:.3}->{:.3} accepted={} ledger={}",
+            rec.step,
+            rec.op,
+            rec.baseline.utility(),
+            rec.candidate.utility(),
+            rec.baseline.biological_consistency,
+            rec.candidate.biological_consistency,
+            rec.accepted,
+            rec.ledger_entries
+        );
+    }
+    println!("[loop] {}", format_summary(&summary));
     print_structure("final", &brain);
+
+    let docs = fixture_docs();
+    let pairs: Vec<(&str, &str)> = docs.iter().map(|(a, b)| (*a, *b)).collect();
+    match save_snapshot(Path::new("../artifacts/sovereign_demo_snap"), &brain, &ctx, &pairs) {
+        Ok(r) => println!(
+            "[persist] saved {} motifs={} calib={} docs={}",
+            r.dir, r.n_motifs, r.wrote_calib, r.wrote_language_docs
+        ),
+        Err(e) => eprintln!("[persist] {e}"),
+    }
 
     let ltm = brain.ltm_stats();
     let final_fit = ctx.score(&brain);
     println!(
-        "[done] chrs={} ltm={} hits={} utility={:.4} task={:.3} bio={:.3} safety={:.1} ledger={}",
+        "[done] chrs={} ltm={} hits={} motifs_ws={} utility={:.4} task={:.3} bio={:.3} safety={:.1} ledger={} jsonl={}",
         brain.n_chromosomes(),
         ltm.n_motifs,
         ltm.total_hits,
+        brain.working_set.motif_ids.len(),
         final_fit.utility(),
         final_fit.task_accuracy,
         final_fit.biological_consistency,
         final_fit.safety,
-        ctx.ledger_entry_count()
+        ctx.ledger_entry_count(),
+        jsonl.display()
     );
 }

@@ -1,9 +1,27 @@
 # Aethyro NTG Engine — Project Status Report
 
-**As of:** 2026-07-09  
+**As of:** 2026-07-12  
 **Capability version:** 10 (`ternary_capability()` — Phase 5 runtime calib supported)  
 **Build:** `cargo test` + `cargo build --release` green on host  
 **Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md).
+
+### Sovereign stack (2026-07-12 — post Phase F rungs)
+
+In addition to kernel Phases 0–5, the genomic path now has a measured
+**SovereignBrain** multi-organ loop (ADR 0009):
+
+| Piece | Location | Evidence |
+|-------|----------|----------|
+| Multi-chr brain + LTM + working set | `genomic/sovereign_brain.rs` | unit + campaign |
+| Language/SIS organ + `activate_from_text` | `genomic/language_organ.rs` | unit + demo |
+| Multi-axis fitness + ledgered select | `genomic/sovereign_fitness.rs` | train✓ prune✗ pattern |
+| Real 1000G multi-chr campaign | `bin/sovereign_campaign` | EXPERIMENTS.md |
+| LD r² bitparallel ~11× | `bitsliced_genotypes` / `ld_compute` | EXPERIMENTS.md |
+
+**Not product-ready:** no aethyro.com head-to-head; durable memory is
+snapshot-based (not full lifelong host integration); self-mod remains
+off by default outside explicit selection loops. Harden notes:
+[SOVEREIGN_HARDEN.md](SOVEREIGN_HARDEN.md).
 
 ---
 

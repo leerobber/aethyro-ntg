@@ -264,6 +264,54 @@ impl ChromosomeBrain {
             .collect()
     }
 
+    /// Population-signal score without allocating a ChromosomeAgent (no clone).
+    pub fn population_signal_score(&self) -> f32 {
+        let n_rare = self.neurons.iter().filter(|n| n.is_rare).count();
+        let rare_frac = n_rare as f32 / (self.neurons.len() as f32 + 1.0);
+        rare_frac.clamp(0.0, 1.0)
+    }
+
+    /// Disease-risk style score over SNP indices without agent clone.
+    pub fn disease_risk_score(&self, snp_indices: &[u32]) -> f32 {
+        let mut score = 0.0f32;
+        let mut hits = 0usize;
+        for &target_idx in snp_indices {
+            if let Some(neuron) = self.neurons.iter().find(|n| n.snp_index == target_idx) {
+                hits += 1;
+                score += 0.15;
+                for block in &self.blocks {
+                    if block.snp_indices.contains(&target_idx) {
+                        score += block.mean_r_squared * 0.05;
+                    }
+                }
+                let connected: f32 = self
+                    .synapses_for_neuron(neuron.id)
+                    .iter()
+                    .map(|s| s.ld_r2)
+                    .sum();
+                score += (connected / (self.synapses.len() as f32 + 1.0)) * 0.1;
+            }
+        }
+        if hits == 0 {
+            0.0
+        } else {
+            (score / 2.0).clamp(0.0, 1.0)
+        }
+    }
+
+    /// Fraction of neurons incident to at least one synapse.
+    pub fn connectivity_score(&self) -> f32 {
+        if self.neurons.is_empty() {
+            return 0.0;
+        }
+        let mut touched = std::collections::HashSet::new();
+        for s in &self.synapses {
+            touched.insert(s.from.0);
+            touched.insert(s.to.0);
+        }
+        (touched.len() as f32 / self.neurons.len() as f32).clamp(0.0, 1.0)
+    }
+
     /// Summary statistics
     pub fn summary(&self) -> BrainSummary {
         let total_ld: f32 = self.synapses.iter().map(|s| s.ld_r2).sum();

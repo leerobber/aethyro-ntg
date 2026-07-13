@@ -16,7 +16,8 @@
 //! Defaults use available 1000G phase3 files if present.
 
 use ntg_kernel::genomic::{
-    fixture_docs, LanguageOrgan, SovereignBrain, SovereignFitnessContext,
+    format_summary, fixture_docs, run_selection_loop, save_snapshot, LanguageOrgan, SovereignBrain,
+    SovereignFitnessContext,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -155,9 +156,14 @@ fn main() {
         ),
         Err(e) => eprintln!("[warn] calib fixtures: {e}"),
     }
-    if let Err(e) = ctx.install_calib_from_language(&organ) {
-        eprintln!("[warn] install calib: {e}");
-        let _ = ctx.install_calib_from_fixtures(25);
+    // Prefer real docs corpus as harder task gate when present.
+    let docs_dir = Path::new("../docs");
+    match ctx.install_calib_from_docs_dir(docs_dir, 30) {
+        Ok(bal) => println!("[*] task-gate docs-corpus holdout_bal={bal:.3}"),
+        Err(e) => {
+            eprintln!("[warn] docs calib: {e}");
+            let _ = ctx.install_calib_from_language(&organ);
+        }
     }
     brain.attach_language(organ);
 
@@ -196,54 +202,33 @@ fn main() {
         ctx.last_ld_coverage
     );
 
-    let mut train_acc = 0usize;
-    let mut prune_acc = 0usize;
-    let mut prune_rej = 0usize;
-    for step in 0..steps {
-        let (label, out) = if step % 2 == 0 {
-            ("train", ctx.select_train_step(&brain, 6).expect("train"))
-        } else {
-            ("prune", ctx.select_prune_step(&brain, 0.12).expect("prune"))
-        };
+    let jsonl = Path::new("../results/sovereign_campaign_metrics.jsonl");
+    let summary =
+        run_selection_loop(&mut brain, &mut ctx, steps, 6, 0.12, Some(jsonl)).expect("loop");
+    for rec in &summary.steps {
         println!(
-            "  step {step} [{label}]: u={:.4}->{:.4} task={:.3}->{:.3} bio={:.3}->{:.3} cost={:.3}->{:.3} accepted={} ledger={}",
-            out.baseline.utility(),
-            out.candidate.utility(),
-            out.baseline.task_accuracy,
-            out.candidate.task_accuracy,
-            out.baseline.biological_consistency,
-            out.candidate.biological_consistency,
-            out.baseline.structural_cost,
-            out.candidate.structural_cost,
-            out.accepted,
-            ctx.ledger_entry_count()
+            "  step {} [{}]: u={:.4}->{:.4} bio={:.3}->{:.3} accepted={}",
+            rec.step,
+            rec.op,
+            rec.baseline.utility(),
+            rec.candidate.utility(),
+            rec.baseline.biological_consistency,
+            rec.candidate.biological_consistency,
+            rec.accepted
         );
-        if out.accepted {
-            if let Some(child) = out.child {
-                brain = child;
-            }
-            if label == "train" {
-                train_acc += 1;
-            } else {
-                prune_acc += 1;
-            }
-        } else if label == "prune" {
-            prune_rej += 1;
-        }
     }
 
     let s1 = brain.measure_structure();
     let f1 = ctx.score(&brain);
     println!("=== campaign summary ===");
     println!(
-        "elapsed={:.1}s chrs={} ledger={} verify=OK",
+        "elapsed={:.1}s chrs={} ledger={} verify=OK jsonl={}",
         t0.elapsed().as_secs_f64(),
         brain.n_chromosomes(),
-        ctx.ledger_entry_count()
+        ctx.ledger_entry_count(),
+        jsonl.display()
     );
-    println!(
-        "train_accepted={train_acc} prune_accepted={prune_acc} prune_rejected={prune_rej}"
-    );
+    println!("[loop] {}", format_summary(&summary));
     println!(
         "utility {:.4} → {:.4} | task {:.3} → {:.3} | bio {:.3} → {:.3} | cost {:.3} → {:.3}",
         f0.utility(),
@@ -256,16 +241,28 @@ fn main() {
         f1.structural_cost
     );
     println!(
-        "synapses {} → {} | mean_w {:.3} → {:.3} | mem {} → {}",
+        "synapses {} → {} | mean_w {:.3} → {:.3} | mem {} → {} | motifs_ws={}",
         s0.n_synapses,
         s1.n_synapses,
         s0.mean_synapse_weight,
         s1.mean_synapse_weight,
         s0.approx_memory_bytes,
-        s1.approx_memory_bytes
+        s1.approx_memory_bytes,
+        brain.working_set.motif_ids.len()
     );
     println!(
         "calib_task={:.3} genomic_task={:.3} ld_cov={:.3}",
         ctx.last_calib_task, ctx.last_genomic_task, ctx.last_ld_coverage
     );
+
+    let docs = fixture_docs();
+    let pairs: Vec<(&str, &str)> = docs.iter().map(|(a, b)| (*a, *b)).collect();
+    match save_snapshot(Path::new("../artifacts/sovereign_campaign_snap"), &brain, &ctx, &pairs)
+    {
+        Ok(r) => println!(
+            "[persist] {} motifs={} calib={}",
+            r.dir, r.n_motifs, r.wrote_calib
+        ),
+        Err(e) => eprintln!("[persist] {e}"),
+    }
 }
