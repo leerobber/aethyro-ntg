@@ -48,17 +48,20 @@ fn test_simd_bit_parity_simple() -> Result<(), NtgError> {
 /// Test 3: Larger matrix test for SIMD paths
 #[test]
 fn test_simd_bit_parity_large() -> Result<(), NtgError> {
-    // 50x50 matrix
-    let a = vec![
+    // 50x50 matrix. `vec![list; N]` is not valid Rust (that syntax repeats
+    // a single scalar N times, not a list) -- this previously failed to
+    // compile. Fixed by tiling the intended ternary pattern out to the
+    // required 50*50 length instead.
+    let a_pattern = [
         1i8, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, 1,
-        -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1;
-        50 * 50
+        -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1,
     ];
-    let b = vec![
+    let b_pattern = [
         0i8, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 0,
-        1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0;
-        50 * 50
+        1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0, 1, -1, 0,
     ];
+    let a: Vec<i8> = a_pattern.iter().copied().cycle().take(50 * 50).collect();
+    let b: Vec<i8> = b_pattern.iter().copied().cycle().take(50 * 50).collect();
 
     let scalar_result = matmul_scalar(&a, &b, 50, 50, 50)?;
     let auto_result = matmul_auto(&a, &b, 50, 50, 50)?;

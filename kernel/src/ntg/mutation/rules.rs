@@ -8,15 +8,15 @@
 //! 5. RewireEdge: change an edge's target
 
 use super::super::error::NtgError;
-use super::super::graph::Graph;
+use super::super::graph::{Graph, NodeId, NodeKind};
 
 #[derive(Clone, Debug)]
 pub enum MutationRuleKind {
     AddNode { label: String },
-    RemoveNode { node_id: u32 },
-    AddEdge { from: u32, to: u32 },
-    RemoveEdge { from: u32, to: u32 },
-    RewireEdge { from: u32, old_to: u32, new_to: u32 },
+    RemoveNode { node_id: NodeId },
+    AddEdge { from: NodeId, to: NodeId },
+    RemoveEdge { from: NodeId, to: NodeId },
+    RewireEdge { from: NodeId, old_to: NodeId, new_to: NodeId },
 }
 
 /// A versioned, auditable mutation rule.
@@ -45,9 +45,8 @@ impl MutationRule {
     pub fn apply(&self, graph: &mut Graph) -> Result<(), NtgError> {
         match &self.kind {
             MutationRuleKind::AddNode { label } => {
-                // Add a new node with a sensible default node ID
-                let new_id = graph.next_node_id();
-                graph.add_node(new_id, label.clone())?;
+                // Graph::add_node assigns the ID itself and returns it.
+                let _new_id = graph.add_node(NodeKind::Content, label.clone());
                 Ok(())
             }
             MutationRuleKind::RemoveNode { node_id } => {
@@ -155,7 +154,7 @@ mod tests {
         };
         rule.apply(&mut graph)?;
         // Verify node was added (basic smoke test)
-        assert!(!graph.is_empty());
+        assert_eq!(graph.node_count(), 1);
         Ok(())
     }
 }

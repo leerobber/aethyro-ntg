@@ -222,7 +222,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
     // Log mutations to the ledger
     let trace1 = ExecutionTrace::new();
     ledger.log_mutation(
-        cycle.mutations_proposed[0].kind.description(),
+        cycle.mutations_proposed[0].description(),
         111,
         112,
         FitnessMeasure {
@@ -237,7 +237,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
 
     let trace2 = ExecutionTrace::new();
     ledger.log_mutation(
-        cycle.mutations_proposed[1].kind.description(),
+        cycle.mutations_proposed[1].description(),
         112,
         112,
         FitnessMeasure {

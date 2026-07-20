@@ -45,3 +45,9 @@ impl fmt::Display for NtgError {
 }
 
 impl std::error::Error for NtgError {}
+
+impl From<std::array::TryFromSliceError> for NtgError {
+    fn from(e: std::array::TryFromSliceError) -> Self {
+        NtgError::InvalidInput(format!("byte slice conversion failed: {e}"))
+    }
+}

@@ -20,13 +20,14 @@ pub use profiler::{BenchmarkResult, ProfileResult};
 use super::error::NtgError;
 
 /// Global SIMD dispatcher instance (lazy-initialized at first use).
-static DISPATCHER_INSTANCE: std::sync::OnceLock<SIMDDispatcher> = std::sync::OnceLock::new();
+/// `get_or_try_init` is nightly-only (`once_cell_try`) on this toolchain, so
+/// the fallible result itself is stored and re-checked on every call instead.
+static DISPATCHER_INSTANCE: std::sync::OnceLock<Result<SIMDDispatcher, String>> =
+    std::sync::OnceLock::new();
 
 /// Get or initialize the global SIMD dispatcher.
 pub fn get_dispatcher() -> Result<&'static SIMDDispatcher, NtgError> {
-    match DISPATCHER_INSTANCE.get_or_try_init(|| {
-        SIMDDispatcher::new()
-    }) {
+    match DISPATCHER_INSTANCE.get_or_init(SIMDDispatcher::new) {
         Ok(d) => Ok(d),
         Err(e) => Err(NtgError::InvalidInput(format!(
             "Failed to initialize SIMD dispatcher: {}",

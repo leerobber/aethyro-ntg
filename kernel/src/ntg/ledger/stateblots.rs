@@ -12,6 +12,15 @@
 use super::NtgError;
 use std::collections::HashMap;
 
+/// Sentinel for "this is the first slot ever written for this agent."
+/// Must not collide with any real slot index -- using 0 for that (as an
+/// earlier version did) is wrong, because 0 is also a perfectly valid
+/// index (the very first slot in the whole store). Any agent whose first
+/// slot happened to land at absolute index 0 would then have its second
+/// write's parent_offset misread as "genesis" by `lineage()`, silently
+/// dropping the real genesis slot from the walk.
+pub const GENESIS_PARENT: u64 = u64::MAX;
+
 /// A single state slot: immutable once written, logically chained via
 /// parent_offset to the previous version of this agent's state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +30,10 @@ pub struct StateSlot {
     pub desires: i32,
     /// Fitness encoded as integer (microseconds of latency, for now)
     pub fitness_int: u64,
-    /// Byte offset of the previous version of this agent's state (0 = genesis)
+    /// Index (not byte offset, despite the field name) of the previous
+    /// version of this agent's state within the store's slot vector.
+    /// `GENESIS_PARENT` marks "no parent -- this is the first slot for
+    /// this agent."
     pub parent_offset: u64,
     /// Generation counter (incremented each time this agent mutates)
     pub generation: u32,
@@ -64,6 +76,7 @@ impl StateSlot {
 
 /// State slot store: append-only, in-memory simulation of mmap state store.
 /// Phase 3 uses in-memory; Phase 3.1+ can mmap to a real file.
+#[derive(Clone, Debug)]
 pub struct StateSlotStore {
     /// Slots in append order
     slots: Vec<StateSlot>,
@@ -96,9 +109,9 @@ impl StateSlotStore {
                 ..slot
             }
         } else {
-            // First time seeing this agent: parent_offset = 0 (genesis)
+            // First time seeing this agent: no parent.
             StateSlot {
-                parent_offset: 0,
+                parent_offset: GENESIS_PARENT,
                 ..slot
             }
         };
@@ -123,7 +136,7 @@ impl StateSlotStore {
     /// Trace the lineage of an agent: walk backwards via parent_offset.
     pub fn lineage(&self, agent_id: u32) -> Result<Vec<StateSlot>, NtgError> {
         let mut lineage = Vec::new();
-        let mut current_idx = self
+        let mut current_idx: usize = *self
             .agent_latest
             .get(&agent_id)
             .ok_or(NtgError::InvalidInput(format!(
@@ -132,16 +145,16 @@ impl StateSlotStore {
             )))?;
 
         loop {
-            let slot = self.slots[*current_idx];
+            let slot = self.slots[current_idx];
             lineage.push(slot);
 
-            if slot.parent_offset == 0 {
+            if slot.parent_offset == GENESIS_PARENT {
                 // Reached genesis
                 break;
             }
 
-            current_idx = &(slot.parent_offset as usize);
-            if *current_idx >= self.slots.len() {
+            current_idx = slot.parent_offset as usize;
+            if current_idx >= self.slots.len() {
                 return Err(NtgError::InvalidInput(format!(
                     "Lineage pointer out of bounds: {} >= {}",
                     current_idx,
@@ -157,7 +170,7 @@ impl StateSlotStore {
     /// Verify that all parent_offset pointers are valid (lineage integrity).
     pub fn verify_lineage(&self) -> Result<(), String> {
         for (idx, slot) in self.slots.iter().enumerate() {
-            if slot.parent_offset > 0 && slot.parent_offset as usize >= idx {
+            if slot.parent_offset != GENESIS_PARENT && slot.parent_offset as usize >= idx {
                 return Err(format!(
                     "Slot {} has invalid parent_offset: {}",
                     idx, slot.parent_offset
@@ -209,6 +222,9 @@ mod tests {
             agent_id: 1,
             desires: 50,
             fitness_int: 3000,
+            // write_slot() always recomputes parent_offset itself (see
+            // `corrected_slot` in write_slot), so whatever's passed in here
+            // is discarded -- this value is irrelevant to what gets stored.
             parent_offset: 0,
             generation: 1,
             timestamp: 1000,
@@ -216,7 +232,13 @@ mod tests {
 
         let offset = store.write_slot(slot)?;
         assert_eq!(offset, 0);
-        assert_eq!(store.get_slot(0), Some(slot));
+        // This is agent 1's first-ever write, so write_slot() stores
+        // GENESIS_PARENT, not whatever parent_offset the input literal had.
+        let expected = StateSlot {
+            parent_offset: GENESIS_PARENT,
+            ..slot
+        };
+        assert_eq!(store.get_slot(0), Some(expected));
         Ok(())
     }
 

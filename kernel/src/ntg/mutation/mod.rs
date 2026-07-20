@@ -70,9 +70,11 @@ impl MutationCycle {
             ));
         }
 
+        let budget = BudgetTracker::new(config.cycle_budget_us);
+
         Ok(Self {
             config,
-            budget: BudgetTracker::new(config.cycle_budget_us),
+            budget,
             fitness_evaluator: FitnessEvaluator::new(),
             mutations_proposed: Vec::new(),
             mutations_accepted: Vec::new(),
