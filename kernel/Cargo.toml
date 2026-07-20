@@ -72,6 +72,18 @@ name = "ld_compute_test"
 path = "src/bin/ld_compute_test.rs"
 
 [[bin]]
+name = "extract_gih_vcf"
+path = "src/bin/extract_gih_vcf.rs"
+
+[[bin]]
+name = "gih_ld_blocks"
+path = "src/bin/gih_ld_blocks.rs"
+
+[[bin]]
+name = "extract_yri_vcf"
+path = "src/bin/extract_yri_vcf.rs"
+
+[[bin]]
 name = "ld_simd_bench"
 path = "src/bin/ld_simd_bench.rs"
 
