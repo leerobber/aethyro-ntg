@@ -68,8 +68,21 @@ pub use organ::Organ;
 pub use selection_loop::{run_selection_loop, format_summary, LoopSummary, LoopStepRecord};
 pub use sovereign_persist::{save_snapshot, load_snapshot_into, SnapshotReport};
 pub use vitascale::{
-    Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport, LifeStage, LifeCourse,
-    StagePermissions, StageGateResult, DevelopmentalJournalEntry, Pulsewire, PulseEvent,
-    VitalMeters, PulseHandles, Guardian, DisciplineEthos, BirthImprint, FIRST_WORDS,
-    GUARDIAN_NAME, GUARDIAN_ROLE, TrajectoryCharter, TrajectoryPillar,
+    Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport, InfantCareReport,
+    ToddlerCareReport, ChildSchoolReport, AdolescentCampaignReport, YoungAdultDayReport,
+    AdultCourseReport, SexEdCourseReport, WorldCourseReport, adult_course_catalog, AdultModule,
+    human_growth_catalog, GrowthModule, world_knowledge_catalog, WorldModule,
+    ADOLESCENT_MAX_VARIANTS,
+    ADOLESCENT_DEFAULT_CHR, ADOLESCENT_SELECTION_STEPS, LifeStage,
+    LifeCourse, StagePermissions, StageGateResult,
+    DevelopmentalJournalEntry, Pulsewire, PulseEvent, VitalMeters, PulseHandles, Guardian,
+    DisciplineEthos, BirthImprint, GuardianAward, FIRST_WORDS, GUARDIAN_NAME, GUARDIAN_ROLE,
+    TrajectoryCharter,
+    TrajectoryPillar, Phageguard, ThreatKind, CradleOpenReport, default_cradle_dir, open_or_birth,
+    save_cradle, load_cradle, talk_once, write_avatar_ui, load_talk_history, TalkReply, TalkTurn,
+    bridge_status, try_remote_kairos_reply, ReplySource,
+    default_lab_dir, default_primary_dir, fork_lab_from_primary,
+    open_or_fork_lab, run_lab_science_day, run_lab_science_day_cfg, promote_lab_weights_to_primary,
+    reaffirm_love_note, LabDayReport, LabDayConfig, Hypothesis, HypothesisRegistry,
+    HypothesisVerdict, evaluate_self_mod_readiness, run_single_self_mod_lab,
 };

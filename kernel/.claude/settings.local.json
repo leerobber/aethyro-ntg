@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test *)",
+      "Read(//mnt/c/Users/leer4/aethyro-ntg/**)"
+    ]
+  }
+}

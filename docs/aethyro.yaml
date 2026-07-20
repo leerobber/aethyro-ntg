@@ -1,0 +1,181 @@
+# Aethyro NTG Configuration Template
+# Copy to /etc/aethyro/aethyro.yaml and customize for your deployment
+
+aethyro:
+  version: "1.0"
+  # Deployment environment: development, staging, production
+  environment: "production"
+
+# Model Configuration
+model:
+  # Path to model directory (must contain graph.json, weights.bin, metadata.json)
+  path: "/var/lib/aethyro/models/model.ntg"
+
+  # Preload model into memory on startup
+  preload: true
+
+  # Warm up cache with sample inputs on startup
+  cache_warmup: true
+
+# Runtime Configuration
+runtime:
+  # Number of worker threads (recommended: CPU count / 2)
+  threads: 8
+
+  # Maximum batch size for /v1/batch-infer endpoint
+  max_batch_size: 32
+
+  # Request timeout in milliseconds
+  request_timeout_ms: 5000
+
+  # Compute acceleration settings
+  accelerator:
+    # Preferred accelerator: tobl (SIMD) or scalar
+    prefer: "tobl"
+
+    # Fallback accelerator if preferred is unavailable
+    fallback: "scalar"
+
+    # Allow fallback to scalar if preferred not available
+    allow_scalar_fallback: true
+
+  # Scheduling strategy
+  scheduling:
+    # Strategy: density_adaptive (route based on layer density)
+    strategy: "density_adaptive"
+
+    # Threshold for using sparse COO format (0.0-1.0)
+    sparse_threshold: 0.9
+
+# Ledger Configuration (Optional)
+# Enable for safety-critical deployments requiring deterministic replay
+ledger:
+  # Enable ledger (false by default)
+  enabled: true
+
+  # Backend: filesystem, redis, s3
+  backend: "filesystem"
+
+  # Filesystem backend path
+  path: "/var/lib/aethyro/ledger"
+
+  # Flush interval in milliseconds (batches writes)
+  flush_interval_ms: 100
+
+  # Maximum blocks to buffer before forced flush
+  max_buffer_blocks: 1000
+
+  # Verify ledger chain integrity on startup
+  verify_on_startup: true
+
+  # Checksum algorithm: sha256
+  checksum_algorithm: "sha256"
+
+# HTTP API Configuration
+api:
+  # Listen address (host:port)
+  listen: "0.0.0.0:8080"
+
+  # Request timeout in milliseconds
+  timeout_ms: 5000
+
+  # Maximum concurrent connections
+  max_connections: 1000
+
+  # TLS Configuration (optional)
+  tls:
+    enabled: false
+    cert_path: "/etc/aethyro/cert.pem"
+    key_path: "/etc/aethyro/key.pem"
+
+  # CORS Configuration
+  cors:
+    enabled: true
+    allowed_origins:
+      - "https://yourdomain.com"
+      - "https://api.yourdomain.com"
+    allowed_methods:
+      - GET
+      - POST
+    allowed_headers:
+      - Content-Type
+      - Authorization
+    max_age_seconds: 86400
+
+# Monitoring & Observability
+monitoring:
+  # Enable Prometheus metrics endpoint
+  metrics_enabled: true
+
+  # Metrics port (separate from API port)
+  metrics_port: 9090
+
+  # Logging configuration
+  logging:
+    # Log level: debug, info, warn, error
+    level: "info"
+
+    # Format: json or text
+    format: "json"
+
+    # Log file path (empty = stdout)
+    file: ""
+
+  # OpenTelemetry Tracing (optional)
+  tracing:
+    enabled: false
+
+    # Jaeger endpoint
+    endpoint: "http://jaeger:4317"
+
+    # Trace sampling rate (0.0-1.0)
+    sample_rate: 0.1
+
+# Security Configuration
+security:
+  # Require HMAC-SHA256 signatures on requests
+  require_signature: false
+
+  # Environment variable containing HMAC key
+  hmac_key_env: "AETHYRO_HMAC_KEY"
+
+  # Request rate limiting per client IP
+  rate_limit:
+    enabled: true
+
+    # Requests per second per IP
+    requests_per_second: 100
+
+    # Burst allowance
+    burst_size: 10
+
+# Advanced Performance Tuning
+# These are optional and usually not needed in production
+performance:
+  # CPU affinity (Linux, optional)
+  cpu_affinity: ""
+
+  # Memory allocation tuning
+  malloc_trim_threshold: "128m"
+  malloc_mmap_max: 65536
+
+  # Network buffer sizes (bytes)
+  socket_recv_buffer: 65536
+  socket_send_buffer: 65536
+
+# Operational Metadata
+metadata:
+  # Deployment ID (for tracking across instances)
+  deployment_id: "prod-us-east-1"
+
+  # Team/owner information
+  owner: "platform-team"
+
+  # Contact for alerts
+  alert_contact: "oncall@aethyro.com"
+
+  # Additional tags for tracking/billing
+  tags:
+    region: "us-east-1"
+    tier: "standard"
+    version: "1.0.0"

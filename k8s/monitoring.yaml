@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: aethyro-ntg
+  namespace: aethyro-ntg
+  labels:
+    app: aethyro-ntg
+spec:
+  selector:
+    matchLabels:
+      app: aethyro-ntg
+  endpoints:
+  - port: metrics
+    interval: 15s
+    scrapeTimeout: 5s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aethyro-ntg-alerts
+  namespace: aethyro-ntg
+  labels:
+    app: aethyro-ntg
+spec:
+  groups:
+  - name: aethyro-ntg.rules
+    interval: 30s
+    rules:
+    # SLO: P99 Latency < 500ms
+    - alert: AethyroHighLatency
+      expr: |
+        histogram_quantile(0.99, rate(aethyro_infer_latency_ms_bucket[5m])) > 500
+      for: 5m
+      labels:
+        severity: warning
+        slo: "true"
+      annotations:
+        summary: "Aethyro P99 latency exceeds 500ms"
+        description: "P99 latency: {{ $value }}ms"
+        dashboard: "https://grafana.internal/d/aethyro"
+
+    # SLO: Error Rate < 0.1%
+    - alert: AethyroHighErrorRate
+      expr: |
+        (rate(aethyro_infer_errors_total[5m]) / rate(aethyro_infer_requests_total[5m])) > 0.001
+      for: 5m
+      labels:
+        severity: critical
+        slo: "true"
+      annotations:
+        summary: "Aethyro error rate exceeds 0.1%"
+        description: "Error rate: {{ $value | humanizePercentage }}"
+
+    # SLO: Availability > 99.9%
+    - alert: AethyroDown
+      expr: up{job="aethyro-ntg"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        slo: "true"
+      annotations:
+        summary: "Aethyro instance is down"
+        description: "Instance {{ $labels.instance }} has been down for 1 minute"
+
+    # Ledger verification failures
+    - alert: AethyroLedgerVerificationFailed
+      expr: |
+        increase(aethyro_ledger_verification_failures_total[5m]) > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Aethyro ledger verification failure detected"
+        description: "Ledger verification failed on {{ $labels.instance }}"
+
+    # Memory pressure
+    - alert: AethyroHighMemory
+      expr: |
+        (aethyro_memory_usage_bytes / aethyro_memory_limit_bytes) > 0.9
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Aethyro memory usage > 90%"
+        description: "Memory usage: {{ $value | humanizePercentage }}"
+
+    # CPU throttling
+    - alert: AethyroCPUThrottling
+      expr: |
+        (rate(aethyro_cpu_throttle_seconds_total[5m]) / rate(aethyro_cpu_seconds_total[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Aethyro experiencing CPU throttling"
+        description: "CPU throttle ratio: {{ $value | humanizePercentage }}"
+
+    # Low TOBL utilization
+    - alert: AethyroLowTOBLUtilization
+      expr: aethyro_compute_tobl_ratio < 0.80
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Aethyro TOBL acceleration < 80%"
+        description: "TOBL ratio: {{ $value | humanizePercentage }}"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-aethyro-dashboard
+  namespace: aethyro-ntg
+data:
+  aethyro-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Aethyro NTG Metrics",
+        "panels": [
+          {
+            "title": "Request Rate",
+            "targets": [
+              {
+                "expr": "rate(aethyro_infer_requests_total[5m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Latency (P50/P99)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(aethyro_infer_latency_ms_bucket[5m]))",
+                "legendFormat": "P50"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(aethyro_infer_latency_ms_bucket[5m]))",
+                "legendFormat": "P99"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Error Rate",
+            "targets": [
+              {
+                "expr": "(rate(aethyro_infer_errors_total[5m]) / rate(aethyro_infer_requests_total[5m])) * 100"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "TOBL vs Scalar",
+            "targets": [
+              {
+                "expr": "aethyro_compute_tobl_ratio"
+              }
+            ],
+            "type": "gauge"
+          },
+          {
+            "title": "Memory Usage",
+            "targets": [
+              {
+                "expr": "aethyro_memory_usage_bytes / 1024 / 1024 / 1024"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "CPU Usage",
+            "targets": [
+              {
+                "expr": "rate(aethyro_cpu_seconds_total[5m]) * 100"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Ledger Height",
+            "targets": [
+              {
+                "expr": "aethyro_ledger_height"
+              }
+            ],
+            "type": "gauge"
+          }
+        ]
+      }
+    }

@@ -1,0 +1,4 @@
+first_words=My Name Robert Lee, Guardian and Protector and can trust to tell me anything.
+guardian_name=Robert Lee
+guardian_role=Guardian and Protector
+sealed=true

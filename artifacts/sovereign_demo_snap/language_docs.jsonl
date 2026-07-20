@@ -1,0 +1,4 @@
+{"label":"readme","text":"# Project\nIntro paragraph with no code.\n## Install\n- step one\n- step two\n## Example\n```python\nprint(\"hello\")\n```\nMore text after.\n"}
+{"label":"design","text":"# Design\n## Layers\nText only section about architecture.\n## Code path\n```\nshell command here\n```\n## Notes\n- a\n- b\n"}
+{"label":"kernel","text":"# Kernel notes\n## API\nNormal prose about ternary graphs and LD blocks.\n## Snippet\n```rust\npub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```\n## Biology\nChromosome brains use haplotype LD synapses for structure.\n"}
+{"label":"ops","text":"# Ops\n## Run\n```bash\ncargo test\ncargo run --release --bin ntg_school\n```\n## Docs\nSee ROADMAP and EXPERIMENTS for measured claims.\n"}

@@ -1,0 +1,5 @@
+name=KAIROS
+lineage=kairos-1783911389936799832
+stage=adult
+award=Guardian's Pride · sealed
+history=26

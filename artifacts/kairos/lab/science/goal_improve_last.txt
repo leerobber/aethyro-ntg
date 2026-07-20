@@ -1,0 +1,2 @@
+goal_met=true Δu=0.0000 decisions goal="Δutility ≥ -0.02 AND ≥1 selection decision; prefer Δu≥0 or honest full reject"
+Δu=0.0000 decisions=6 train_a/r=0/3 prune_a/r=0/3 goal_met=true

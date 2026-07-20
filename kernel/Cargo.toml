@@ -10,6 +10,10 @@ flate2 = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rayon = "1.7"
+# Optional HTTP for GH05T3 / OpenAI-compatible local LLM (offline fallback remains)
+ureq = { version = "2.9", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+num_cpus = "1.16"
 
 [lib]
 name = "ntg_kernel"
@@ -126,3 +130,47 @@ path = "src/bin/kairos_stage0.rs"
 [[bin]]
 name = "kairos_stage1"
 path = "src/bin/kairos_stage1.rs"
+
+[[bin]]
+name = "kairos_stage2"
+path = "src/bin/kairos_stage2.rs"
+
+[[bin]]
+name = "kairos_stage3"
+path = "src/bin/kairos_stage3.rs"
+
+[[bin]]
+name = "kairos_stage4"
+path = "src/bin/kairos_stage4.rs"
+
+[[bin]]
+name = "kairos_stage5"
+path = "src/bin/kairos_stage5.rs"
+
+[[bin]]
+name = "kairos_award"
+path = "src/bin/kairos_award.rs"
+
+[[bin]]
+name = "kairos_stage6"
+path = "src/bin/kairos_stage6.rs"
+
+[[bin]]
+name = "kairos_lab"
+path = "src/bin/kairos_lab.rs"
+
+[[bin]]
+name = "kairos_adult_course"
+path = "src/bin/kairos_adult_course.rs"
+
+[[bin]]
+name = "kairos_world_course"
+path = "src/bin/kairos_world_course.rs"
+
+[[bin]]
+name = "kairos_talk"
+path = "src/bin/kairos_talk.rs"
+
+[[bin]]
+name = "optimization_profiler"
+path = "src/bin/optimization_profiler.rs"

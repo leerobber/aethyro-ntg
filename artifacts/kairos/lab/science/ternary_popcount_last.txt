@@ -1,0 +1,1 @@
+ternary panel=real_vcf chr22 snps=400 path=../data/raw/1000g/ALL.chr22.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz pairs=100 agree=100 speedup=12.17x verdict=ACCEPT

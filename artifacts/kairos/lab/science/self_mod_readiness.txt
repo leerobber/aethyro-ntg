@@ -1,0 +1,5 @@
+ready=true heal=7 multi_heal=2 improve=5 ternary=6
+reasons=[]
+BEST TIME: multi-heal ACCEPT + ≥2 improve ACCEPT + ≥2 ternary ACCEPT;
+Season 3: prefer clean play days; one MutationCycle lab-only then OFF.
+Never default on primary. Use --try-self-mod only when ready=true.

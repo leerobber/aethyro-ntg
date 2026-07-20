@@ -1,0 +1,2 @@
+all_agree=true best_speedup=12.17x rungs=3
+rungs=3 all_agree=true best_speedup=12.17x | real_vcf chr22 snps=100 path=../data/raw:agree=100/100 spd=11.39x | real_vcf chr22 snps=200 path=../data/raw:agree=100/100 spd=8.18x | real_vcf chr22 snps=400 path=../data/raw:agree=100/100 spd=12.17x

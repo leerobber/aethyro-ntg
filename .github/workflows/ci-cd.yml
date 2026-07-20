@@ -1,0 +1,205 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.75
+        components: rustfmt, clippy
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: kernel
+
+    - name: Format check
+      run: cd kernel && cargo fmt -- --check
+
+    - name: Clippy lint
+      run: cd kernel && cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Run tests
+      run: cd kernel && cargo test --all --verbose
+
+    - name: Run doc tests
+      run: cd kernel && cargo test --doc
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.75
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: kernel
+
+    - name: Install tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    - name: Generate coverage
+      run: cd kernel && cargo tarpaulin -o Xml --out coverage.xml --timeout 120
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        fail_ci_if_error: true
+
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.75
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: kernel
+
+    - name: Run benchmarks
+      run: cd kernel && cargo bench --release 2>&1 | tee benchmark_output.txt
+
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'cargo'
+        output-file-path: kernel/benchmark_output.txt
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        target:
+        - x86_64-unknown-linux-gnu
+        - x86_64-unknown-linux-musl
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.75
+        targets: ${{ matrix.target }}
+
+    - uses: swatinem/rust-cache@v2
+      with:
+        workspaces: kernel
+
+    - name: Build release
+      run: cd kernel && cargo build --release --target ${{ matrix.target }}
+
+    - name: Create archive
+      run: |
+        cd kernel/target/${{ matrix.target }}/release
+        tar -czf ../../../aethyro-ntg-${{ matrix.target }}.tar.gz kernel_host
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: aethyro-ntg-${{ matrix.target }}
+        path: aethyro-ntg-${{ matrix.target }}.tar.gz
+
+  container:
+    name: Build Container Image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: docker/setup-buildx-action@v2
+
+    - uses: docker/metadata-action@v4
+      id: meta
+      with:
+        images: |
+          ghcr.io/${{ github.repository_owner }}/aethyro-ntg
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - uses: docker/login-action@v2
+      if: github.event_name != 'pull_request'
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: rustsec/audit-check-action@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test, build, container]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/download-artifact@v3
+
+    - name: Create checksums
+      run: |
+        sha256sum aethyro-ntg-*/*.tar.gz > checksums.sha256
+        cat checksums.sha256
+
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          aethyro-ntg-*/*.tar.gz
+          checksums.sha256
+        generate_release_notes: true

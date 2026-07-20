@@ -1,0 +1,12 @@
+{
+  "generation": 5,
+  "working_set_capacity": 64,
+  "n_chromosomes": 2,
+  "n_neurons": 70,
+  "n_synapses": 198,
+  "n_ltm_motifs": 2,
+  "mean_synapse_weight": 0.764889,
+  "mean_block_r2": 0.820000,
+  "approx_memory_bytes": 11968,
+  "ledger_entries": 8
+}

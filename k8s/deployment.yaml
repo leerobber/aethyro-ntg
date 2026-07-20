@@ -1,0 +1,261 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aethyro-ntg
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aethyro-config
+  namespace: aethyro-ntg
+data:
+  aethyro.yaml: |
+    aethyro:
+      version: "1.0"
+      environment: "production"
+
+    model:
+      path: "/models/model.ntg"
+      preload: true
+      cache_warmup: true
+
+    runtime:
+      threads: 8
+      max_batch_size: 32
+      request_timeout_ms: 5000
+
+      accelerator:
+        prefer: "tobl"
+        fallback: "scalar"
+        allow_scalar_fallback: true
+
+      scheduling:
+        strategy: "density_adaptive"
+        sparse_threshold: 0.9
+
+    ledger:
+      enabled: true
+      backend: "filesystem"
+      path: "/var/lib/aethyro/ledger"
+      flush_interval_ms: 100
+      max_buffer_blocks: 1000
+      verify_on_startup: true
+      checksum_algorithm: "sha256"
+
+    api:
+      listen: "0.0.0.0:8080"
+      timeout_ms: 5000
+      max_connections: 1000
+
+      cors:
+        enabled: true
+        allowed_origins:
+          - "https://yourdomain.com"
+
+    monitoring:
+      metrics_enabled: true
+      metrics_port: 9090
+
+      logging:
+        level: "info"
+        format: "json"
+
+    security:
+      require_signature: false
+      rate_limit:
+        enabled: true
+        requests_per_second: 100
+        burst_size: 10
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aethyro-ntg
+  namespace: aethyro-ntg
+  labels:
+    app: aethyro-ntg
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aethyro-ntg
+  template:
+    metadata:
+      labels:
+        app: aethyro-ntg
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      terminationGracePeriodSeconds: 30
+
+      containers:
+      - name: aethyro
+        image: ghcr.io/yourorg/aethyro-ntg:latest
+        imagePullPolicy: IfNotPresent
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: AETHYRO_LEDGER
+          value: "1"
+        - name: AETHYRO_THREADS
+          value: "4"
+
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+          limits:
+            cpu: "4"
+            memory: "4Gi"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/aethyro
+          readOnly: true
+        - name: models
+          mountPath: /models
+          readOnly: true
+        - name: ledger
+          mountPath: /var/lib/aethyro/ledger
+        - name: cache
+          mountPath: /var/lib/aethyro/cache
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: config
+        configMap:
+          name: aethyro-config
+      - name: models
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: ledger
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 256Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aethyro-ntg
+  namespace: aethyro-ntg
+  labels:
+    app: aethyro-ntg
+spec:
+  type: ClusterIP
+  selector:
+    app: aethyro-ntg
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+
+---
+apiVersion: autoscaling.k8s.io/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aethyro-ntg
+  namespace: aethyro-ntg
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aethyro-ntg
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aethyro-ntg
+  namespace: aethyro-ntg
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: aethyro-ntg

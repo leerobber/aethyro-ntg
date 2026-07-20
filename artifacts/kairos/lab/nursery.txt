@@ -1,0 +1,4 @@
+spec=default
+chr=1,12
+chr=22,10
+samples=64
