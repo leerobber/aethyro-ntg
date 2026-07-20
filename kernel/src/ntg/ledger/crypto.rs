@@ -1,8 +1,14 @@
-//! Cryptographic hashing for ledger integrity.
+//! Cryptographic hashing for ledger self-consistency checks.
 //!
-//! Replaces the non-cryptographic DefaultHasher (SipHash) used in Phase 2's
-//! ChainLog with real SHA-256, matching LexGenSeal's choice and suitable for
-//! regulatory compliance (auditable, non-repudiable, tamper-evident).
+//! Replaces the non-cryptographic DefaultHasher (SipHash) used in an
+//! earlier version with SHA-256. This makes the hash chain resistant to
+//! accidental or crafted collisions, but does NOT by itself make anything
+//! "non-repudiable" or "suitable for regulatory compliance" -- those
+//! properties need an identity-bound signing key and/or an external
+//! anchor, neither of which exists here. Using SHA-256 instead of SipHash
+//! is a real improvement (SipHash is keyed for DoS resistance in hash
+//! tables, not designed as a collision-resistant content hash); it is not,
+//! by itself, a compliance or non-repudiation guarantee.
 
 use sha2::{Sha256, Digest};
 

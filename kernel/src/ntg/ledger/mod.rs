@@ -1,4 +1,25 @@
-//! Tamper-evident audit ledger for self-modifying graph topology.
+//! Append-only audit ledger for self-modifying graph topology.
+//!
+//! What this actually provides: SHA-256 hash-chained sequence records plus
+//! per-record content hashes, checked for *internal self-consistency* --
+//! useful for catching accidental corruption, a bug that reorders or drops
+//! entries, or a naive in-place edit within a single process run.
+//!
+//! What this does NOT provide: tamper evidence against a deliberate
+//! adversary. There is no signing key, no external anchor (nothing is
+//! persisted or published anywhere outside this in-memory structure), and
+//! no append-only enforcement at the storage layer. Anyone who can
+//! construct or edit a `CryptoChainLog`/`SignedEntry` in memory can
+//! recompute the entire chain from a modified version and it will verify
+//! cleanly, because verification only recomputes the same unkeyed hashes.
+//! An earlier version of this module was named `TamperEvidentLedger` and
+//! its docs (and the accompanying ADR/summary docs) claimed it was
+//! "suitable for regulated, air-gapped deployment" -- that claim doesn't
+//! hold for what's actually implemented and has been corrected. Real
+//! tamper evidence would need at minimum a keyed MAC/signature the
+//! verifier trusts but a tamperer doesn't hold, or an external, append-only
+//! anchor (e.g. periodically publishing the chain head somewhere the
+//! ledger's own process can't rewrite).
 //!
 //! ADR 0002 specifies five safety rails for self-modification:
 //! 1. Off by default
@@ -8,14 +29,10 @@
 //! 5. Every modification event is ledger-logged
 //!
 //! This module implements the ledger layer (rules 4-5), combining three
-//! pieces reused from prior proven work:
-//! - ChainLog (sequence integrity — chained hashes detect deletion/reordering)
-//! - SignedEntry (content integrity — per-record SHA-256, like LexGenSeal)
-//! - StateSlots (fast mutable state + lineage, like ChronosLedger)
-//!
-//! Phase 3 exit criteria: all five ADR 0002 rails have dedicated passing
-//! tests; ledger entries produced for every accept/reject event;
-//! self-modification remains disabled by default at end of phase.
+//! pieces:
+//! - ChainLog (sequence self-consistency — chained hashes detect deletion/reordering)
+//! - SignedEntry (per-record content hash — detects in-place edits)
+//! - StateSlots (fast mutable state + lineage tracking via parent pointers)
 
 pub mod crypto;
 pub mod signed_entry;
@@ -72,7 +89,7 @@ pub enum MutationOutcome {
 /// The ledger: combines CryptoChainLog (sequence), SignedEntry (content),
 /// StateSlots (state), and ExecutionTrace (reproducibility).
 #[derive(Clone, Debug)]
-pub struct TamperEvidentLedger {
+pub struct MutationLedger {
     /// Sequence integrity: chained SHA-256 hashes
     chain: CryptoChainLog,
     /// Content integrity + state history
@@ -85,7 +102,7 @@ pub struct TamperEvidentLedger {
     next_mutation_id: u64,
 }
 
-impl TamperEvidentLedger {
+impl MutationLedger {
     pub fn new(stateslot_file: Option<&str>) -> Result<Self, NtgError> {
         let slots = StateSlotStore::new(stateslot_file)?;
         Ok(Self {
@@ -217,14 +234,14 @@ mod tests {
 
     #[test]
     fn empty_ledger_verifies() -> Result<(), NtgError> {
-        let ledger = TamperEvidentLedger::new(None)?;
+        let ledger = MutationLedger::new(None)?;
         assert!(ledger.verify_full_ledger().is_ok());
         Ok(())
     }
 
     #[test]
     fn log_single_mutation_verifies() -> Result<(), NtgError> {
-        let mut ledger = TamperEvidentLedger::new(None)?;
+        let mut ledger = MutationLedger::new(None)?;
         let trace = ExecutionTrace::new();
 
         let mutation_id = ledger.log_mutation(
@@ -249,7 +266,7 @@ mod tests {
 
     #[test]
     fn multiple_mutations_chain_correctly() -> Result<(), NtgError> {
-        let mut ledger = TamperEvidentLedger::new(None)?;
+        let mut ledger = MutationLedger::new(None)?;
 
         for i in 0..5 {
             let trace = ExecutionTrace::new();
@@ -283,7 +300,7 @@ mod tests {
 
     #[test]
     fn tampering_with_entry_breaks_verification() -> Result<(), NtgError> {
-        let mut ledger = TamperEvidentLedger::new(None)?;
+        let mut ledger = MutationLedger::new(None)?;
         let trace = ExecutionTrace::new();
 
         ledger.log_mutation(
@@ -309,7 +326,7 @@ mod tests {
 
     #[test]
     fn retrieve_execution_trace() -> Result<(), NtgError> {
-        let mut ledger = TamperEvidentLedger::new(None)?;
+        let mut ledger = MutationLedger::new(None)?;
         let trace = ExecutionTrace::new();
 
         let mutation_id = ledger.log_mutation(

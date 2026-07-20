@@ -13,7 +13,7 @@
 use ntg_kernel::ntg::{
     graph::Graph,
     ledger::{
-        TamperEvidentLedger, MutationOutcome, FitnessMeasure,
+        MutationLedger, MutationOutcome, FitnessMeasure,
     },
     mutation::{SelfModConfig, MutationCycle, rules::{MutationRule, MutationRuleKind}},
     error::NtgError,
@@ -122,7 +122,7 @@ fn adr0002_rail4_deterministic_replay() -> Result<(), NtgError> {
 fn adr0002_rail5_every_mutation_is_ledger_logged() -> Result<(), NtgError> {
     use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
 
-    let mut ledger = TamperEvidentLedger::new(None)?;
+    let mut ledger = MutationLedger::new(None)?;
 
     // Initially empty
     assert!(ledger.is_empty());
@@ -182,7 +182,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
     let baseline_fitness = (5000, 1024);
 
     // Setup: create ledger
-    let mut ledger = TamperEvidentLedger::new(None)?;
+    let mut ledger = MutationLedger::new(None)?;
 
     // Setup: create a mutation cycle
     let mut config = SelfModConfig::default();
@@ -266,7 +266,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
 fn ledger_detects_tampering() -> Result<(), NtgError> {
     use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
 
-    let mut ledger = TamperEvidentLedger::new(None)?;
+    let mut ledger = MutationLedger::new(None)?;
 
     let trace = ExecutionTrace::new();
     ledger.log_mutation(

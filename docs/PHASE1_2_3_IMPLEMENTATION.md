@@ -1,9 +1,17 @@
 # Phase 1.2-1.3 Implementation: SIMD Dispatch + Zero-Copy FFI
 
-**Status:** Complete (2026-07-08)  
+**Status:** Written 2026-07-08, before this code ever compiled (19 errors
+at that time). **Corrected 2026-07-19**: the AVX2 kernel's "bit-parity"
+claim was false when written (the kernel produced zeros/wrong values for
+every case its own tests covered) and the "self-tuning" dispatcher never
+read any profiling data. Both are now fixed and verified by actually
+running the tests below -- see `BREAKTHROUGH_SUMMARY.md` for the full
+account. The architecture description in this file is accurate; treat
+any status checkmark as re-verified 2026-07-19, not as of the original
+date.  
 **Branch:** phase-1-2-3-simd-ffi  
 **Lines of Code:** 1,400+ (SIMD + FFI modules)  
-**Tests:** 11 comprehensive end-to-end tests  
+**Tests:** 11 tests in `phase1_2_3_simd_ffi.rs`, verified passing 2026-07-19  
 
 ---
 

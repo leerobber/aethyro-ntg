@@ -1,5 +1,11 @@
 # Aethyro-NTG FFI Integration Guide
 
+**Note (2026-07-19):** This branch didn't compile when this guide was
+originally written; see `BREAKTHROUGH_SUMMARY.md` for the full account.
+The FFI layer described here was not affected by the bugs found elsewhere
+on this branch (SIMD kernel, dispatcher) -- its tests pass as described
+below, verified by actually running them 2026-07-19.
+
 ## Overview
 
 The aethyro-ntg kernel exports a zero-copy C interface for orchestrators, applications, and external systems to call ternary matmul operations directly.
@@ -9,7 +15,10 @@ The aethyro-ntg kernel exports a zero-copy C interface for orchestrators, applic
 - ✅ Zero copying (direct pointer to slice conversion)
 - ✅ Thread-safe (reentrant, no global state)
 - ✅ Full observability (OpStats on every call)
-- ✅ Production-ready (memory-safe FFI boundary)
+- Memory-safe FFI boundary by construction (bounds/null checks before any
+  unsafe dereference) -- "production-ready" is a broader claim than this
+  guide can support on its own and has been removed; it would need real
+  deployment experience or an external review to back it up.
 
 ---
 

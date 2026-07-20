@@ -5,7 +5,7 @@
 //! - Which SIMD path was used
 //! - Timestamp for sequencing
 //!
-//! These flow directly into Phase 3's TamperEvidentLedger.
+//! These flow directly into Phase 3's MutationLedger.
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

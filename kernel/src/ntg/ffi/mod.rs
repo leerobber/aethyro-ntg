@@ -1,7 +1,7 @@
 //! Phase 1.3: Zero-copy FFI + Observability
 //!
 //! C interface for orchestrator integration. All calls produce OpStats
-//! that feed into Phase 3's TamperEvidentLedger for full auditability.
+//! that feed into Phase 3's MutationLedger for full auditability.
 //!
 //! Safety: FFI boundary is the only place where `unsafe` appears.
 //! All pointer validation is mandatory before dereference.

@@ -1,8 +1,52 @@
-# 0004: Phase 3 Implementation — Tamper-Evident Ledger + Self-Modification Engine
+# 0004: Phase 3 Implementation — Mutation Ledger + Self-Modification Engine
 
-**Status:** Implemented (2026-07-08). All 5 ADR 0002 safety rails have dedicated passing tests; self-modification remains disabled by default.
+**Status:** Implemented 2026-07-08; **corrected 2026-07-19.** The code
+described here didn't compile at the time of writing (19 errors) and had
+never been run -- see the correction notice below before reading the
+original claims. All 5 ADR 0002 safety-rail tests now pass, verified by
+actually running them on 2026-07-19; the ledger's core type has been
+renamed from `TamperEvidentLedger` to `MutationLedger` because the
+original name and this ADR's framing claimed a security property (tamper
+evidence against a deliberate adversary) that the design never provided.
 
-**Author's Note:** This ADR records the breakthrough Phase 3 build that unified three proven technologies (ChronosLedger's state-slot model, LexGenSeal's per-record signing, and ChainLog's sequence chaining) into a production-ready audit ledger suitable for regulated, air-gapped deployment.
+---
+
+## Correction notice (2026-07-19)
+
+This ADR originally claimed the ledger was "production-ready audit ledger
+suitable for regulated, air-gapped deployment" and "non-repudiable." Both
+claims are false for what's actually implemented:
+
+- The ledger is **unkeyed SHA-256 hash-chaining, entirely in-memory, with
+  no persistence and no external anchor**. Verification just recomputes
+  the same hashes and compares them. Anyone with the same process access
+  needed to read the ledger can also edit it and recompute the whole
+  chain from their edited version, and it will verify cleanly -- there is
+  no secret anywhere in the scheme that a tamperer wouldn't also have.
+- What this design **does** provide, and what its passing tests actually
+  demonstrate: detection of *accidental* corruption, or a bug that drops,
+  reorders, or edits an entry without also recomputing everything
+  downstream, within a single process run. That's a real and useful
+  property -- self-consistency checking -- but it is a materially weaker
+  claim than "tamper-evident" or "non-repudiable," both of which imply
+  resistance to a deliberate adversary.
+- Real tamper evidence would require, at minimum, a keyed MAC or
+  signature the verifier trusts but a tamperer doesn't hold, or an
+  external append-only anchor (e.g. periodically publishing the chain
+  head somewhere the ledger's own process can't rewrite). Neither exists
+  here as of this correction.
+
+The rest of this document is left largely as originally written, since
+its architectural description (what the layers are, how they combine) is
+accurate -- only the security-property claims were wrong. Read "Tamper-
+detection at the sequence level" below as "self-consistency detection,"
+not adversarial tamper evidence.
+
+**Author's Note (original, 2026-07-08):** This ADR records the Phase 3
+build that unified three pieces (a state-slot model, per-record content
+hashing, and sequence chaining) into an audit ledger. The original note
+went on to call this "production-ready" and "suitable for regulated,
+air-gapped deployment" -- both removed per the correction above.
 
 ## Context
 
@@ -15,7 +59,7 @@ Phase 2 proved the graph structure. Phase 3's task: build the **self-modificatio
 5. **Off by default** (ADR 0002 rule 1) — self-modification requires explicit opt-in, never ships enabled
 
 Prior art from GH05T3 was re-audited (EXPERIMENTS.md, 2026-07-08 finding):
-- ChronosLedger: real fast mutable state store (32-byte slots, `parent_offset` lineage), no hashing
+- ChronosLedger: real fast mutable state store (48-byte slots, `parent_offset` lineage (index, not byte offset)), no hashing
 - LexGenSeal: real per-record SHA-256 signing, no chaining
 - No genuine hash-chained ledger existed
 
@@ -34,7 +78,7 @@ Prior art from GH05T3 was re-audited (EXPERIMENTS.md, 2026-07-08 finding):
 
 **Constraints:** Non-mutable by design. Append-only.
 
-**Technology choice:** SHA-256 matches LexGenSeal's choice, proven in regulatory contexts.
+**Technology choice:** SHA-256 is a widely used, collision-resistant hash function. Using it does not by itself make anything "proven in regulatory contexts" -- that would require an actual compliance review against a specific regulation.
 
 ### Layer 2: Per-Record Signing (SignedEntry)
 
@@ -48,7 +92,7 @@ Prior art from GH05T3 was re-audited (EXPERIMENTS.md, 2026-07-08 finding):
 
 ### Layer 3: Mutable State Slots (StateSlotStore)
 
-**What:** Fast, append-only store for agent/node state (32-byte slots, each with `parent_offset`).
+**What:** Fast, append-only store for agent/node state (48-byte slots, each with `parent_offset`).
 
 **Why:** ChronosLedger's core insight: lineage tracing via parent pointers, not sequential numbering. Enables:
 - Fast latest-state lookup (HashMap<agent_id, slot_index>)
@@ -140,13 +184,13 @@ Test: `adr0002_rail4_deterministic_replay` — proves same topology + input → 
 
 ### Rail 5: Every Mutation is Ledger-Logged ✓
 ```rust
-pub struct TamperEvidentLedger {
+pub struct MutationLedger {
     chain: CryptoChainLog,           // sequence
     entries: Vec<SignedEntry>,       // content
     slots: StateSlotStore,           // state
     traces: HashMap<u64, ExecutionTrace>,  // reproducibility
 }
-impl TamperEvidentLedger {
+impl MutationLedger {
     pub fn log_mutation(...) -> Result<u64, NtgError>;
     pub fn verify_full_ledger(&self) -> Result<(), NtgError>;
 }
@@ -207,9 +251,15 @@ Deliberately deferred to Phase 4:
 
 ## Consequences
 
-- Phases 4-7 now have a solid, auditable foundation for self-modification
-- Air-gapped deployments can trust mutations are traceable and reversible
-- Regulatory compliance becomes easier (complete audit trail, no gaps)
+- Phases 4-7 have a foundation for self-modification with sequence and
+  content self-consistency checks and mutation history
+- The ledger can detect accidental corruption or a bug that drops,
+  reorders, or edits an entry within one process run -- it cannot, as
+  designed, detect a deliberate adversary who edits and recomputes the
+  whole chain (see correction notice above)
+- Any regulatory-compliance or air-gapped-deployment claim needs an
+  actual audit against the specific requirement in question; nothing
+  about the current design should be assumed to satisfy either
 - Performance overhead is minimal (ledger appends are O(n) for chaining, fast in practice)
 
 ## Related ADRs
@@ -224,7 +274,7 @@ Deliberately deferred to Phase 4:
 
 ```
 kernel/src/ntg/ledger/
-├── mod.rs                    # TamperEvidentLedger orchestration
+├── mod.rs                    # MutationLedger orchestration
 ├── crypto.rs                 # SHA-256 primitives
 ├── chain.rs                  # CryptoChainLog (sequence integrity)
 ├── signed_entry.rs           # SignedEntry (content integrity)
