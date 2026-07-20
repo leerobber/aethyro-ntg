@@ -10,22 +10,25 @@
 //! source (`backend/oss/core/chronos_ledger.py`) found that claim
 //! false: ChronosLedger is a real-time **mutable** mmap agent-state
 //! store (32-byte slots, overwritten in place via `write_agent`/
-//! `update_fitness`/etc.) with no hashing and no tamper-evidence of any
+//! `update_fitness`/etc.) with no hashing and no tamper-detection of any
 //! kind -- genuinely useful for fast slot state and lineage tracing
 //! (`parent_offset` chains), not for an audit trail. A second
 //! candidate, `backend/oss/core/seal.py` ("LexGenSeal"), is real and
-//! genuinely tamper-evident *per record* (SHA256 over each record's own
-//! content, append-only by file-naming convention) -- but does not
-//! chain records together, so deleting one seal file is undetectable
-//! from the rest. **No genuine hash chain existed anywhere in the
-//! checked codebase.** This module is that missing piece, built once
-//! the gap was found rather than assumed away.
+//! does give per-record content self-consistency (SHA256 over each
+//! record's own content, append-only by file-naming convention, so an
+//! edited record's hash won't match) -- but this is unkeyed, with no
+//! secret a tamperer wouldn't also have, so it's not evidence against a
+//! deliberate adversary, only against accidental corruption; and it
+//! does not chain records together, so deleting one seal file is
+//! undetectable from the rest. **No genuine hash chain existed anywhere
+//! in the checked codebase.** This module is that missing piece, built
+//! once the gap was found rather than assumed away.
 //!
 //! Phase 3's real ledger should combine: ChronosLedger's state-slot
-//! model (state), something like LexGenSeal's per-record signing
-//! (content integrity), and this module's chaining (sequence
-//! integrity) -- reusing the two real, proven pieces and adding only
-//! the piece that was actually missing.
+//! model (state), something like LexGenSeal's per-record hashing
+//! (content self-consistency), and this module's chaining (sequence
+//! self-consistency) -- reusing the two real, working pieces and adding
+//! only the piece that was actually missing.
 //!
 //! **Not cryptographic yet**, same honest caveat as `Graph::fingerprint`:
 //! this uses `std`'s `DefaultHasher` (SipHash, not collision-resistant

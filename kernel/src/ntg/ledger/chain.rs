@@ -1,9 +1,13 @@
 //! Cryptographic hash-chain for Phase 3 ledger: SHA-256 instead of DefaultHasher.
 //!
-//! This extends the Phase 2 ChainLog concept with real cryptography, making
-//! the tamper-evidence suitable for regulatory/compliance use cases.
-//! Each entry is chained to the previous via SHA-256(prev_hash || content),
-//! so any tampering, deletion, or reordering is mathematically detectable.
+//! This extends the Phase 2 ChainLog concept with real cryptography: each
+//! entry is chained to the previous via SHA-256(prev_hash || content), so
+//! accidental deletion, insertion, or reordering within a single process
+//! run is detectable by recomputing the chain. This is unkeyed and has no
+//! external anchor, so it does not resist a deliberate adversary with the
+//! same access needed to read the chain -- see the correction notice in
+//! docs/architecture/0004-phase3-tamper-evident-ledger.md. Not suitable,
+//! by itself, for regulatory/compliance use cases.
 
 use super::crypto::{chain_hash, GENESIS};
 use super::NtgError;

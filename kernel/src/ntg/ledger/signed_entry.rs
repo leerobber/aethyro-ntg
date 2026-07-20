@@ -1,8 +1,13 @@
 //! Per-record signing layer: content integrity like LexGenSeal.
 //!
-//! Each ledger entry is SHA-256 signed over its own content, making it
-//! tamper-evident at the individual record level. Combined with ChainLog's
-//! sequence chaining, this gives both content *and* sequence integrity.
+//! Each ledger entry carries an unkeyed SHA-256 hash of its own content,
+//! which detects accidental corruption or a bug that edits a record
+//! in place without recomputing its hash. This is content
+//! self-consistency, not tamper evidence against a deliberate adversary:
+//! anyone able to edit the content can also recompute the hash, since
+//! there is no signing key or secret in the scheme. Combined with
+//! ChainLog's sequence chaining, this gives content *and* sequence
+//! self-consistency checking.
 
 use super::crypto::{content_hash, hash_to_hex};
 use super::NtgError;
