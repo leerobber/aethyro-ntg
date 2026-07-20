@@ -1,112 +1,106 @@
-# GenomicBrain - Production-Grade Machine Learning System
+# Aethyro-NTG — Genomic Data Pipeline + Ternary Neural Network Kernel
 
-**Enterprise-quality autonomous agent framework for genomic data processing and real-time inference**
-
----
-
-## 📊 Project Metrics
-
-| Metric | Value | Status |
-|--------|-------|--------|
-| **Lines of Code** | 39,126 | ✓ Production |
-| **Test Coverage** | 396 tests | ✓ 100% passing |
-| **Quality Rating** | 9.8/10 | ✓ Enterprise-grade |
-| **Performance** | 100x baseline | ✓ SIMD optimized |
-| **Deployment** | Production-ready | ✓ Approved for biotech labs |
+A Rust workspace combining a population-genetics processing pipeline (VCF
+parsing, linkage disequilibrium computation, synthetic genome generation)
+with a ternary/quantized neural network kernel (SIMD matmul, self-modifying
+graph topology with an audit ledger).
 
 ---
 
-## 🎯 What is GenomicBrain?
+## Verified status (2026-07-19)
 
-GenomicBrain is a complete machine learning pipeline that processes real genomic data at production scale. It demonstrates production-grade engineering with autonomous agents and real-time LLM integration.
+| Metric | Value | How verified |
+|--------|-------|---------------|
+| Build | Clean, 0 errors | `cargo build --release` |
+| Tests | 386 passing, 0 failing | `cargo test --release`, counted directly from output |
+| Lines of Rust | ~30,400 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs cat \| wc -l` |
+| Unsafe blocks | ~26 | `grep -rn "^\s*unsafe " kernel/src` (FFI boundary + SIMD intrinsics) |
 
-**Core Capabilities:**
-- 1.3M genomic features per chromosome (real-time processing)
-- KAIROS autonomous agent lifecycle framework (safety-critical)
-- Ollama v0.18.3 LLM backend integration (production-tested)
-- 100x performance improvement over Python baseline
-- Cryptographic audit trail (scientific reproducibility)
-- 396 comprehensive tests (100% passing)
-- Enterprise deployment approved
-
----
-
-## 🏗️ Architecture
-
-- **Phase A:** VCF stream parsing + LD computation pipeline ✓
-- **Phase B:** Chromosome brain + autonomous agent training ✓
-- **LLM Integration:** Ollama backend for genomic understanding ✓
-- **Quality Assurance:** Cryptographic verification + 396 tests ✓
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system design.
+No performance benchmark numbers are stated here unless they were actually
+measured and are reproducible by running the code in this repo — see
+"What's not verified" below for claims removed because they weren't.
 
 ---
 
-## 📈 Performance
+## What this actually does
 
-```
-Python baseline:        50 SNPs/second
-GenomicBrain (Rust):    201,000 SNPs/second
-Improvement:            4,000x faster
+**Genomic pipeline** (`kernel/src/genomic/`, ~11K lines):
+- Streaming VCF parsing with bit-packed (2-bit) genotype storage
+- Linkage disequilibrium (Pearson r²) computation, including a bit-parallel
+  popcount-based fast path cross-validated against a scalar reference
+  (`ld_compute.rs` — this is the most solid, tested part of the codebase)
+- Synthetic genome sampling that preserves real allele frequencies and LD
+  structure from real 1000 Genomes data
+- Population genetics utilities: Hardy-Weinberg, Kimura fixation probability,
+  quality control checks
 
-Million-scale features: 1.3M LD pairs per chromosome
-Real-time inference:    <100ms latency
-Test coverage:          396 tests, 100% passing
-```
+**NTG kernel** (`kernel/src/ntg/`, ~12K lines):
+- Ternary weight representation and scalar/SIMD matmul
+- A self-modifying graph topology with 5 safety rails (off by default,
+  bounded compute budget, automatic rollback, deterministic replay,
+  full audit logging) — see `kernel/src/ntg/mutation/` and `kernel/src/ntg/ledger/`
+- The ledger provides **self-consistency checking** (detects accidental
+  corruption or reordering within one process run), not cryptographic
+  tamper evidence against a deliberate adversary — there's no signing key
+  or external anchor. See `kernel/src/ntg/ledger/mod.rs` for the full
+  explanation of what this design does and doesn't provide.
 
----
-
-## 🧪 Testing
-
-**396 comprehensive tests - 100% passing:**
-- 305 unit tests (algorithm correctness)
-- 56 integration tests (multi-component workflows)
-- 15 end-to-end tests (complete genomic pipelines)
-- 20+ performance benchmarks
-
-See [VERIFICATION_REPORT.md](./VERIFICATION_REPORT.md) for quality proof.
-
----
-
-## 💻 Technologies
-
-**Production Rust:** 39,126 lines of high-performance code
-**Performance:** SIMD optimization (AVX2), parallel processing (Rayon)
-**Safety:** KAIROS agent lifecycle, cryptographic verification
-**Integration:** Ollama v0.18.3 LLM backend
+**KAIROS / vitascale** (`kernel/src/genomic/vitascale/`): an experimental
+agent-lifecycle framework with staged capability gating. This is the least
+mature part of the codebase and the least externally verifiable — read the
+source before relying on any claim about it.
 
 ---
 
-## 📚 Documentation
+## What's not verified (removed from this README)
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — Detailed system design
-- [VERIFICATION_REPORT.md](./VERIFICATION_REPORT.md) — Quality metrics
-- [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guidelines
+An earlier version of this README claimed: "Quality Rating: 9.8/10,"
+"Approved for biotech labs," "Enterprise deployment approved," "396 tests,"
+"39,126 lines of code," and internally inconsistent speedup figures ("100x
+baseline" in one place, "4,000x faster" in another, for the same claim).
+None of these were measured by any tool, and none should be trusted. The
+actual test count, line count, and build status are in the table above,
+verified by actually running the commands.
+
+**Speedup claims:** the 4,000x / 201K SNPs-per-second figures describing
+the VCF/LD pipeline vs. a Python baseline have not been re-verified in this
+pass and should be treated as unconfirmed until someone runs the benchmark
+and records the real numbers, on real hardware, with the command used to
+produce them.
+
+**"Approved for biotech/clinical" claims:** removed entirely. No external
+audit, regulatory review, or clinical validation has occurred. Nothing in
+this repository should be used for a clinical or regulated purpose without
+an actual, independent review.
 
 ---
 
-## 🚀 Quick Start
+## Current project status
+
+**[docs/STATUS.md](docs/STATUS.md) is the maintained, honest status
+document** — read it before trusting any claim in this README or
+elsewhere in the repo. It already explicitly names "docs and marketing
+language outrunning measurements" as the project's primary risk, and
+already marks the old root-level session-summary docs as historical.
+This README's numbers are a snapshot verified 2026-07-19; `docs/STATUS.md`
+is updated more frequently and is more authoritative on current phase,
+readiness, and what's actually product-ready vs. research-stage.
+
+## Quick start
 
 ```bash
 cd kernel
-cargo build --release     # Build optimized binary
-cargo test                # Run all 396 tests
-cargo bench               # Run performance benchmarks
+cargo build --release     # Build
+cargo test --release      # Run the real test suite (386 tests as of this writing)
 ```
 
----
+## Documentation
 
-## ✨ What Makes This Production-Ready
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — contribution guidelines
+- `docs/architecture/` — architecture decision records (ADRs)
 
-✅ Comprehensive testing (396 tests, 100% pass)
-✅ Real performance optimization (100x improvement proven)
-✅ Safety-first design (KAIROS capability gating)
-✅ Cryptographic verification (scientific reproducibility)
-✅ Enterprise documentation (architecture + design decisions)
-✅ Production deployment (approved for biotech labs)
-
----
-
-**Built with discipline. Tested thoroughly. Ready for production.**
-
-🧬 GenomicBrain: Where research meets engineering.
+Historical per-phase session logs from earlier development have been moved
+to `docs/history/` to keep the repository root readable; they're kept for
+reference but may contain claims that were never re-verified the way this
+README and `VERIFICATION_REPORT.md` have been.
