@@ -14,7 +14,9 @@ pub mod node;
 
 pub use node::GraphNode;
 
+use std::cmp::Reverse;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BinaryHeap;
 use std::hash::{Hash, Hasher};
 
 use super::error::NtgError;
@@ -259,24 +261,21 @@ impl Graph {
             in_degree[to] += 1;
         }
 
-        let mut ready: Vec<NodeId> =
-            existing.iter().copied().filter(|&id| in_degree[id] == 0).collect();
+        let mut ready: BinaryHeap<Reverse<NodeId>> = existing
+            .iter()
+            .copied()
+            .filter(|&id| in_degree[id] == 0)
+            .map(Reverse)
+            .collect();
         let mut order = Vec::with_capacity(existing.len());
 
-        while !ready.is_empty() {
-            let id = ready.remove(0);
+        while let Some(Reverse(id)) = ready.pop() {
             order.push(id);
-            let mut newly_ready = Vec::new();
             for child in self.children(id) {
                 in_degree[child] -= 1;
                 if in_degree[child] == 0 {
-                    newly_ready.push(child);
+                    ready.push(Reverse(child));
                 }
-            }
-            newly_ready.sort_unstable();
-            for child in newly_ready {
-                let pos = ready.partition_point(|&x| x < child);
-                ready.insert(pos, child);
             }
         }
 

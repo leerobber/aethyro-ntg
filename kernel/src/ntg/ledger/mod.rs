@@ -28,6 +28,13 @@ use super::error::NtgError;
 use signed_entry::SignedEntry;
 use stateblots::StateSlotStore;
 use replay::ExecutionTrace;
+
+/// Escape a string for embedding as a JSON string value in the hand-built
+/// ledger entry JSON below (backslash and double-quote only; entry fields
+/// are otherwise plain ASCII/numeric).
+fn escape_json_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
 use std::collections::HashMap;
 
 /// Ledger entry covering a complete mutation cycle: proposal, evaluation, decision.
@@ -117,7 +124,7 @@ impl TamperEvidentLedger {
         let entry_json = format!(
             r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{}","budget_ns":{},"timestamp":{}}}"#,
             mutation_id,
-            desc,
+            escape_json_string(&desc),
             pre_fingerprint,
             post_fingerprint,
             fitness.latency_us,
