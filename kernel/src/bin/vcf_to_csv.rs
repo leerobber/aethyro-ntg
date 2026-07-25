@@ -1,9 +1,8 @@
-/// Ultra-fast VCF to CSV converter
-/// Uses Rust for 50-100x speedup vs Python
+//! Ultra-fast VCF to CSV converter
+//! Uses Rust for 50-100x speedup vs Python
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
 use flate2::read::GzDecoder;
 
 fn main() {
@@ -20,10 +19,10 @@ fn main() {
     println!("═══════════════════════════════════════════════════");
     println!("VCF → CSV Converter (Rust)");
     println!("═══════════════════════════════════════════════════");
-    println!("");
+    println!();
     println!("Input:  {}", vcf_path);
     println!("Output: {}", csv_path);
-    println!("");
+    println!();
 
     let start = std::time::Instant::now();
 
@@ -36,7 +35,7 @@ fn main() {
     let mut samples: Vec<String> = Vec::new();
     let mut variant_count = 0u64;
 
-    for (line_no, line) in reader.lines().enumerate() {
+    for line in reader.lines() {
         let line = line.expect("Read error");
 
         // Parse header
@@ -73,8 +72,7 @@ fn main() {
 
         // Extract genotypes
         let mut genotypes = Vec::with_capacity(samples.len());
-        for i in 9..std::cmp::min(9 + samples.len(), parts.len()) {
-            let gt_field = parts[i];
+        for &gt_field in parts.iter().skip(9).take(samples.len()) {
 
             let gt = if let Some(colon_pos) = gt_field.find(':') {
                 &gt_field[..colon_pos]
@@ -107,7 +105,7 @@ fn main() {
         writeln!(csv_file).expect("Write error");
 
         variant_count += 1;
-        if variant_count % 100000 == 0 {
+        if variant_count.is_multiple_of(100000) {
             let elapsed = start.elapsed().as_secs_f64();
             let rate = variant_count as f64 / elapsed;
             println!("  ✓ {} variants ({:.0}/sec)...", variant_count, rate);
@@ -115,14 +113,14 @@ fn main() {
     }
 
     let elapsed = start.elapsed();
-    println!("");
+    println!();
     println!("═══════════════════════════════════════════════════");
     println!("✓ Conversion Complete!");
     println!("═══════════════════════════════════════════════════");
-    println!("");
+    println!();
     println!("Variants: {}", variant_count);
     println!("Samples: {}", samples.len());
     println!("Duration: {:.1}s", elapsed.as_secs_f64());
     println!("Rate: {:.0} variants/sec", variant_count as f64 / elapsed.as_secs_f64());
-    println!("");
+    println!();
 }

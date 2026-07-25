@@ -1,6 +1,6 @@
-/// Phase C: Evolution Simulation
-/// Fitness ranking, selection, and generational advancement
-/// Pure Rust implementation
+//! Phase C: Evolution Simulation
+//! Fitness ranking, selection, and generational advancement
+//! Pure Rust implementation
 
 use crate::genomic::synthesis::Genome;
 
@@ -30,7 +30,7 @@ impl FitnessModel for DefaultFitnessModel {
         // Fitness = proximity to target allele frequency
         let distance = (mean_freq - self.target_allele_freq).abs();
         let fitness = 1.0 - (distance * self.selection_strength);
-        fitness.max(0.0).min(1.0)
+        fitness.clamp(0.0, 1.0)
     }
 }
 
@@ -69,7 +69,7 @@ impl EvolutionSim {
         let mut next_generation = self.population[0..elite_count].to_vec();
 
         // Phase 4: Reproduction (fill population with new samples)
-        let pop_id_start = (self.generation * 1000) as u32;
+        let pop_id_start = self.generation * 1000;
         while next_generation.len() < self.population.len() {
             let new_genome = sampler.sample(pop_id_start + next_generation.len() as u32);
             next_generation.push(new_genome);

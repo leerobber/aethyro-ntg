@@ -105,6 +105,11 @@ impl TamperEvidentLedger {
     }
 
     /// Log a completed mutation cycle. Returns the entry's position in the ledger.
+    // Each argument is a distinct, independently-meaningful ledger field (ADR
+    // 0002 rail 5); bundling them into a params struct wouldn't reduce real
+    // complexity and would touch every call site, so the lint is suppressed
+    // rather than the API reshaped.
+    #[allow(clippy::too_many_arguments)]
     pub fn log_mutation(
         &mut self,
         description: impl Into<String>,
@@ -122,14 +127,14 @@ impl TamperEvidentLedger {
 
         // Create the entry
         let entry_json = format!(
-            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{}","budget_ns":{},"timestamp":{}}}"#,
+            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{:?}","budget_ns":{},"timestamp":{}}}"#,
             mutation_id,
             escape_json_string(&desc),
             pre_fingerprint,
             post_fingerprint,
             fitness.latency_us,
             fitness.memory_bytes,
-            format!("{:?}", outcome),
+            outcome,
             budget_consumed_ns,
             timestamp
         );

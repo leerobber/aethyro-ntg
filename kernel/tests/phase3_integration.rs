@@ -178,7 +178,7 @@ fn end_to_end_mutation_cycle() -> Result<(), NtgError> {
     use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
 
     // Setup: create a graph
-    let mut graph = Graph::new();
+    let _graph = Graph::new();
     let baseline_fitness = (5000, 1024);
 
     // Setup: create ledger

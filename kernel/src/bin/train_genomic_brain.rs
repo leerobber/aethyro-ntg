@@ -1,9 +1,9 @@
-/// GenomicBrain Training Protocol: KAIROS-style cycles for chromosome learning
-/// Learn memory techniques from LD patterns, adapt to population structure
-/// Usage: train_genomic_brain <chr_data.csv> <num_cycles> [--population CEU|YRI|ALL]
+//! GenomicBrain Training Protocol: KAIROS-style cycles for chromosome learning
+//! Learn memory techniques from LD patterns, adapt to population structure
+//! Usage: train_genomic_brain <chr_data.csv> <num_cycles> [--population CEU|YRI|ALL]
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::time::Instant;
 
 #[derive(Clone, Debug)]
@@ -14,6 +14,9 @@ struct TrainConfig {
     window_size: usize,
 }
 
+// cycle/duration_ms are populated for Debug output but not read back
+// programmatically elsewhere in this binary.
+#[allow(dead_code)]
 #[derive(Debug)]
 struct TrainingMetrics {
     cycle: usize,
@@ -49,13 +52,13 @@ fn main() {
     println!("\n{}", "=".repeat(70));
     println!("GenomicBrain Training Protocol - KAIROS Cycles");
     println!("{}", "=".repeat(70));
-    println!("");
+    println!();
     println!("Config:");
     println!("  Cycles: {}", config.num_cycles);
     println!("  Learning rate: {}", config.learning_rate);
     println!("  Population: {}", config.population);
     println!("  LD window: {} SNPs", config.window_size);
-    println!("");
+    println!();
 
     let start_overall = Instant::now();
 
@@ -67,11 +70,11 @@ fn main() {
     let num_snps = snp_ids.len();
 
     println!("[OK] Loaded {} SNPs in {:.1}s", num_snps, start.elapsed().as_secs_f64());
-    println!("");
+    println!();
 
     // Training loop
     println!("[*] Starting KAIROS training cycles...");
-    println!("");
+    println!();
     println!("{:<8} {:<12} {:<12} {:<12} {:<12}",
         "Cycle", "Loss", "LD_mean", "Connectivity", "Time(ms)");
     println!("{}", "-".repeat(58));
@@ -115,7 +118,7 @@ fn main() {
     let total_time = start_overall.elapsed().as_secs_f64();
 
     // Summary
-    println!("");
+    println!();
     println!("{}", "=".repeat(70));
     println!("[TRAINING SUMMARY]");
     println!("{}", "=".repeat(70));
@@ -128,19 +131,19 @@ fn main() {
         println!("  Initial loss: {:.4}", initial_loss);
         println!("  Final loss:   {:.4}", final_loss);
         println!("  Improvement:  {:.1}%", improvement);
-        println!("");
+        println!();
         println!("  Mean LD (learned): {:.4}", metrics.iter().map(|m| m.ld_mean).sum::<f64>() / metrics.len() as f64);
         println!("  Connectivity: {:.4}", metrics.iter().map(|m| m.connectivity).sum::<f64>() / metrics.len() as f64);
-        println!("");
+        println!();
     }
 
     println!("  Total time: {:.1}s", total_time);
     println!("  Avg cycle: {:.1}s", total_time / config.num_cycles as f64);
-    println!("");
+    println!();
     println!("[OK] GenomicBrain training complete!");
     println!("     Next: export brain checkpoint, then generate synthetic genomes");
     println!("{}", "=".repeat(70));
-    println!("");
+    println!();
 }
 
 fn load_csv(csv_path: &str) -> (Vec<String>, Vec<u32>, Vec<Vec<u8>>) {
@@ -154,24 +157,22 @@ fn load_csv(csv_path: &str) -> (Vec<String>, Vec<u32>, Vec<Vec<u8>>) {
     let mut positions = Vec::new();
     let mut genotypes = Vec::new();
 
-    for line in lines {
-        if let Ok(line) = line {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() < 3 {
-                continue;
-            }
-
-            snp_ids.push(parts[0].to_string());
-            positions.push(parts[1].parse::<u32>().unwrap_or(0));
-
-            let mut geno = Vec::new();
-            for i in 2..parts.len() {
-                let val = parts[i].parse::<u8>().unwrap_or(3);
-                geno.push(val);
-            }
-
-            genotypes.push(geno);
+    for line in lines.map_while(Result::ok) {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() < 3 {
+            continue;
         }
+
+        snp_ids.push(parts[0].to_string());
+        positions.push(parts[1].parse::<u32>().unwrap_or(0));
+
+        let mut geno = Vec::new();
+        for part in parts.iter().skip(2) {
+            let val = part.parse::<u8>().unwrap_or(3);
+            geno.push(val);
+        }
+
+        genotypes.push(geno);
     }
 
     (snp_ids, positions, genotypes)
@@ -231,7 +232,7 @@ fn compute_r2(geno_i: &[u8], geno_j: &[u8]) -> f64 {
 
     if var_i > 1e-9 && var_j > 1e-9 {
         let r = cov / (var_i.sqrt() * var_j.sqrt());
-        let r_clamped = r.max(-1.0).min(1.0);
+        let r_clamped = r.clamp(-1.0, 1.0);
         (r_clamped * r_clamped).max(0.0)
     } else {
         0.0

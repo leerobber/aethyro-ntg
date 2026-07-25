@@ -1,9 +1,8 @@
-/// Compute LD (Linkage Disequilibrium) Matrix from 1000 Genomes
-/// Shows how genetic variants correlate across the population
+//! Compute LD (Linkage Disequilibrium) Matrix from 1000 Genomes
+//! Shows how genetic variants correlate across the population
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::io::{BufRead, BufReader};
 use std::time::Instant;
 
 fn main() {
@@ -24,9 +23,9 @@ fn main() {
     println!("════════════════════════════════════════════════════════════════");
     println!("COMPUTING: Linkage Disequilibrium (LD) Matrix");
     println!("════════════════════════════════════════════════════════════════");
-    println!("");
+    println!();
     println!("Input: {}", csv_path);
-    println!("");
+    println!();
 
     let start_overall = Instant::now();
 
@@ -62,8 +61,8 @@ fn main() {
         positions.push(parts[1].parse().unwrap_or(0));
 
         let mut geno = Vec::with_capacity(num_samples);
-        for i in 2..std::cmp::min(2 + num_samples, parts.len()) {
-            let val: u8 = parts[i].parse().unwrap_or(3);
+        for part in parts.iter().skip(2).take(num_samples) {
+            let val: u8 = part.parse().unwrap_or(3);
             geno.push(val);
         }
 
@@ -79,7 +78,7 @@ fn main() {
 
     println!("✓ Loaded {} variants in {:.1}s", num_variants, load_time);
     println!("  Memory: ~{:.1} MB", (num_variants * num_samples) as f64 / 1_000_000.0);
-    println!("");
+    println!();
 
     if summary_only {
         print_summary_only(&genotypes, &variant_ids, &positions, num_samples);
@@ -115,12 +114,12 @@ fn main() {
 
     let stats_time = start.elapsed().as_secs_f64();
     println!("✓ Statistics computed in {:.1}s", stats_time);
-    println!("");
+    println!();
 
     // Compute LD matrix
     println!("🔗 Computing LD matrix ({} SNPs)...", num_variants);
     println!("  This will compute {} pairwise correlations", num_variants * (num_variants - 1) / 2);
-    println!("");
+    println!();
 
     let start = Instant::now();
     let mut ld_count = 0;
@@ -131,10 +130,7 @@ fn main() {
             let mut dot = 0.0;
             let mut valid = 0.0;
 
-            for k in 0..num_samples {
-                let gi = genotypes[i][k];
-                let gj = genotypes[j][k];
-
+            for (&gi, &gj) in genotypes[i].iter().zip(genotypes[j].iter()).take(num_samples) {
                 if gi != 3 && gj != 3 {
                     dot += (gi as f64) * (gj as f64);
                     valid += 1.0;
@@ -143,7 +139,7 @@ fn main() {
 
             if valid > 0.0 && variances[i] > 1e-9 && variances[j] > 1e-9 {
                 let r = ((dot / valid) - (means[i] * means[j])) / (variances[i].sqrt() * variances[j].sqrt());
-                let r_clamped = r.max(-1.0).min(1.0);
+                let r_clamped = r.clamp(-1.0, 1.0);
                 let r2 = r_clamped * r_clamped;
 
                 // Track high LD pairs (r² > 0.5)
@@ -165,17 +161,17 @@ fn main() {
     let ld_time = start.elapsed().as_secs_f64();
     let total_time = start_overall.elapsed().as_secs_f64();
 
-    println!("");
+    println!();
     println!("════════════════════════════════════════════════════════════════");
     println!("✅ LD MATRIX COMPUTATION COMPLETE!");
     println!("════════════════════════════════════════════════════════════════");
-    println!("");
+    println!();
 
     println!("📈 LD Statistics:");
     println!("  Total SNP pairs: {}", num_variants * (num_variants - 1) / 2);
     println!("  Pairs computed: {}", ld_count);
     println!("  High LD pairs (r² > 0.5): {}", high_ld_pairs.len());
-    println!("");
+    println!();
 
     println!("⏱️  Performance:");
     println!("  Load time: {:.1}s", load_time);
@@ -183,19 +179,19 @@ fn main() {
     println!("  LD computation: {:.1}s", ld_time);
     println!("  Total time: {:.1}s", total_time);
     println!("  Rate: {:.0} pairs/sec", ld_count as f64 / ld_time);
-    println!("");
+    println!();
 
     // Print top LD pairs
     if !high_ld_pairs.is_empty() {
         println!("🔗 Top 20 Linked Variant Pairs (highest r²):");
-        println!("");
+        println!();
 
         high_ld_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
 
         println!("{:<20} {:<20} {:<12} {:<20}", "SNP1", "SNP2", "r²", "Distance (bp)");
         println!("{}", "─".repeat(80));
 
-        for (i, (idx1, idx2, r2)) in high_ld_pairs.iter().take(20).enumerate() {
+        for (idx1, idx2, r2) in high_ld_pairs.iter().take(20) {
             let dist = (positions[*idx2] as i64 - positions[*idx1] as i64).abs();
             println!(
                 "{:<20} {:<20} {:<12.4} {:<20}",
@@ -206,18 +202,18 @@ fn main() {
             );
         }
 
-        println!("");
+        println!();
     }
 
     // LD decay analysis
     println!("📉 LD Decay Analysis:");
-    println!("");
+    println!();
 
     let mut ld_by_distance: std::collections::HashMap<u32, Vec<f64>> = std::collections::HashMap::new();
 
     for (idx1, idx2, r2) in &high_ld_pairs {
         let dist = ((positions[*idx2] as i64 - positions[*idx1] as i64).abs() / 10000) as u32 * 10000;
-        ld_by_distance.entry(dist).or_insert_with(Vec::new).push(*r2);
+        ld_by_distance.entry(dist).or_default().push(*r2);
     }
 
     let mut distances: Vec<u32> = ld_by_distance.keys().copied().collect();
@@ -238,7 +234,7 @@ fn main() {
         }
     }
 
-    println!("");
+    println!();
     println!("════════════════════════════════════════════════════════════════");
     println!("Analysis complete! LD patterns extracted from real 1000G data.");
     println!("════════════════════════════════════════════════════════════════");
@@ -251,11 +247,11 @@ fn print_summary_only(
     num_samples: usize,
 ) {
     println!("📊 Data Summary (--summary mode):");
-    println!("");
+    println!();
     println!("  Variants: {}", genotypes.len());
     println!("  Samples: {}", num_samples);
     println!("  Total genotypes: {}", genotypes.len() * num_samples);
-    println!("");
+    println!();
 
     // Compute allele frequencies
     let mut allele_freq = vec![0.0; genotypes.len()];
@@ -278,15 +274,15 @@ fn print_summary_only(
 
     let maf: Vec<f64> = allele_freq.iter().map(|&af| af.min(1.0 - af)).collect();
 
-    let rare = maf.iter().filter(|&&m| m < 0.001).count();
+    let _rare = maf.iter().filter(|&&m| m < 0.001).count();
     let very_rare = maf.iter().filter(|&&m| m < 0.01).count();
     let common = maf.iter().filter(|&&m| m > 0.05).count();
 
     println!("  Common (MAF > 5%): {}", common);
-    println!("  Intermediate (1-5%): {}", maf.iter().filter(|&&m| m >= 0.01 && m <= 0.05).count());
-    println!("  Rare (0.1-1%): {}", maf.iter().filter(|&&m| m >= 0.001 && m < 0.01).count());
+    println!("  Intermediate (1-5%): {}", maf.iter().filter(|&&m| (0.01..=0.05).contains(&m)).count());
+    println!("  Rare (0.1-1%): {}", maf.iter().filter(|&&m| (0.001..0.01).contains(&m)).count());
     println!("  Very rare (< 0.1%): {}", very_rare);
-    println!("");
+    println!();
 
     println!("  First 10 variants:");
     for i in 0..std::cmp::min(10, variant_ids.len()) {

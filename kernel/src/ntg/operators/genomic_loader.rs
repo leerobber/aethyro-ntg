@@ -1,6 +1,6 @@
-/// Genomic Data Loader
-/// Handles ingestion of genomic data from various formats
-/// (VCF, PLINK, CSV, JSON)
+//! Genomic Data Loader
+//! Handles ingestion of genomic data from various formats
+//! (VCF, PLINK, CSV, JSON)
 
 use super::genomic::GenomicNode;
 use serde::{Deserialize, Serialize};
@@ -137,6 +137,12 @@ impl GenomicBatch {
 /// Genomic data ingestion pipeline
 pub struct GenomicPipeline {
     pub batches: Vec<GenomicBatch>,
+}
+
+impl Default for GenomicPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GenomicPipeline {

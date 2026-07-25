@@ -24,7 +24,7 @@ pub struct PackedTernary {
 impl PackedTernary {
     /// Create new packed ternary buffer of given ternary element count.
     pub fn new(len: usize) -> Self {
-        let word_count = (len + 31) / 32;
+        let word_count = len.div_ceil(32);
         Self {
             words: vec![0u64; word_count],
             len,
@@ -161,7 +161,7 @@ impl PackedTernary {
     /// Word count for kernel iteration.
     #[inline]
     pub fn word_count(&self) -> usize {
-        (self.len + 31) / 32
+        self.len.div_ceil(32)
     }
 }
 

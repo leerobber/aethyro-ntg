@@ -1,10 +1,10 @@
-/// LD Computation Test - End-to-End Phase A Integration
-/// VCF Parse → Bitsliced Genotypes → LD Computation
-///
-/// Usage: cargo run --release --bin ld_compute_test [-- <max_variants>]
-/// With no argument, parses each full chromosome file (can take a long
-/// time on the real 1000 Genomes files in data/raw). Pass a variant cap
-/// to bound the run to a leading slice of the real data.
+//! LD Computation Test - End-to-End Phase A Integration
+//! VCF Parse → Bitsliced Genotypes → LD Computation
+//!
+//! Usage: cargo run --release --bin ld_compute_test [-- <max_variants>]
+//! With no argument, parses each full chromosome file (can take a long
+//! time on the real 1000 Genomes files in data/raw). Pass a variant cap
+//! to bound the run to a leading slice of the real data.
 
 use ntg_kernel::genomic::{VcfParser, LdComputer};
 use std::path::Path;

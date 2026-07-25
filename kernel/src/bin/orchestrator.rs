@@ -1,13 +1,15 @@
-/// GenomicBrain Complete Pipeline Orchestrator
-/// Phases A-H: Data → Training → Synthesis → Reasoning → Multi-Agent → Meta-Optimization
-/// End-to-end execution with full Rust implementation, no Python
+//! GenomicBrain Complete Pipeline Orchestrator
+//! Phases A-H: Data → Training → Synthesis → Reasoning → Multi-Agent → Meta-Optimization
+//! End-to-end execution with full Rust implementation, no Python
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Instant;
-use std::collections::HashMap;
 
+// vcf_path/csv_path/ld_path are set for Debug/inspection purposes but this
+// pipeline currently derives those paths on the fly rather than reading
+// them back off the struct.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ChromosomeConfig {
     chr: u8,
@@ -18,6 +20,9 @@ struct ChromosomeConfig {
     synthetics_dir: PathBuf,
 }
 
+// phase/chromosome are populated for Debug output but not read back
+// programmatically elsewhere in this binary.
+#[allow(dead_code)]
 #[derive(Debug)]
 struct PipelineMetrics {
     phase: String,
@@ -40,6 +45,9 @@ impl PipelineMetrics {
     }
 }
 
+// root_path is kept for reference (e.g. future relative-path resolution)
+// but every path used today is built as an absolute/joined path elsewhere.
+#[allow(dead_code)]
 struct PipelineOrchestrator {
     root_path: PathBuf,
     chromosomes: Vec<ChromosomeConfig>,
@@ -430,7 +438,7 @@ impl PipelineOrchestrator {
         println!("║                  WEEK 2 EXECUTION SUMMARY                    ║");
         println!("╚═══════════════════════════════════════════════════════════════╝");
 
-        let total_duration: f64 = self.metrics.iter().map(|m| m.duration_secs()).sum();
+        let _total_duration: f64 = self.metrics.iter().map(|m| m.duration_secs()).sum();
         let successful = self.metrics.iter().filter(|m| m.success).count();
 
         println!("\nPhase Breakdown:");

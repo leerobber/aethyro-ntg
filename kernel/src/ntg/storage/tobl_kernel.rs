@@ -155,10 +155,10 @@ unsafe fn unpack_ternary_half_to_i16(word: u64, half: usize) -> std::arch::x86_6
 
     let base = half * 16;
     let mut lanes = [0i16; 16];
-    for i in 0..16 {
+    for (i, lane) in lanes.iter_mut().enumerate() {
         let bit_offset = (base + i) * 2;
         let packed = ((word >> bit_offset) & 0b11) as i16;
-        lanes[i] = match packed {
+        *lane = match packed {
             0b01 => -1,
             0b00 => 0,
             0b10 => 1,
@@ -223,7 +223,7 @@ mod tests {
             .unwrap();
 
         let (result, _cycles) = tobl_dot_product(&a, &b, None).unwrap();
-        assert!(result >= -10 && result <= 10);
+        assert!((-10..=10).contains(&result));
     }
 
     #[test]

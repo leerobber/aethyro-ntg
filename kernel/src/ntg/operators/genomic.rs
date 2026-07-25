@@ -1,6 +1,6 @@
-/// OmniSynth-X Genomic Operator for NTG
-/// Bitsliced LD/PRS computation with SIMD acceleration
-/// Integrated into Neural Ternary Graph for self-evolution
+//! OmniSynth-X Genomic Operator for NTG
+//! Bitsliced LD/PRS computation with SIMD acceleration
+//! Integrated into Neural Ternary Graph for self-evolution
 
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ pub struct GenomicOperator {
 impl GenomicOperator {
     /// Initialize a new genomic operator
     pub fn new(num_individuals: usize, num_snps: usize) -> Self {
-        let words_per_snp = (num_individuals + 63) / 64;
+        let words_per_snp = num_individuals.div_ceil(64);
         let total_words = num_snps * words_per_snp * 2;
 
         Self {
@@ -188,7 +188,7 @@ impl GenomicOperator {
                             / (sigma_i * self.std_devs[j]);
 
                     // Clamp to [-1, 1]
-                    let r_clamped = r.max(-1.0).min(1.0);
+                    let r_clamped = r.clamp(-1.0, 1.0);
 
                     ld_matrix[i * self.num_snps + j] = r_clamped;
                     ld_matrix[j * self.num_snps + i] = r_clamped; // Symmetric
@@ -211,8 +211,7 @@ impl GenomicOperator {
             return prs_scores; // Dimension mismatch
         }
 
-        for snp_idx in 0..self.num_snps {
-            let weight = weights[snp_idx];
+        for (snp_idx, &weight) in weights.iter().enumerate().take(self.num_snps) {
             let base = snp_idx * self.words_per_snp * 2;
 
             for word_idx in 0..self.words_per_snp {

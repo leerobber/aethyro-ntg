@@ -9,7 +9,6 @@
 //! Ledger binary format is not fully rehydrated here; decision history
 //! should live in JSONL from `selection_loop` for audit replay.
 
-use crate::genomic::language_organ::LanguageOrgan;
 use crate::genomic::sovereign_brain::{LtmMotif, SovereignBrain, StructuralMetrics};
 use crate::genomic::sovereign_fitness::SovereignFitnessContext;
 use crate::ntg::calib::CalibModel;
@@ -149,7 +148,7 @@ pub fn load_snapshot_into(
     let mut wrote_docs = 0usize;
     if docs_path.is_file() {
         let text = fs::read_to_string(&docs_path).map_err(|e| e.to_string())?;
-        let mut organ = brain.language.take().unwrap_or_else(LanguageOrgan::new);
+        let mut organ = brain.language.take().unwrap_or_default();
         for line in text.lines() {
             if let Some((label, body)) = parse_doc_line(line) {
                 organ.ingest_document(&label, &body);

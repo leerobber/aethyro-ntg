@@ -1,12 +1,15 @@
-/// GenomicBrain: Bio-inspired neural architecture from chromosome LD patterns
-/// Learns memory techniques from genetic diversity
+//! GenomicBrain: Bio-inspired neural architecture from chromosome LD patterns
+//! Learns memory techniques from genetic diversity
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::time::Instant;
 
 /// Core neuron: represents a genetic variant (SNP)
+// `position` is populated for Debug output but not read back
+// programmatically elsewhere in this binary.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct GenomicNeuron {
     snp_id: String,
@@ -17,6 +20,9 @@ struct GenomicNeuron {
 }
 
 /// Memory module: represents a haplotype block
+// block_id/neurons/coherence/context are populated for Debug output but
+// not read back programmatically elsewhere in this binary.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct MemoryModule {
     block_id: String,

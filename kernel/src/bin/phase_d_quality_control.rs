@@ -1,12 +1,12 @@
-/// Phase D: Quality Control & Validation
-/// Statistical validation of Phase C's synthetic genomes against a real
-/// 1000 Genomes reference built from actual chr1 VCF data. Phase C
-/// synthesizes via haplotype-block resampling (real observed haplotype
-/// fragments, not independent per-locus draws), so this now validates
-/// both allele-frequency matching and LD/haplotype-structure matching.
-/// Pure Rust implementation
-///
-/// Usage: cargo run --release --bin phase_d_quality_control [-- <max_variants>]
+//! Phase D: Quality Control & Validation
+//! Statistical validation of Phase C's synthetic genomes against a real
+//! 1000 Genomes reference built from actual chr1 VCF data. Phase C
+//! synthesizes via haplotype-block resampling (real observed haplotype
+//! fragments, not independent per-locus draws), so this now validates
+//! both allele-frequency matching and LD/haplotype-structure matching.
+//! Pure Rust implementation
+//!
+//! Usage: cargo run --release --bin phase_d_quality_control [-- <max_variants>]
 
 use ntg_kernel::genomic::{build_real_chromosome, GenomeComparator, GenomeValidator, PowerAnalysis};
 

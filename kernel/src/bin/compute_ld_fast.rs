@@ -27,17 +27,17 @@ fn main() {
     println!("{}","=".repeat(64));
     println!("COMPUTING: Linkage Disequilibrium (LD) Matrix [FAST]");
     println!("{}","=".repeat(64));
-    println!("");
+    println!();
     println!("Input: {}", csv_path);
     println!("Mode: Bitsliced ternary + popcount LD");
-    println!("");
+    println!();
 
     let start_overall = Instant::now();
 
     println!("[*] Loading genotypes into bitsliced operator...");
     let start = Instant::now();
 
-    let (mut operator, variant_ids, positions, num_samples) =
+    let (operator, variant_ids, positions, num_samples) =
         load_csv_into_operator(csv_path, sample_n);
 
     let load_time = start.elapsed().as_secs_f64();
@@ -47,7 +47,7 @@ fn main() {
     println!("  Memory: ~{:.1} MB (bitsliced)",
         (num_variants * num_samples * 2) as f64 / 1_000_000.0);
     println!("  Samples: {}", num_samples);
-    println!("");
+    println!();
 
     if summary_only {
         print_summary_only(&operator, &variant_ids, &positions, num_samples);
@@ -58,7 +58,7 @@ fn main() {
     let pairwise = num_variants * (num_variants - 1) / 2;
     println!("  This will compute {} pairwise correlations", pairwise);
     println!("  Keeping only pairs with r² > 0.5 to save memory");
-    println!("");
+    println!();
 
     let start = Instant::now();
 
@@ -93,18 +93,18 @@ fn main() {
     let ld_time = start.elapsed().as_secs_f64();
     let total_time = start_overall.elapsed().as_secs_f64();
 
-    println!("");
+    println!();
     println!("{}","=".repeat(64));
     println!("[OK] LD MATRIX COMPUTATION COMPLETE!");
     println!("{}","=".repeat(64));
-    println!("");
+    println!();
 
     println!("[STATS] LD Statistics:");
     println!("  Total SNP pairs: {}", pairwise);
     println!("  Pairs computed: {}", pairs_computed);
     println!("  High LD pairs (r² > 0.5): {}", high_ld_pairs.len());
     println!("  LD computation: {:.1}s", ld_time);
-    println!("");
+    println!();
 
     println!("[TIME] Performance:");
     println!("  Load time: {:.1}s", load_time);
@@ -113,10 +113,10 @@ fn main() {
     if ld_time > 0.0 {
         println!("  Rate: {:.0} pairs/sec", pairs_computed as f64 / ld_time);
     }
-    println!("");
+    println!();
 
     println!("[RESULTS] Top 20 Linked Variant Pairs (highest r2):");
-    println!("");
+    println!();
 
     high_ld_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
 
@@ -134,15 +134,15 @@ fn main() {
         );
     }
 
-    println!("");
+    println!();
     println!("[ANALYSIS] LD Decay:");
-    println!("");
+    println!();
 
     let mut ld_by_distance: HashMap<u32, Vec<f64>> = HashMap::new();
 
     for (idx1, idx2, r2) in &high_ld_pairs {
         let dist = ((positions[*idx2] as i64 - positions[*idx1] as i64).abs() / 10000) as u32 * 10000;
-        ld_by_distance.entry(dist).or_insert_with(Vec::new).push(*r2);
+        ld_by_distance.entry(dist).or_default().push(*r2);
     }
 
     let mut distances: Vec<u32> = ld_by_distance.keys().copied().collect();
@@ -163,7 +163,7 @@ fn main() {
         }
     }
 
-    println!("");
+    println!();
     println!("{}","=".repeat(64));
     println!("Analysis complete! LD patterns extracted from real 1000G data.");
     println!("{}","=".repeat(64));
@@ -197,8 +197,8 @@ fn load_csv_into_operator(
         positions.push(parts[1].parse().unwrap_or(0));
 
         let mut geno = Vec::with_capacity(num_samples);
-        for i in 2..std::cmp::min(2 + num_samples, parts.len()) {
-            let val: u8 = parts[i].parse().unwrap_or(3);
+        for part in parts.iter().skip(2).take(num_samples) {
+            let val: u8 = part.parse().unwrap_or(3);
             geno.push(val);
         }
 
@@ -239,7 +239,7 @@ fn compute_pair_correlation(operator: &GenomicOperator, i: usize, j: usize) -> (
     if valid > 1 && operator.std_devs[i] > 1e-9 && operator.std_devs[j] > 1e-9 {
         let r = ((dot / valid as f64) - (operator.means[i] * operator.means[j]))
                 / (operator.std_devs[i] * operator.std_devs[j]);
-        let r_clamped = r.max(-1.0).min(1.0);
+        let r_clamped = r.clamp(-1.0, 1.0);
         let r2 = r_clamped * r_clamped;
         (r2, valid)
     } else {
@@ -256,11 +256,11 @@ fn print_summary_only(
     let num_variants = operator.num_snps;
 
     println!("[*] Data Summary (--summary mode):");
-    println!("");
+    println!();
     println!("  Variants: {}", num_variants);
     println!("  Samples: {}", num_samples);
     println!("  Total genotypes: {}", num_variants * num_samples);
-    println!("");
+    println!();
 
     let means = &operator.means;
 
@@ -275,9 +275,9 @@ fn print_summary_only(
 
         if maf > 0.05 {
             common += 1;
-        } else if maf >= 0.01 && maf <= 0.05 {
+        } else if (0.01..=0.05).contains(&maf) {
             intermediate += 1;
-        } else if maf >= 0.001 && maf < 0.01 {
+        } else if (0.001..0.01).contains(&maf) {
             rare += 1;
         } else if maf < 0.001 {
             very_rare += 1;
@@ -288,7 +288,7 @@ fn print_summary_only(
     println!("  Intermediate (1-5%): {}", intermediate);
     println!("  Rare (0.1-1%): {}", rare);
     println!("  Very rare (< 0.1%): {}", very_rare);
-    println!("");
+    println!();
 
     println!("  First 10 variants:");
     for i in 0..std::cmp::min(10, variant_ids.len()) {

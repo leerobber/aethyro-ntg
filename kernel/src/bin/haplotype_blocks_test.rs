@@ -1,5 +1,5 @@
-/// Haplotype Block Detection Test - Complete Phase A Pipeline
-/// VCF Parse → Bitsliced Genotypes → LD Computation → Haplotype Blocks
+//! Haplotype Block Detection Test - Complete Phase A Pipeline
+//! VCF Parse → Bitsliced Genotypes → LD Computation → Haplotype Blocks
 
 use ntg_kernel::genomic::{VcfParser, LdComputer, BlockDetector, compute_block_statistics};
 use std::path::Path;

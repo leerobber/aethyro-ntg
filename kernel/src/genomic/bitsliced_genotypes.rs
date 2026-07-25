@@ -1,10 +1,10 @@
-/// Bitsliced 2-bit genotype storage
-/// Genotypes: 0=ref/ref, 1=ref/alt, 2=alt/alt, 3=missing
-/// Storage: 2 bits per genotype, packed into u64 words
-///
-/// For 2504 samples: 5008 bits = 626 bytes per SNP
-/// For 4.3M SNPs: 4.3M × 626 bytes = 2.69 GB (uncompressed)
-/// After gzip: ~1 GB
+//! Bitsliced 2-bit genotype storage
+//! Genotypes: 0=ref/ref, 1=ref/alt, 2=alt/alt, 3=missing
+//! Storage: 2 bits per genotype, packed into u64 words
+//!
+//! For 2504 samples: 5008 bits = 626 bytes per SNP
+//! For 4.3M SNPs: 4.3M × 626 bytes = 2.69 GB (uncompressed)
+//! After gzip: ~1 GB
 
 use std::io::{Read, Write};
 
@@ -18,7 +18,7 @@ pub struct BitstreamGenotypes {
 impl BitstreamGenotypes {
     /// Create new bitstream for n_samples
     pub fn new(n_samples: usize) -> Self {
-        let words_per_plane = (n_samples + 31) / 32;  // 32 genotypes per u64 word
+        let words_per_plane = n_samples.div_ceil(32);  // 32 genotypes per u64 word
         BitstreamGenotypes {
             n_samples,
             plane0: vec![0; words_per_plane],
@@ -78,6 +78,11 @@ impl BitstreamGenotypes {
         self.n_samples
     }
 
+    /// Whether there are no samples
+    pub fn is_empty(&self) -> bool {
+        self.n_samples == 0
+    }
+
     /// Memory usage in bytes
     pub fn memory_bytes(&self) -> usize {
         (self.plane0.len() + self.plane1.len()) * 8
@@ -108,7 +113,7 @@ impl BitstreamGenotypes {
         reader.read_exact(&mut n_bytes)?;
         let n_samples = u32::from_le_bytes(n_bytes) as usize;
 
-        let words_per_plane = (n_samples + 31) / 32;
+        let words_per_plane = n_samples.div_ceil(32);
 
         // Read plane0
         let mut plane0 = vec![0u64; words_per_plane];

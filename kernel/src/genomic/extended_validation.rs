@@ -1,9 +1,9 @@
-/// Phase E: Extended Validation
-/// Genome-wide validation across all 22 chromosomes, multi-population
-/// reference comparison (EUR/AFR/ASN), locus-specific statistical power,
-/// recombination-rate matching, and haplotype block structure comparison.
-/// Builds on Phase D (quality_control, validation) and Phase A
-/// (haplotype_blocks, ld_compute). Pure Rust, no dependencies.
+//! Phase E: Extended Validation
+//! Genome-wide validation across all 22 chromosomes, multi-population
+//! reference comparison (EUR/AFR/ASN), locus-specific statistical power,
+//! recombination-rate matching, and haplotype block structure comparison.
+//! Builds on Phase D (quality_control, validation) and Phase A
+//! (haplotype_blocks, ld_compute). Pure Rust, no dependencies.
 
 use std::collections::{HashMap, HashSet};
 
@@ -133,7 +133,7 @@ fn snp_fst(p_a: f32, p_b: f32) -> f32 {
 
     let h_s = (2.0 * p_a * (1.0 - p_a) + 2.0 * p_b * (1.0 - p_b)) / 2.0;
 
-    ((h_t - h_s) / h_t).max(0.0).min(1.0)
+    ((h_t - h_s) / h_t).clamp(0.0, 1.0)
 }
 
 /// Recombination-rate profile between adjacent SNPs on one chromosome
@@ -233,8 +233,8 @@ impl RecombinationComparator {
         // Typical human recombination rates span ~0-3 cM/Mb; an RMSE of that
         // scale counts as "no agreement" for the RMSE half of the score.
         let rmse_score = (1.0 - (rmse / 3.0).min(1.0)).max(0.0);
-        let corr_score = pearson_r.max(0.0).min(1.0);
-        let similarity = (0.5 * rmse_score + 0.5 * corr_score).max(0.0).min(1.0);
+        let corr_score = pearson_r.clamp(0.0, 1.0);
+        let similarity = (0.5 * rmse_score + 0.5 * corr_score).clamp(0.0, 1.0);
 
         RecombinationComparison {
             n_intervals_compared: ref_values.len(),
@@ -346,9 +346,8 @@ impl HaplotypeBlockComparator {
                 / ref_stats.mean_block_size.max(syn_stats.mean_block_size).max(1.0)) as f32;
         let r2_similarity = 1.0 - (ref_stats.mean_r_squared - syn_stats.mean_r_squared).abs() as f32;
 
-        let similarity = ((count_similarity + size_similarity + r2_similarity) / 3.0)
-            .max(0.0)
-            .min(1.0);
+        let similarity =
+            ((count_similarity + size_similarity + r2_similarity) / 3.0).clamp(0.0, 1.0);
 
         HaplotypeBlockComparison {
             reference_blocks: ref_stats.total_blocks,
@@ -495,7 +494,7 @@ pub struct LocusPowerAnalyzer;
 
 impl LocusPowerAnalyzer {
     pub fn standardized_effect_size(beta: f32, maf: f32) -> f32 {
-        let maf = maf.max(0.0).min(0.5);
+        let maf = maf.clamp(0.0, 0.5);
         beta * (2.0 * maf * (1.0 - maf)).max(0.0).sqrt()
     }
 
