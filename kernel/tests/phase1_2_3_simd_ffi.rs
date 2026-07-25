@@ -65,8 +65,8 @@ fn test_simd_bit_parity_large() -> Result<(), NtgError> {
 /// Test 4: FFI matmul call
 #[test]
 fn test_ffi_matmul_call() {
-    let a = vec![1i8, -1, 0, 1];
-    let b = vec![1i8, 0, -1, 1];
+    let a = [1i8, -1, 0, 1];
+    let b = [1i8, 0, -1, 1];
     let mut out = vec![0.0f32; 4];
     let mut stats = OpStats::default();
 
@@ -103,8 +103,8 @@ fn test_ffi_matmul_call() {
 fn test_ffi_op_counter() {
     let before = ntg_get_op_count();
 
-    let a = vec![1i8; 4];
-    let b = vec![1i8; 4];
+    let a = [1i8; 4];
+    let b = [1i8; 4];
     let mut out = vec![0.0f32; 4];
 
     unsafe {
@@ -148,8 +148,8 @@ fn test_ffi_null_pointer_rejection() {
 /// Test 7: FFI rejects dimension mismatch
 #[test]
 fn test_ffi_dimension_mismatch() {
-    let a = vec![1i8; 4];
-    let b = vec![1i8; 6];
+    let a = [1i8; 4];
+    let b = [1i8; 6];
     let mut out = vec![0.0f32; 4];
 
     let result = unsafe {
