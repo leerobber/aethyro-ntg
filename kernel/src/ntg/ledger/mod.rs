@@ -29,12 +29,6 @@ use signed_entry::SignedEntry;
 use stateblots::StateSlotStore;
 use replay::ExecutionTrace;
 
-/// Escape a string for embedding as a JSON string value in the hand-built
-/// ledger entry JSON below (backslash and double-quote only; entry fields
-/// are otherwise plain ASCII/numeric).
-fn escape_json_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
 use std::collections::HashMap;
 
 /// Ledger entry covering a complete mutation cycle: proposal, evaluation, decision.
@@ -125,11 +119,16 @@ impl TamperEvidentLedger {
         let mutation_id = self.next_mutation_id;
         self.next_mutation_id += 1;
 
-        // Create the entry
+        // Create the entry. serde_json::to_string on a String cannot fail
+        // (it's always valid UTF-8), and its output already includes the
+        // surrounding quotes plus escaping for every JSON-forbidden
+        // character (not just \ and "), so it's spliced in unquoted here.
+        let desc_json = serde_json::to_string(&desc)
+            .expect("String -> JSON string serialization cannot fail");
         let entry_json = format!(
-            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{:?}","budget_ns":{},"timestamp":{}}}"#,
+            r#"{{"mutation_id":{},"description":{},"pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{:?}","budget_ns":{},"timestamp":{}}}"#,
             mutation_id,
-            escape_json_string(&desc),
+            desc_json,
             pre_fingerprint,
             post_fingerprint,
             fitness.latency_us,
@@ -340,6 +339,35 @@ mod tests {
 
         assert!(ledger.get_trace(mutation_id).is_some());
         assert!(ledger.get_trace(mutation_id + 999).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn description_control_characters_produce_valid_json() -> Result<(), NtgError> {
+        let mut ledger = TamperEvidentLedger::new(None)?;
+        let trace = ExecutionTrace::new();
+
+        ledger.log_mutation(
+            "line one\nline two\ttabbed \"quoted\" \\backslash\\",
+            0,
+            1,
+            FitnessMeasure {
+                latency_us: 5000,
+                memory_bytes: 1024,
+            },
+            MutationOutcome::Accepted,
+            100_000,
+            trace,
+            1000,
+        )?;
+
+        let entry = &ledger.entries()[0];
+        let parsed: serde_json::Value = serde_json::from_str(&entry.content)
+            .expect("ledger entry must be valid JSON even with control chars in description");
+        assert_eq!(
+            parsed["description"],
+            "line one\nline two\ttabbed \"quoted\" \\backslash\\"
+        );
         Ok(())
     }
 }
