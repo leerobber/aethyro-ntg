@@ -127,3 +127,7 @@ path = "src/bin/kairos_stage0.rs"
 [[bin]]
 name = "kairos_stage1"
 path = "src/bin/kairos_stage1.rs"
+
+[[bin]]
+name = "vitascale_demo"
+path = "src/bin/vitascale_demo.rs"

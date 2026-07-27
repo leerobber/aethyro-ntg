@@ -29,6 +29,8 @@ use signed_entry::SignedEntry;
 use stateblots::StateSlotStore;
 use replay::ExecutionTrace;
 
+pub use stateblots::StateSlot;
+
 use std::collections::HashMap;
 
 /// Ledger entry covering a complete mutation cycle: proposal, evaluation, decision.
@@ -219,6 +221,65 @@ impl TamperEvidentLedger {
 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    // -----------------------------------------------------------------------
+    // VITASCALE Phase F extensions (ADR 0010 §4.3 ledger hooks)
+    // -----------------------------------------------------------------------
+
+    /// Log a phage quarantine event to the tamper-evident chain.
+    ///
+    /// Wraps `log_mutation` with a phage-grammar description so phage events
+    /// are indistinguishable from mutation events in the chain (same integrity
+    /// guarantee). `class` should be "Load" or "Deterministic" (KD16).
+    pub fn log_phage_event(
+        &mut self,
+        agent_id: u32,
+        class: &str,
+        reason: &str,
+        timestamp: u64,
+    ) -> Result<u64, NtgError> {
+        let description = format!(
+            "phage:agent_id={},class={},reason={}",
+            agent_id, class, reason
+        );
+        self.log_mutation(
+            description,
+            0,
+            0,
+            FitnessMeasure {
+                latency_us: 0,
+                memory_bytes: 0,
+            },
+            MutationOutcome::RejectedFitnessGate,
+            0,
+            replay::ExecutionTrace::new(),
+            timestamp,
+        )
+    }
+
+    /// Append an agent StateSlot to the ledger's slot store.
+    /// Returns the slot's byte offset (1-based lineage pointer).
+    pub fn write_agent_slot(
+        &mut self,
+        slot: stateblots::StateSlot,
+    ) -> Result<usize, NtgError> {
+        self.slots.write_slot(slot)
+    }
+
+    /// Walk an agent's slot lineage (oldest-first).
+    pub fn agent_lineage(
+        &self,
+        agent_id: u32,
+    ) -> Result<Vec<stateblots::StateSlot>, NtgError> {
+        self.slots.lineage(agent_id)
+    }
+
+    /// Verify that every agent's slot lineage is internally consistent.
+    pub fn verify_agent_lineages(&self) -> Result<(), NtgError> {
+        self.slots.verify_lineage().map_err(|e| {
+            NtgError::LedgerTampering(format!("State slot lineage broken: {}", e))
+        })
     }
 }
 
