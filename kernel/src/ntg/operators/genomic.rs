@@ -194,6 +194,9 @@ impl GenomicOperator {
                     ld_matrix[j * self.num_snps + i] = 0.0;
                 }
             }
+
+            // Self-correlation is always 1.0 by definition, regardless of variance
+            ld_matrix[i * self.num_snps + i] = 1.0;
         }
 
         ld_matrix
