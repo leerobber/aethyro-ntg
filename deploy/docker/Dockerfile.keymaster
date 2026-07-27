@@ -1,0 +1,23 @@
+# NanoKeymaster Cloud Run backend — separate image from the kernel binary.
+# Build context: repo root (aethyro-ntg/)
+
+FROM rust:1.79-bookworm AS builder
+WORKDIR /build
+COPY backend/keymaster/Cargo.toml backend/keymaster/Cargo.lock* ./backend/keymaster/
+RUN mkdir -p backend/keymaster/src && echo "fn main(){}" > backend/keymaster/src/main.rs \
+ && cd backend/keymaster && cargo build --release 2>/dev/null || true \
+ && rm backend/keymaster/src/main.rs
+COPY backend/keymaster/src ./backend/keymaster/src
+RUN cd backend/keymaster && cargo build --release \
+ && strip target/release/keymaster-backend
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /build/backend/keymaster/target/release/keymaster-backend ./keymaster-backend
+ENV RUST_LOG=info
+ENV PORT=8080
+EXPOSE 8080
+CMD ["./keymaster-backend"]

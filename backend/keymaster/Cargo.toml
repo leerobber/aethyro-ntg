@@ -1,0 +1,26 @@
+[package]
+name = "keymaster-backend"
+version = "0.1.0"
+edition = "2021"
+description = "NanoKeymaster Cloud Run HTTP backend — sovereign routing arbiter"
+
+[[bin]]
+name = "keymaster-backend"
+path = "src/main.rs"
+
+[dependencies]
+axum            = { version = "0.7", features = ["json"] }
+tokio           = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tower           = { version = "0.4" }
+tower-http      = { version = "0.5", features = ["trace", "timeout"] }
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+tracing         = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid            = { version = "1", features = ["v4"] }
+sha2            = "0.10"
+hex             = "0.4"
+
+[dev-dependencies]
+axum-test       = "14"
+tokio           = { version = "1", features = ["rt", "macros"] }
