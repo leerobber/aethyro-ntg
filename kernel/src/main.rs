@@ -16,7 +16,7 @@
 //! Run:
 //!   cargo run --release --bin kernel_host
 //!   KEYMASTER_MODEL=/tmp/ntg.calib cargo run --release --bin kernel_host
-//!   echo '{"intent":"classify","payload":{"text":"fn main(){}"}}'  | cargo run --release --bin kernel_host
+//!   echo '{"intent":"classify","payload":{"text":"fn main(){}"}}' | cargo run --release --bin kernel_host
 
 use ntg_kernel::ntg::calib::{calibrate, fixture_documents, samples_from_documents, CalibModel};
 use ntg_kernel::ntg::ledger::{FitnessMeasure, MutationOutcome, TamperEvidentLedger};
@@ -357,9 +357,7 @@ fn main() {
         None => eprintln!("[keymaster] external backend: none (local-only mode)"),
     }
     eprintln!("[keymaster] accepting JSON on stdin — one object per line");
-    eprintln!(
-        r#"[keymaster] example: {{"intent":"classify","payload":{{"text":"fn main() {{}}"}}}})""
-    );
+    eprintln!("[keymaster] example: {{\"intent\":\"classify\",\"payload\":{{\"text\":\"fn main() {{}}\"}}}}");
 
     let mut km = NanoKeymaster::new(model, external_url);
 
