@@ -24,7 +24,7 @@ import time
 from contextlib import contextmanager
 from typing import Callable, Optional
 
-# ── optional torch import ──────────────────────────────────────────────────────
+# ── optional torch import ───────────────────────────────────────────────────────
 try:
     import torch
     TORCH_OK = True
@@ -37,7 +37,7 @@ try:
 except ImportError:
     NP_OK = False
 
-# ── CLI ────────────────────────────────────────────────────────────────────────
+# ── CLI ──────────────────────────────────────────────────────────────────
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="CPU vs GPU micro-benchmark")
     p.add_argument("--skip-gpu", action="store_true", help="Skip GPU benchmarks")
@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-# ── utilities ────────────────────────────────────────────────────────────────────
+# ── utilities ──────────────────────────────────────────────────────────────────────
 def sep(ch="─", n=68) -> str:
     return ch * n
 
@@ -94,7 +94,7 @@ def bench_fn(fn: Callable, warmup: int, reps: int, sync=None) -> float:
     return times[len(times) // 2]  # median
 
 
-# ── benchmark definitions ────────────────────────────────────────────────────────────────
+# ── benchmark definitions ────────────────────────────────────────────────────────────────────────────
 
 def run_matmul(device_label: str, device, sizes, reps: int, warmup: int) -> list[dict]:
     results = []
@@ -196,7 +196,7 @@ def run_numpy_matmul(sizes: list[int], reps: int, warmup: int) -> list[dict]:
     return results
 
 
-# ── printing ──────────────────────────────────────────────────────────────────────────
+# ── printing ──────────────────────────────────────────────────────────────────────────────
 
 def print_results(results: list[dict]) -> None:
     if not results:
@@ -220,7 +220,7 @@ def print_results(results: list[dict]) -> None:
         print()
 
 
-# ── main ──────────────────────────────────────────────────────────────────────────────
+# ── main ────────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     args = parse_args()
@@ -242,8 +242,6 @@ def main() -> None:
               f"{props.multi_processor_count} SMs, compute {props.major}.{props.minor})")
     else:
         print("GPU: not available" + (" (--skip-gpu set)" if args.skip_gpu else ""))
-
-    torch.set_num_threads(torch.get_num_interop_threads())
 
     reps, warmup = args.reps, args.warmup
     all_results: list[dict] = []

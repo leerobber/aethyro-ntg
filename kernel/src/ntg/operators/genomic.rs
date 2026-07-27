@@ -166,7 +166,6 @@ impl GenomicOperator {
                         !0u64
                     };
 
-                    // Valid mask: exclude missing data (11 in both planes)
                     let valid_mask = !(l_i & h_i) & !(l_j & h_j) & mask;
                     mutual_valid_count += valid_mask.count_ones() as u64;
 
@@ -175,11 +174,10 @@ impl GenomicOperator {
                     let l_j_v = l_j & valid_mask;
                     let h_j_v = h_j & valid_mask;
 
-                    // Branchless polynomial evaluation: G_ik * G_jk
-                    dot_product += (l_i_v & l_j_v).count_ones() as u64;                    // 0*0 = 0
-                    dot_product += ((l_i_v & h_j_v).count_ones() as u64) << 1;             // 0*2 = 0, 1*1 = 1
-                    dot_product += ((h_i_v & l_j_v).count_ones() as u64) << 1;             // 2*1 = 2
-                    dot_product += ((h_i_v & h_j_v).count_ones() as u64) << 2;             // 2*2 = 4
+                    dot_product += (l_i_v & l_j_v).count_ones() as u64;
+                    dot_product += ((l_i_v & h_j_v).count_ones() as u64) << 1;
+                    dot_product += ((h_i_v & l_j_v).count_ones() as u64) << 1;
+                    dot_product += ((h_i_v & h_j_v).count_ones() as u64) << 2;
                 }
 
                 let n_ij = mutual_valid_count as f64;
@@ -187,28 +185,29 @@ impl GenomicOperator {
                     let r = ((dot_product as f64 / n_ij) - (mu_i * self.means[j]))
                             / (sigma_i * self.std_devs[j]);
 
-                    // Clamp to [-1, 1]
                     let r_clamped = r.clamp(-1.0, 1.0);
 
                     ld_matrix[i * self.num_snps + j] = r_clamped;
-                    ld_matrix[j * self.num_snps + i] = r_clamped; // Symmetric
+                    ld_matrix[j * self.num_snps + i] = r_clamped;
                 } else {
                     ld_matrix[i * self.num_snps + j] = 0.0;
                     ld_matrix[j * self.num_snps + i] = 0.0;
                 }
             }
+
+            // Self-correlation is always 1.0 by definition, regardless of variance
+            ld_matrix[i * self.num_snps + i] = 1.0;
         }
 
         ld_matrix
     }
 
     /// Compute Polygenic Risk Scores (PRS)
-    /// Scores = sum of (genotype * weight) for each individual
     pub fn compute_prs(&self, weights: &[f64]) -> Vec<f64> {
         let mut prs_scores = vec![0.0; self.num_individuals];
 
         if weights.len() != self.num_snps {
-            return prs_scores; // Dimension mismatch
+            return prs_scores;
         }
 
         for (snp_idx, &weight) in weights.iter().enumerate().take(self.num_snps) {
@@ -228,7 +227,6 @@ impl GenomicOperator {
                     let l = (low_word >> bit_pos) & 1;
                     let h = (high_word >> bit_pos) & 1;
 
-                    // Skip missing data (11)
                     if !(l == 1 && h == 1) {
                         let genotype_val = l + (h << 1);
                         prs_scores[ind_idx] += (genotype_val as f64) * weight;
@@ -272,16 +270,21 @@ impl GenomicOperator {
         }
     }
 
-    fn estimate_missing_rate(&self) -> f64 {
-        let mut missing_count = 0u64;
+    /// Estimate the fraction of missing genotypes (value 3 = missing in bitsliced encoding).
+    /// Returns 0.0 for an empty operator (zero SNPs or zero individuals).
+    pub fn estimate_missing_rate(&self) -> f64 {
         let total_count = (self.num_snps * self.num_individuals) as u64;
+        if total_count == 0 {
+            return 0.0;
+        }
+        let mut missing_count = 0u64;
 
         for snp_idx in 0..self.num_snps {
             let base = snp_idx * self.words_per_snp * 2;
             for w in 0..self.words_per_snp {
                 let l = self.data[base + w];
                 let h = self.data[base + self.words_per_snp + w];
-                missing_count += (l & h).count_ones() as u64; // Count 11 bits
+                missing_count += (l & h).count_ones() as u64;
             }
         }
 
@@ -347,23 +350,21 @@ mod tests {
     fn test_prs_computation() {
         let mut op = GenomicOperator::new(100, 10);
 
-        // Set some genotypes
         for i in 0..10 {
-            op.set(i, 0, 1); // Set first individual to heterozygous
+            op.set(i, 0, 1);
         }
 
         let weights = vec![0.5; 10];
         let prs = op.compute_prs(&weights);
 
         assert_eq!(prs.len(), 100);
-        assert!(prs[0] > 0.0); // First individual should have non-zero PRS
+        assert!(prs[0] > 0.0);
     }
 
     #[test]
     fn test_statistics() {
         let mut op = GenomicOperator::new(1000, 50);
 
-        // Fill with random data
         for snp in 0..50 {
             for ind in 0..1000 {
                 op.set(snp, ind, ((snp + ind) % 3) as u8);
@@ -375,5 +376,11 @@ mod tests {
         assert_eq!(op.means.len(), 50);
         assert_eq!(op.std_devs.len(), 50);
         assert!(op.is_stats_valid);
+    }
+
+    #[test]
+    fn test_estimate_missing_rate_empty() {
+        let op = GenomicOperator::new(0, 0);
+        assert_eq!(op.estimate_missing_rate(), 0.0);
     }
 }
