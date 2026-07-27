@@ -1,0 +1,6 @@
+kernel/target/
+.git/
+deploy/
+docs/
+tests/
+*.md

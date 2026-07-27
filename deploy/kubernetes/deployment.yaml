@@ -1,0 +1,90 @@
+# KAIROS agent deployment — VITASCALE L0 tier (Super-agents).
+#
+# Runs kernel_host (NanoKeymaster + VITASCALE Crown) on GKE Autopilot.
+# Scales to 0 in dev; prod uses HPA targeting 70% CPU.
+#
+# Replace IMAGE_TAG and PROJECT_ID with CI-injected values (kustomize overlay
+# or envsubst in the CI pipeline).
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kairos-super
+  namespace: kairos
+  labels:
+    app.kubernetes.io/name: kairos-super
+    app.kubernetes.io/component: super-agent
+    aethyro.io/tier: super
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kairos-super
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kairos-super
+        app.kubernetes.io/component: super-agent
+        aethyro.io/tier: super
+    spec:
+      serviceAccountName: kairos-sa
+
+      # Single-threaded L0 — no CPU contention needed
+      containers:
+        - name: kernel-host
+          image: us-central1-docker.pkg.dev/PROJECT_ID/ntg-kernel/ntg-kernel:IMAGE_TAG
+          command: ["./kernel_host"]
+
+          envFrom:
+            - configMapRef:
+                name: kairos-config
+
+          env:
+            - name: KEYMASTER_BACKEND_URL
+              valueFrom:
+                secretKeyRef:
+                  name: keymaster-secrets
+                  key: backend-url
+                  optional: true
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop: ["ALL"]
+
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+
+      terminationGracePeriodSeconds: 30

@@ -1,0 +1,53 @@
+# NanoKeymaster Cloud Run service descriptor.
+#
+# This is a reference spec — the Terraform resource in deploy/terraform/main.tf
+# is the authoritative IaC definition. Use this file for:
+#   - Local gcloud runs:  gcloud run services replace service.yaml
+#   - Manual inspection / diff against live state
+#
+# Replace PROJECT_ID, REGION, IMAGE_TAG before applying directly.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: keymaster-dev
+  namespace: PROJECT_ID
+  annotations:
+    run.googleapis.com/ingress: internal
+    run.googleapis.com/launch-stage: BETA
+labels:
+  app.kubernetes.io/name: keymaster
+  app.kubernetes.io/component: routing-agent
+  aethyro.io/tier: keymaster
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      serviceAccountName: keymaster-run@PROJECT_ID.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 30
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/ntg-kernel/ntg-kernel:IMAGE_TAG
+          command: ["./kernel_host"]
+
+          env:
+            - name: RUST_LOG
+              value: info
+            - name: KEYMASTER_BACKEND_URL
+              valueFrom:
+                secretKeyRef:
+                  name: keymaster-backend-url
+                  key: latest
+
+          ports:
+            - name: h2c
+              containerPort: 8080
+
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi

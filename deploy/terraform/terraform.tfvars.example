@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in before running terraform apply.
+# Never commit terraform.tfvars — it contains your project ID.
+
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+environment = "dev"
+image_tag   = "latest"

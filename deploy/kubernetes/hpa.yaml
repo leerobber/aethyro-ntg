@@ -1,0 +1,28 @@
+# Horizontal Pod Autoscaler — production only (dev keeps replicas=1).
+# Apply with: kubectl apply -f hpa.yaml --context=<prod-context>
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kairos-super
+  namespace: kairos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: kairos-super
+  minReplicas: 1
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
