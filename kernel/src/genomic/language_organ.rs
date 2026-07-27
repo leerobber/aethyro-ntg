@@ -225,7 +225,7 @@ impl LanguageOrgan {
                 scored.push((id, score));
             }
         }
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.sort_by_key(|b| std::cmp::Reverse(b.1));
         self.last_active_nodes = scored
             .into_iter()
             .take(budget.max(1))

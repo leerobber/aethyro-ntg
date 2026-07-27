@@ -1,14 +1,14 @@
-/// Phase C: Synthetic Genome Synthesis & Evolution
-/// Complete pipeline: real chromosome brain -> Synthesis -> Evolution -> Phenotype Prediction
-/// Pure Rust implementation
-///
-/// Usage: cargo run --release --bin phase_c_synthesis [-- <max_variants>]
-/// Builds a real ChromosomeBrain from data/raw/1000g chr1 (optionally
-/// capped to a leading slice of variants) and synthesizes a population
-/// via haplotype-block resampling: real per-locus allele frequencies AND
-/// real within-block LD, both from actual observed haplotypes (real VCFs
-/// are phased) instead of independent per-locus draws at an assumed
-/// frequency. See genomic::synthesis module doc for the mechanism.
+//! Phase C: Synthetic Genome Synthesis & Evolution
+//! Complete pipeline: real chromosome brain -> Synthesis -> Evolution -> Phenotype Prediction
+//! Pure Rust implementation
+//!
+//! Usage: cargo run --release --bin phase_c_synthesis [-- <max_variants>]
+//! Builds a real ChromosomeBrain from data/raw/1000g chr1 (optionally
+//! capped to a leading slice of variants) and synthesizes a population
+//! via haplotype-block resampling: real per-locus allele frequencies AND
+//! real within-block LD, both from actual observed haplotypes (real VCFs
+//! are phased) instead of independent per-locus draws at an assumed
+//! frequency. See genomic::synthesis module doc for the mechanism.
 
 use ntg_kernel::genomic::{
     BlockDetector, ChromosomeId, DefaultFitnessModel, Environment, EvolutionSim, GenomeSampler,

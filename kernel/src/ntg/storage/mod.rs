@@ -26,7 +26,7 @@ pub use packed_ternary::PackedTernary;
 pub use sparse_bit_sliced_ternary::{
     BitSlicedBlock, SparseBitSlicedTernary, COMPACT_THRESHOLD,
 };
-pub use tobl_kernel::{tobl_dot_product, ToблKernelPath};
+pub use tobl_kernel::{tobl_dot_product, ToblKernelPath};
 
 #[cfg(test)]
 mod tests {

@@ -16,7 +16,7 @@ fn accelerated_transcription(signal: f32) -> f32 {
     if signal.is_nan() {
         0.0
     } else {
-        signal * 1.4142
+        signal * std::f32::consts::SQRT_2
     }
 }
 
@@ -27,7 +27,7 @@ fn regressed_transcription(signal: f32) -> f32 {
 }
 
 fn target_transcription(signal: f32) -> f32 {
-    signal * 1.4142 // what "good" looks like, for benchmark scoring
+    signal * std::f32::consts::SQRT_2 // what "good" looks like, for benchmark scoring
 }
 
 fn baseline_recombination(signal: f32) -> f32 {

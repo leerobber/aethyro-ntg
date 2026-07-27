@@ -1,6 +1,6 @@
-/// Phase B: Chromosome Agents
-/// Local intelligence handlers for genome queries and decisions
-/// Agents operate on chromosome brains and coordinate multi-brain responses
+//! Phase B: Chromosome Agents
+//! Local intelligence handlers for genome queries and decisions
+//! Agents operate on chromosome brains and coordinate multi-brain responses
 
 use crate::genomic::chromosome_brain::{ChromosomeBrain, ChromosomeId};
 use std::collections::HashMap;

@@ -152,14 +152,10 @@ pub fn features_from_label(label: &str) -> Vec<i8> {
     let indent_code = looks_like_indented_code(label);
     let line_shape = code_line_shape(label);
     // Pack into 63: prefer indent, then multi-line length shape.
-    feat[63] = if indent_code {
+    feat[63] = if indent_code || line_shape {
         1
-    } else if line_shape {
-        1
-    } else if label.len() < 8 {
-        -1
-    } else if !label.contains('\n') && label.len() < 48 {
-        -1 // short single-line prose / heading
+    } else if label.len() < 8 || (!label.contains('\n') && label.len() < 48) {
+        -1 // very short, or short single-line prose / heading
     } else {
         0
     };
@@ -461,7 +457,7 @@ fn train_balanced(train: &[Sample], epochs: usize, threshold: i64) -> Vec<i8> {
 
     let n_pos = train.iter().filter(|s| s.is_execution).count().max(1);
     let n_neg = train.iter().filter(|s| !s.is_execution).count().max(1);
-    let pos_repeats = (n_neg / n_pos).max(1).min(48);
+    let pos_repeats = (n_neg / n_pos).clamp(1, 48);
 
     for epoch in 0..epochs {
         let order = balanced_epoch_order(train, epoch as u64 + 1);
@@ -472,10 +468,10 @@ fn train_balanced(train: &[Sample], epochs: usize, threshold: i64) -> Vec<i8> {
                 let y: i32 = if s.is_execution { 1 } else { -1 };
                 let reps = if s.is_execution { pos_repeats } else { 1 };
                 for _ in 0..reps {
-                    for i in 0..FEATURE_DIM {
-                        let x = s.features[i] as i32;
-                        let w = weights[i] as i32;
-                        weights[i] = clamp_ternary(w + y * x);
+                    for (w, &x) in weights.iter_mut().zip(s.features.iter()).take(FEATURE_DIM) {
+                        let x = x as i32;
+                        let w_val = *w as i32;
+                        *w = clamp_ternary(w_val + y * x);
                     }
                 }
                 // Keep code cues pinned positive (stable prior under imbalance).
@@ -775,10 +771,12 @@ pub fn optional_self_mod_probe(
         });
     }
 
-    let mut config = SelfModConfig::default();
-    config.enabled = true;
-    config.cycle_budget_us = 5_000_000; // 5ms budget for probe
-    config.max_mutations_per_cycle = 1;
+    let config = SelfModConfig {
+        enabled: true,
+        cycle_budget_us: 5_000_000, // 5ms budget for probe
+        max_mutations_per_cycle: 1,
+        ..Default::default()
+    };
 
     // Baseline fitness: use fingerprint cost proxy + node count
     let pre_fp = graph.fingerprint().unwrap_or(0);
@@ -1105,7 +1103,7 @@ pub fn batch_predict_parallel(model: &CalibModel, labels: &[&str]) -> Vec<bool> 
         .unwrap_or(4)
         .min(n)
         .max(1);
-    let chunk = (n + workers - 1) / workers;
+    let chunk = n.div_ceil(workers);
     let mut out = vec![false; n];
     thread::scope(|scope| {
         for (chunk_i, out_chunk) in out.chunks_mut(chunk).enumerate() {
@@ -1133,7 +1131,7 @@ pub fn batch_score_parallel(model: &CalibModel, labels: &[&str]) -> Vec<i64> {
         .unwrap_or(4)
         .min(n)
         .max(1);
-    let chunk = (n + workers - 1) / workers;
+    let chunk = n.div_ceil(workers);
     let mut out = vec![0i64; n];
     thread::scope(|scope| {
         for (chunk_i, out_chunk) in out.chunks_mut(chunk).enumerate() {

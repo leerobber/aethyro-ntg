@@ -711,7 +711,7 @@ mod tests {
                 .collect()
         };
         for pos in positions {
-            assert!(pos >= 2000 && pos <= 8000);
+            assert!((2000..=8000).contains(&pos));
         }
     }
 

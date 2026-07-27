@@ -61,19 +61,37 @@ impl SignedEntry {
     /// Extract the mutation outcome from the entry's JSON content.
     /// (Helper for audit_summary and other queries.)
     pub fn get_outcome(&self) -> Result<super::MutationOutcome, NtgError> {
-        if self.content.contains("Accepted") {
+        let field = self.outcome_field()?;
+        if field == "Accepted" {
             Ok(super::MutationOutcome::Accepted)
-        } else if self.content.contains("RejectedRegression") {
+        } else if field == "RejectedRegression" {
             Ok(super::MutationOutcome::RejectedRegression)
-        } else if self.content.contains("RejectedBudgetExceeded") {
+        } else if field == "RejectedBudgetExceeded" {
             Ok(super::MutationOutcome::RejectedBudgetExceeded)
-        } else if self.content.contains("RejectedFitnessGate") {
+        } else if field == "RejectedFitnessGate" {
             Ok(super::MutationOutcome::RejectedFitnessGate)
         } else {
             Err(NtgError::InvalidInput(
                 "Unknown outcome in entry".to_string(),
             ))
         }
+    }
+
+    /// Extract the raw value of the `"outcome"` JSON field, ignoring any
+    /// other field (e.g. free-text `description`) that might happen to
+    /// contain one of the outcome variant names as a substring.
+    fn outcome_field(&self) -> Result<&str, NtgError> {
+        let key = "\"outcome\":\"";
+        let start = self
+            .content
+            .find(key)
+            .ok_or_else(|| NtgError::InvalidInput("Unknown outcome in entry".to_string()))?
+            + key.len();
+        let rest = &self.content[start..];
+        let end = rest
+            .find('"')
+            .ok_or_else(|| NtgError::InvalidInput("Unknown outcome in entry".to_string()))?;
+        Ok(&rest[..end])
     }
 }
 
@@ -132,6 +150,22 @@ mod tests {
     #[test]
     fn extract_outcome_rejection() -> Result<(), NtgError> {
         let entry = SignedEntry::new(r#"{"outcome":"RejectedRegression"}"#, 0, 1000)?;
+        assert_eq!(
+            entry.get_outcome()?,
+            super::super::MutationOutcome::RejectedRegression
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn extract_outcome_ignores_mentions_in_description() -> Result<(), NtgError> {
+        // The description field mentions "Accepted" as free text; only the
+        // actual "outcome" field value should determine the classification.
+        let entry = SignedEntry::new(
+            r#"{"description":"previously Accepted before rollback","outcome":"RejectedRegression"}"#,
+            0,
+            1000,
+        )?;
         assert_eq!(
             entry.get_outcome()?,
             super::super::MutationOutcome::RejectedRegression

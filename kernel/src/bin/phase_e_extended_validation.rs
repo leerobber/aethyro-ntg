@@ -1,26 +1,26 @@
-/// Phase E: Extended Validation
-/// Genome-wide validation across the real chromosomes available in
-/// data/raw (chr1, chr2, chr3, chr22 -- not the full 22-autosome set),
-/// multi-population reference comparison, and locus-specific statistical
-/// power computed from real per-locus allele frequencies.
-/// Pure Rust implementation
-///
-/// Usage: cargo run --release --bin phase_e_extended_validation [-- <max_variants>]
-///
-/// Real-data honesty notes:
-/// - Genome-wide validation and locus power are built from real VCF data
-///   via build_real_chromosome (VCF -> LD -> brain -> Phase C synthesis
-///   via haplotype-block resampling, preserving real within-block LD),
-///   the same pipeline Phase D uses.
-/// - Only 4 of the 22 human autosomes have VCFs in data/raw, so
-///   `is_complete_autosome_set` will correctly report false.
-/// - Multi-population (EUR/AFR/ASN) comparison remains a labeled SYNTHETIC
-///   PROXY: data/raw has no per-sample population panel file, only pooled
-///   "ALL" 1000G genotypes, so there is no real ancestry label to split
-///   samples by. Faking a population split would be worse than not having
-///   one -- this is flagged in every place the proxy numbers are printed.
-/// - Recombination-rate matching also remains a synthetic proxy: no real
-///   genetic map file is present in data/raw either.
+//! Phase E: Extended Validation
+//! Genome-wide validation across the real chromosomes available in
+//! data/raw (chr1, chr2, chr3, chr22 -- not the full 22-autosome set),
+//! multi-population reference comparison, and locus-specific statistical
+//! power computed from real per-locus allele frequencies.
+//! Pure Rust implementation
+//!
+//! Usage: cargo run --release --bin phase_e_extended_validation [-- <max_variants>]
+//!
+//! Real-data honesty notes:
+//! - Genome-wide validation and locus power are built from real VCF data
+//!   via build_real_chromosome (VCF -> LD -> brain -> Phase C synthesis
+//!   via haplotype-block resampling, preserving real within-block LD),
+//!   the same pipeline Phase D uses.
+//! - Only 4 of the 22 human autosomes have VCFs in data/raw, so
+//!   `is_complete_autosome_set` will correctly report false.
+//! - Multi-population (EUR/AFR/ASN) comparison remains a labeled SYNTHETIC
+//!   PROXY: data/raw has no per-sample population panel file, only pooled
+//!   "ALL" 1000G genotypes, so there is no real ancestry label to split
+//!   samples by. Faking a population split would be worse than not having
+//!   one -- this is flagged in every place the proxy numbers are printed.
+//! - Recombination-rate matching also remains a synthetic proxy: no real
+//!   genetic map file is present in data/raw either.
 
 use ntg_kernel::genomic::{
     build_real_chromosome, snp_key, ChromosomeValidation, ExtendedValidationReport,
@@ -46,7 +46,7 @@ fn vcf_path(chr: u8) -> String {
 
 fn proxy_freq(chr: u8, snp_idx: usize, drift: f32) -> f32 {
     let base = ((chr as f32 * 7.0 + snp_idx as f32 * 3.0).sin() + 1.0) / 2.0;
-    (0.05 + base * 0.9 + drift).max(0.02).min(0.98)
+    (0.05 + base * 0.9 + drift).clamp(0.02, 0.98)
 }
 
 fn proxy_reference(chr: u8, n_samples: usize, population_drift: f32) -> ReferenceGenome {

@@ -1,6 +1,6 @@
-/// Phase B: Chromosome Brain Architecture
-/// Initializes neurons from SNPs, synapses from LD pairs, embeddings from blocks
-/// Ready for KAIROS training and multi-brain coordination
+//! Phase B: Chromosome Brain Architecture
+//! Initializes neurons from SNPs, synapses from LD pairs, embeddings from blocks
+//! Ready for KAIROS training and multi-brain coordination
 
 use crate::genomic::{BitstreamGenotypes, LdPair, HaplotypeBlock, SnpRecord};
 use std::collections::HashMap;
@@ -225,7 +225,7 @@ impl ChromosomeBrain {
         for syn in &mut self.synapses {
             let target_weight = syn.ld_r2; // LD strength is learning target
             let delta = syn.plasticity * (target_weight - syn.weight);
-            syn.weight = (syn.weight + delta).max(0.0).min(1.0);
+            syn.weight = (syn.weight + delta).clamp(0.0, 1.0);
             weight_delta_sum += delta.abs();
             if delta.abs() > 1e-4 {
                 self.kairos_state.weight_updates += 1;
@@ -326,7 +326,7 @@ impl ChromosomeBrain {
             n_neurons: self.neurons.len() as u32,
             n_synapses: self.synapses.len() as u32,
             n_blocks: self.blocks.len() as u32,
-            total_ld: total_ld,
+            total_ld,
             avg_weight,
             training_cycles: self.training_cycles,
             convergence: self.kairos_state.convergence_score,

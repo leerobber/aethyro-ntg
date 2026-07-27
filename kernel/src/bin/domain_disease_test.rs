@@ -1,11 +1,11 @@
-/// Domain-Agnostic Disease Detection Test
-/// Demonstrates risk assessment across 6 disease domains:
-/// 1. Genomic (SNPs → disease)
-/// 2. Code Quality (anti-patterns, complexity)
-/// 3. Malware (virus, trojan signatures)
-/// 4. Injection Risk (SQL injection, XSS, prompt injection)
-/// 5. Supply Chain (dependency poisoning)
-/// 6. Cryptographic (weak algorithms)
+//! Domain-Agnostic Disease Detection Test
+//! Demonstrates risk assessment across 6 disease domains:
+//! 1. Genomic (SNPs → disease)
+//! 2. Code Quality (anti-patterns, complexity)
+//! 3. Malware (virus, trojan signatures)
+//! 4. Injection Risk (SQL injection, XSS, prompt injection)
+//! 5. Supply Chain (dependency poisoning)
+//! 6. Cryptographic (weak algorithms)
 
 use ntg_kernel::genomic::{
     DomainAgent, DomainType, DomainQuery, RiskSeverity,
@@ -35,12 +35,12 @@ fn main() {
 
     // Create agents for each disease domain
     println!("\n[Initializing Domain Agents]");
-    let mut genomic_agent = DomainAgent::new(brain.clone(), DomainType::Genomic);
-    let mut code_agent = DomainAgent::new(brain.clone(), DomainType::CodeQuality);
-    let mut malware_agent = DomainAgent::new(brain.clone(), DomainType::Malware);
-    let mut injection_agent = DomainAgent::new(brain.clone(), DomainType::InjectionRisk);
-    let mut supply_agent = DomainAgent::new(brain.clone(), DomainType::SupplyChain);
-    let mut crypto_agent = DomainAgent::new(brain.clone(), DomainType::Cryptographic);
+    let genomic_agent = DomainAgent::new(brain.clone(), DomainType::Genomic);
+    let code_agent = DomainAgent::new(brain.clone(), DomainType::CodeQuality);
+    let malware_agent = DomainAgent::new(brain.clone(), DomainType::Malware);
+    let injection_agent = DomainAgent::new(brain.clone(), DomainType::InjectionRisk);
+    let supply_agent = DomainAgent::new(brain.clone(), DomainType::SupplyChain);
+    let crypto_agent = DomainAgent::new(brain.clone(), DomainType::Cryptographic);
 
     println!("✓ Genomic Agent");
     println!("✓ Code Quality Agent");

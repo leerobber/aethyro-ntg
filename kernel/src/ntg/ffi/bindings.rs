@@ -4,21 +4,21 @@
 //! are defined in mod.rs with #[no_mangle] pub extern "C".
 //!
 //! C header equivalent is in kernel/include/ntg.h.
-
-/// FFI Safety Contract
-///
-/// All FFI functions assume caller is responsible for:
-/// 1. Pointer validity (not null, properly aligned)
-/// 2. Buffer sizing (a: m*k, b: k*n, out: m*n)
-/// 3. Dimension consistency
-///
-/// Violations result in -1 (EINVAL) return code.
-///
-/// Thread Safety: Each FFI call is independent and thread-safe.
-/// OpStats are thread-local and safe to pass between threads.
-///
-/// Memory Management: Output buffer (out) is caller-allocated.
-/// No dynamic allocation happens inside FFI functions.
+//!
+//! # FFI Safety Contract
+//!
+//! All FFI functions assume caller is responsible for:
+//! 1. Pointer validity (not null, properly aligned)
+//! 2. Buffer sizing (a: m*k, b: k*n, out: m*n)
+//! 3. Dimension consistency
+//!
+//! Violations result in -1 (EINVAL) return code.
+//!
+//! Thread Safety: Each FFI call is independent and thread-safe.
+//! OpStats are thread-local and safe to pass between threads.
+//!
+//! Memory Management: Output buffer (out) is caller-allocated.
+//! No dynamic allocation happens inside FFI functions.
 
 pub mod error_codes {
     /// Success

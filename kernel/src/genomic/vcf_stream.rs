@@ -1,8 +1,8 @@
-/// VCF Streaming Parser
-/// Handles gzipped (BGZF multi-member) VCF files with streaming genotype
-/// encoding. Measured on real 1000 Genomes chr1-3/22 VCFs (2504 samples):
-/// ~14K variants/sec parsing; LD computation downstream is the actual
-/// bottleneck at ~500 SNPs/sec (sliding-window r² over 2504 samples/SNP).
+//! VCF Streaming Parser
+//! Handles gzipped (BGZF multi-member) VCF files with streaming genotype
+//! encoding. Measured on real 1000 Genomes chr1-3/22 VCFs (2504 samples):
+//! ~14K variants/sec parsing; LD computation downstream is the actual
+//! bottleneck at ~500 SNPs/sec (sliding-window r² over 2504 samples/SNP).
 
 use std::io::{BufRead, BufReader};
 use flate2::read::MultiGzDecoder;
@@ -292,7 +292,7 @@ impl VcfParser {
             return 3;  // Missing
         }
 
-        let parts: Vec<&str> = gt_str.split(|c| c == '/' || c == '|').collect();
+        let parts: Vec<&str> = gt_str.split(['/', '|']).collect();
         if parts.len() < 2 {
             return 3;  // Missing
         }
@@ -325,7 +325,7 @@ impl VcfParser {
             return (3, 3);
         }
 
-        let parts: Vec<&str> = gt_str.split(|c| c == '/' || c == '|').collect();
+        let parts: Vec<&str> = gt_str.split(['/', '|']).collect();
         if parts.len() < 2 {
             return (3, 3);
         }

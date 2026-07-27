@@ -1,28 +1,29 @@
-/// Phase C: Synthetic Genome Synthesis
-///
-/// Two sampling modes:
-/// - Independent per-locus (the original approach, still the fallback):
-///   each SNP drawn under Hardy-Weinberg at its own real allele frequency
-///   (via `from_brain`), with no cross-locus correlation. Matches a real
-///   reference's allele frequencies but not its LD pattern -- Phase D's
-///   real-vs-synthetic validation surfaced this directly (allele-frequency
-///   RMSE small, LD correlation near zero).
-/// - Haplotype-block-based (`from_brain_with_haplotypes`, using
-///   `HaplotypePool`): real 1000 Genomes VCFs are phased ("0|1", not
-///   "0/1" -- see `VcfParser::parse_vcf_phased_limited`), so for each
-///   `HaplotypeBlock` we can extract the *actual* observed haplotype
-///   fragments real samples carry across that block's SNPs, and
-///   synthesize new individuals by drawing two real fragments (with
-///   replacement) per block, the same way a real diploid genome is two
-///   inherited chromosome copies. This preserves real within-block LD by
-///   construction, because it isn't modeling LD from summary statistics
-///   at all -- it's recombining real co-inherited fragments. SNPs not
-///   covered by any block (or when no phased data was supplied) still
-///   fall back to independent per-locus sampling. Cross-block LD is not
-///   modeled either way; blocks are themselves defined as maximal
-///   LD-connected components, so that's a reasonable simplification, not
-///   an omission of anything the block structure itself would capture.
-/// Pure Rust implementation
+//! Phase C: Synthetic Genome Synthesis
+//!
+//! Two sampling modes:
+//! - Independent per-locus (the original approach, still the fallback):
+//!   each SNP drawn under Hardy-Weinberg at its own real allele frequency
+//!   (via `from_brain`), with no cross-locus correlation. Matches a real
+//!   reference's allele frequencies but not its LD pattern -- Phase D's
+//!   real-vs-synthetic validation surfaced this directly (allele-frequency
+//!   RMSE small, LD correlation near zero).
+//! - Haplotype-block-based (`from_brain_with_haplotypes`, using
+//!   `HaplotypePool`): real 1000 Genomes VCFs are phased ("0|1", not
+//!   "0/1" -- see `VcfParser::parse_vcf_phased_limited`), so for each
+//!   `HaplotypeBlock` we can extract the *actual* observed haplotype
+//!   fragments real samples carry across that block's SNPs, and
+//!   synthesize new individuals by drawing two real fragments (with
+//!   replacement) per block, the same way a real diploid genome is two
+//!   inherited chromosome copies. This preserves real within-block LD by
+//!   construction, because it isn't modeling LD from summary statistics
+//!   at all -- it's recombining real co-inherited fragments. SNPs not
+//!   covered by any block (or when no phased data was supplied) still
+//!   fall back to independent per-locus sampling. Cross-block LD is not
+//!   modeled either way; blocks are themselves defined as maximal
+//!   LD-connected components, so that's a reasonable simplification, not
+//!   an omission of anything the block structure itself would capture.
+//!
+//! Pure Rust implementation
 
 use crate::genomic::bitsliced_genotypes::BitstreamGenotypes;
 use crate::genomic::chromosome_brain::ChromosomeBrain;
@@ -216,7 +217,7 @@ impl Genome {
         let den = ((valid_count * sum_x2 - sum_x * sum_x) * (valid_count * sum_y2 - sum_y * sum_y)).sqrt();
 
         if den > 0.0 {
-            (((num / den) * (num / den)) as f32).max(0.0).min(1.0)
+            (((num / den) * (num / den)) as f32).clamp(0.0, 1.0)
         } else {
             0.0
         }
@@ -460,8 +461,8 @@ impl GenomeSampler {
         // Independent per-locus fallback for everything a pool didn't
         // cover (no phased data supplied, or a singleton SNP outside any
         // block).
-        for snp_idx in 0..self.n_snps {
-            if covered[snp_idx] {
+        for (snp_idx, &is_covered) in covered.iter().enumerate().take(self.n_snps) {
+            if is_covered {
                 continue;
             }
             let allele_freq = self.allele_freq_for(snp_idx);

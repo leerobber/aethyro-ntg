@@ -68,7 +68,7 @@ impl AccelDevice {
         activations: &SparseBitSlicedTernary,
         threshold: i64,
     ) -> Result<SparseBitSlicedTernary, NtgError> {
-        if weights.len() != activations.len() && weights.len() != 0 && activations.len() != 0 {
+        if weights.len() != activations.len() && !weights.is_empty() && !activations.is_empty() {
             // Allow zero-len empty tensors through; otherwise require match.
             // Sparse matmul itself only asserts in debug; enforce in release too.
             if weights.len() != activations.len() {

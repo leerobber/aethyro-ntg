@@ -1,5 +1,5 @@
-/// VCF Stream Testing Binary
-/// Parse real 1000G VCF data and validate output
+//! VCF Stream Testing Binary
+//! Parse real 1000G VCF data and validate output
 
 use ntg_kernel::genomic::VcfParser;
 use std::path::Path;

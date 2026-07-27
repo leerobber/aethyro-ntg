@@ -1,5 +1,5 @@
-/// Chromosome Brain Test - Phase B Validation
-/// Test: VCF → Genotypes → LD → Blocks → ChomosomeBrain → KAIROS Training → Agents
+//! Chromosome Brain Test - Phase B Validation
+//! Test: VCF → Genotypes → LD → Blocks → ChomosomeBrain → KAIROS Training → Agents
 
 use ntg_kernel::genomic::{
     VcfParser, LdComputer, BlockDetector, ChromosomeId,
@@ -153,7 +153,7 @@ fn main() {
         println!("\n[Agent Queries]");
 
         // Query 1: Disease Risk
-        if chromosome.snps.len() > 0 {
+        if !chromosome.snps.is_empty() {
             let query = AgentQuery::DiseaseRisk {
                 snp_indices: vec![0],
             };

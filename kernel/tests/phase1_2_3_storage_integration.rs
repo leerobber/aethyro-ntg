@@ -7,7 +7,7 @@
 //! - OpStats observability
 
 use ntg_kernel::ntg::{
-    storage::{PackedTernary, tobl_dot_product, ToблKernelPath},
+    storage::{PackedTernary, tobl_dot_product, ToblKernelPath},
     ffi::tobl_ffi::*,
     ledger::{
         FitnessMeasure, MutationOutcome, TamperEvidentLedger,
@@ -59,7 +59,7 @@ fn test_tobl_dot_scalar() -> Result<(), NtgError> {
     a.set_from_slice(&[1i8, -1, 0, 1, 0, 1, -1, 0, 1, -1])?;
     b.set_from_slice(&[1i8, 1, 0, -1, 0, 1, 1, 0, 1, 1])?;
 
-    let (result, _cycles) = tobl_dot_product(&a, &b, Some(ToблKernelPath::Scalar))?;
+    let (result, _cycles) = tobl_dot_product(&a, &b, Some(ToblKernelPath::Scalar))?;
 
     // Manual calculation:
     // 1*1=1, -1*1=-1, 0*0=0, 1*(-1)=-1, 0*0=0, 1*1=1, -1*1=-1, 0*0=0, 1*1=1, -1*1=-1
@@ -82,7 +82,7 @@ fn test_tobl_kernel_selection() -> Result<(), NtgError> {
     let (result_auto, cycles_auto) = tobl_dot_product(&a, &b, None)?;
 
     // Force scalar
-    let (result_scalar, _cycles_scalar) = tobl_dot_product(&a, &b, Some(ToблKernelPath::Scalar))?;
+    let (result_scalar, _cycles_scalar) = tobl_dot_product(&a, &b, Some(ToblKernelPath::Scalar))?;
 
     // Results must match (even if timing differs)
     assert_eq!(result_auto, result_scalar);

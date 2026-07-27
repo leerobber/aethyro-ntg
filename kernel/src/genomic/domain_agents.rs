@@ -1,6 +1,6 @@
-/// Domain-Agnostic Agent System
-/// Handles genomic diseases, code diseases, data diseases, malware, poisonous injections, etc.
-/// Architecture: Patterns + Connectivity + Blocks → Risk Scores
+//! Domain-Agnostic Agent System
+//! Handles genomic diseases, code diseases, data diseases, malware, poisonous injections, etc.
+//! Architecture: Patterns + Connectivity + Blocks → Risk Scores
 
 use crate::genomic::chromosome_brain::{ChromosomeBrain, NeuronId};
 use std::collections::HashMap;

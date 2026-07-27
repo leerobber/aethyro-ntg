@@ -18,7 +18,7 @@ fn accelerated_transcription(signal: f32) -> f32 {
     if signal.is_nan() {
         0.0
     } else {
-        signal * 1.4142
+        signal * std::f32::consts::SQRT_2
     }
 }
 
@@ -65,7 +65,7 @@ fn main() {
                 // Sanity check: output must correspond to exactly one of
                 // the known strategies, never a garbage/torn value.
                 let is_baseline = (out - input * 1.05).abs() < 1e-4;
-                let is_mutated = (out - input * 1.4142).abs() < 1e-4;
+                let is_mutated = (out - input * std::f32::consts::SQRT_2).abs() < 1e-4;
                 assert!(is_baseline || is_mutated, "reader {id} saw torn output: {out}");
                 thread::sleep(Duration::from_micros(50));
             }

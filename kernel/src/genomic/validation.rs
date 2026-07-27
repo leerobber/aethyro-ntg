@@ -1,6 +1,6 @@
-/// Phase D: Validation — Compare Synthetic vs Real Genomes
-/// Statistical power analysis and distribution matching
-/// Pure Rust implementation
+//! Phase D: Validation — Compare Synthetic vs Real Genomes
+//! Statistical power analysis and distribution matching
+//! Pure Rust implementation
 
 use std::collections::HashMap;
 
@@ -199,9 +199,9 @@ impl GenomeComparator {
             allele_freq_score = (0.1 / (allele_freq_rmse + 0.01)).min(1.0);
         }
 
-        let ld_score = ld_pearson_r.abs().max(0.0).min(1.0);
+        let ld_score = ld_pearson_r.abs().clamp(0.0, 1.0);
 
-        let overall_similarity = (0.6 * allele_freq_score + 0.4 * ld_score).max(0.0).min(1.0);
+        let overall_similarity = (0.6 * allele_freq_score + 0.4 * ld_score).clamp(0.0, 1.0);
 
         ValidationResults {
             ref_population: reference.population.clone(),
@@ -235,7 +235,7 @@ impl PowerAnalysis {
         let z_alpha = inverse_normal_cdf(1.0 - alpha);
         let power = 1.0 - normal_cdf(z_alpha - lambda.sqrt());
 
-        power.max(0.0).min(1.0)
+        power.clamp(0.0, 1.0)
     }
 
     /// Minimum sample size needed for given power
@@ -256,10 +256,10 @@ fn normal_cdf(x: f32) -> f32 {
 /// Inverse normal CDF (quantile function)
 fn inverse_normal_cdf(p: f32) -> f32 {
     if p <= 0.0 {
-        return std::f32::NEG_INFINITY;
+        return f32::NEG_INFINITY;
     }
     if p >= 1.0 {
-        return std::f32::INFINITY;
+        return f32::INFINITY;
     }
 
     let p_low = if p < 0.5 { p } else { 1.0 - p };
@@ -286,11 +286,11 @@ fn inverse_normal_cdf(p: f32) -> f32 {
 
 /// Error function
 fn error_function(x: f32) -> f32 {
-    let a1 = 0.254829592;
-    let a2 = -0.284496736;
-    let a3 = 1.421413741;
-    let a4 = -1.453152027;
-    let a5 = 1.061405429;
+    let a1 = 0.254_829_6;
+    let a2 = -0.284_496_72;
+    let a3 = 1.421_413_8;
+    let a4 = -1.453_152_1;
+    let a5 = 1.061_405_4;
     let p = 0.3275911;
 
     let sign = if x >= 0.0 { 1.0 } else { -1.0 };

@@ -1,6 +1,6 @@
-/// Phase D: Quality Control — Statistical Validation
-/// Compare synthetic genomes to real 1000 Genomes data
-/// Pure Rust, no dependencies
+//! Phase D: Quality Control — Statistical Validation
+//! Compare synthetic genomes to real 1000 Genomes data
+//! Pure Rust, no dependencies
 
 /// Statistics for a single locus
 #[derive(Clone, Debug)]
@@ -97,7 +97,7 @@ impl QCMetrics {
             hwe_violations,
             low_maf_count,
             mean_ld_r2,
-            quality_score: quality_score.max(0.0).min(1.0),
+            quality_score: quality_score.clamp(0.0, 1.0),
         }
     }
 }
@@ -197,7 +197,7 @@ impl GenomeValidator {
             return 0.0;
         }
 
-        (var_d / (2.0 * 2.0)).max(0.0).min(1.0)
+        (var_d / (2.0 * 2.0)).clamp(0.0, 1.0)
     }
 
     /// Generate QC report
@@ -229,11 +229,11 @@ fn chi_sq_to_p_value(chi_sq: f32) -> f32 {
 
 /// Error function approximation
 fn erf_approx(x: f32) -> f32 {
-    let a1 = 0.254829592;
-    let a2 = -0.284496736;
-    let a3 = 1.421413741;
-    let a4 = -1.453152027;
-    let a5 = 1.061405429;
+    let a1 = 0.254_829_6;
+    let a2 = -0.284_496_72;
+    let a3 = 1.421_413_8;
+    let a4 = -1.453_152_1;
+    let a5 = 1.061_405_4;
     let p = 0.3275911;
 
     let sign = if x >= 0.0 { 1.0 } else { -1.0 };

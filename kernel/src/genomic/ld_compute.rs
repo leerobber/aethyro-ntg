@@ -1,6 +1,6 @@
-/// Linkage Disequilibrium (LD) Computation
-/// Computes pairwise r² between SNPs with streaming memory efficiency
-/// Target: 201K SNPs/sec, ~1.3M high-LD pairs per chromosome
+//! Linkage Disequilibrium (LD) Computation
+//! Computes pairwise r² between SNPs with streaming memory efficiency
+//! Target: 201K SNPs/sec, ~1.3M high-LD pairs per chromosome
 
 use crate::genomic::bitsliced_genotypes::BitstreamGenotypes;
 use std::time::Instant;
@@ -210,7 +210,7 @@ impl LdComputer {
         }
 
         let r = num / den;
-        Some(((r * r) as f32).max(0.0).min(1.0))
+        Some(((r * r) as f32).clamp(0.0, 1.0))
     }
 }
 
@@ -249,7 +249,7 @@ impl LdMatrix {
         let bin_size = 1000;  // 1kb bins
 
         for pair in &self.pairs {
-            let distance = (pair.position2 as i32 - pair.position1 as i32).abs() as u32;
+            let distance = (pair.position2 as i32 - pair.position1 as i32).unsigned_abs();
             let bin = (distance / bin_size) * bin_size;
 
             let entry = bins.entry(bin).or_insert((0.0, 0));
@@ -282,7 +282,7 @@ impl LdMatrix {
         let mut csv = String::from("snp1_idx,snp2_idx,r_squared,position1,position2,distance\n");
 
         for pair in &self.pairs {
-            let distance = (pair.position2 as i32 - pair.position1 as i32).abs() as u32;
+            let distance = (pair.position2 as i32 - pair.position1 as i32).unsigned_abs();
             csv.push_str(&format!(
                 "{},{},{:.6},{},{},{}\n",
                 pair.snp1_idx, pair.snp2_idx, pair.r_squared, pair.position1, pair.position2,

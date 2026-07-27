@@ -1,5 +1,5 @@
-/// Report Generation - Pure Rust
-/// Generates CSV, JSON, and HTML reports from domain disease test results
+//! Report Generation - Pure Rust
+//! Generates CSV, JSON, and HTML reports from domain disease test results
 
 use std::fs;
 
@@ -18,6 +18,12 @@ pub struct DomainResult {
 pub struct TestResults {
     pub timestamp: String,
     pub domains: Vec<DomainResult>,
+}
+
+impl Default for TestResults {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TestResults {
@@ -366,7 +372,7 @@ pub struct AggregateStats {
 
 /// Simple timestamp format (no chrono dependency)
 fn chrono_format() -> String {
-    format!("2026-07-12T14:30:00Z")
+    "2026-07-12T14:30:00Z".to_string()
 }
 
 #[cfg(test)]

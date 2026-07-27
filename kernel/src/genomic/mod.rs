@@ -1,10 +1,10 @@
-/// Genomic data processing modules
-/// Phase A: VCF → LD → Blocks
-/// Phase B: Chromosome Brain Architecture + Domain-Agnostic Disease Detection
-/// Phase C: Genome Synthesis & Evolution with G×E
-/// Phase D: Quality Control & Validation
-/// Phase E: Extended Validation (all 22 chromosomes, multi-population, locus power)
-/// Report Generation: Pure Rust CSV/JSON/HTML generation
+//! Genomic data processing modules
+//! Phase A: VCF → LD → Blocks
+//! Phase B: Chromosome Brain Architecture + Domain-Agnostic Disease Detection
+//! Phase C: Genome Synthesis & Evolution with G×E
+//! Phase D: Quality Control & Validation
+//! Phase E: Extended Validation (all 22 chromosomes, multi-population, locus power)
+//! Report Generation: Pure Rust CSV/JSON/HTML generation
 
 pub mod bitsliced_genotypes;
 pub mod vcf_stream;

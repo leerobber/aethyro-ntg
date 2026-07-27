@@ -77,7 +77,7 @@ pub fn render_campaign_notebook(c: &CampaignReport, threshold: f64) -> String {
                 it.id, it.skill
             ));
         }
-        s.push_str("\n");
+        s.push('\n');
         if !rec.exam.passed() {
             s.push_str(&format!(
                 "> **FAIL PROTOCOL:** score {:.2}% < {:.0}%. Full study+exam redo \
@@ -132,7 +132,7 @@ pub fn render_master_notebook(
             a.mean_attempts
         ));
     }
-    s.push_str("\n");
+    s.push('\n');
 
     let all_green = aggs.iter().all(|a| a.n_fail == 0 && a.n_runs > 0);
     s.push_str(&format!(

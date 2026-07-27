@@ -152,7 +152,7 @@ pub fn kimura_fixation_probability(s: f64, ne: f64) -> f64 {
         return if s > 0.0 { 1.0 } else { 0.0 };
     }
 
-    (numerator / denominator).max(0.0).min(1.0)
+    (numerator / denominator).clamp(0.0, 1.0)
 }
 
 /// Four named, independently-weighted telemetry channels, combined into

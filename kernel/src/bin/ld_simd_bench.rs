@@ -3,10 +3,10 @@
 //! Loads a real 1000-Genomes chromosome's genotypes once, then computes
 //! genotypic r² for every SNP pair in the same sliding window two ways:
 //!   * `scalar`  — the original per-sample `get()` loop (inlined here as
-//!                 the baseline; it now lives only as a test oracle in
-//!                 `ld_compute`).
+//!     the baseline; it now lives only as a test oracle in
+//!     `ld_compute`).
 //!   * `bitparallel` — `BitstreamGenotypes::pearson_r2_bitparallel`, the
-//!                 word-level popcount path now on the production hot path.
+//!     word-level popcount path now on the production hot path.
 //!
 //! Reports wall-clock for each over the identical pair set and asserts the
 //! two produce the same r² (so the speedup is not bought with a wrong

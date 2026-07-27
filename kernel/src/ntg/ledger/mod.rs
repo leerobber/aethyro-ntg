@@ -28,6 +28,7 @@ use super::error::NtgError;
 use signed_entry::SignedEntry;
 use stateblots::StateSlotStore;
 use replay::ExecutionTrace;
+
 use std::collections::HashMap;
 
 /// Ledger entry covering a complete mutation cycle: proposal, evaluation, decision.
@@ -98,6 +99,11 @@ impl TamperEvidentLedger {
     }
 
     /// Log a completed mutation cycle. Returns the entry's position in the ledger.
+    // Each argument is a distinct, independently-meaningful ledger field (ADR
+    // 0002 rail 5); bundling them into a params struct wouldn't reduce real
+    // complexity and would touch every call site, so the lint is suppressed
+    // rather than the API reshaped.
+    #[allow(clippy::too_many_arguments)]
     pub fn log_mutation(
         &mut self,
         description: impl Into<String>,
@@ -113,16 +119,21 @@ impl TamperEvidentLedger {
         let mutation_id = self.next_mutation_id;
         self.next_mutation_id += 1;
 
-        // Create the entry
+        // Create the entry. serde_json::to_string on a String cannot fail
+        // (it's always valid UTF-8), and its output already includes the
+        // surrounding quotes plus escaping for every JSON-forbidden
+        // character (not just \ and "), so it's spliced in unquoted here.
+        let desc_json = serde_json::to_string(&desc)
+            .expect("String -> JSON string serialization cannot fail");
         let entry_json = format!(
-            r#"{{"mutation_id":{},"description":"{}","pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{}","budget_ns":{},"timestamp":{}}}"#,
+            r#"{{"mutation_id":{},"description":{},"pre_fingerprint":{},"post_fingerprint":{},"latency_us":{},"memory_bytes":{},"outcome":"{:?}","budget_ns":{},"timestamp":{}}}"#,
             mutation_id,
-            desc,
+            desc_json,
             pre_fingerprint,
             post_fingerprint,
             fitness.latency_us,
             fitness.memory_bytes,
-            format!("{:?}", outcome),
+            outcome,
             budget_consumed_ns,
             timestamp
         );
@@ -328,6 +339,35 @@ mod tests {
 
         assert!(ledger.get_trace(mutation_id).is_some());
         assert!(ledger.get_trace(mutation_id + 999).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn description_control_characters_produce_valid_json() -> Result<(), NtgError> {
+        let mut ledger = TamperEvidentLedger::new(None)?;
+        let trace = ExecutionTrace::new();
+
+        ledger.log_mutation(
+            "line one\nline two\ttabbed \"quoted\" \\backslash\\",
+            0,
+            1,
+            FitnessMeasure {
+                latency_us: 5000,
+                memory_bytes: 1024,
+            },
+            MutationOutcome::Accepted,
+            100_000,
+            trace,
+            1000,
+        )?;
+
+        let entry = &ledger.entries()[0];
+        let parsed: serde_json::Value = serde_json::from_str(&entry.content)
+            .expect("ledger entry must be valid JSON even with control chars in description");
+        assert_eq!(
+            parsed["description"],
+            "line one\nline two\ttabbed \"quoted\" \\backslash\\"
+        );
         Ok(())
     }
 }
