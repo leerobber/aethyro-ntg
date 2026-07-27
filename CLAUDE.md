@@ -104,14 +104,14 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F** | **PROPOSED** | Self-awareness instrumentation, self-healing, robotics |
 
-**Test count:** 586 tests, all passing (as of Phase 6.18 + PR #10 fix).
+**Test count:** 598 tests, all passing (as of Phase 6.18 + PR #10 fix + PR #12 genomic operator tests).
 
 ---
 
 ## Running Tests
 
 ```bash
-# Full Rust test suite (586 tests, ~1-2 min)
+# Full Rust test suite (598 tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)
@@ -206,8 +206,6 @@ vllm serve qwen2.5-32b-awq --port 8001 --dtype auto
 
 ## Known Issues / Follow-ups
 
-- **Orphaned test**: `tests/test_genomic_operator.rs` uses crate name `ntg` (should be `ntg_kernel`);
-  not wired to Cargo.toml, never runs via `cargo test`.
 - **Clippy debt**: ~155 warnings in `genomic/` modules — pre-existing, out of scope.
 - **VITASCALE Hostframe** (ADR 0010): Production hosting architecture — not yet implemented.
 - **Phase F**: Self-awareness instrumentation, self-healing, robotics — proposed, not started.
