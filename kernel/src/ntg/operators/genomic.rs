@@ -270,10 +270,14 @@ impl GenomicOperator {
         }
     }
 
-    /// Estimate the fraction of missing genotypes (value 3 = missing in bitsliced encoding)
+    /// Estimate the fraction of missing genotypes (value 3 = missing in bitsliced encoding).
+    /// Returns 0.0 for an empty operator (zero SNPs or zero individuals).
     pub fn estimate_missing_rate(&self) -> f64 {
-        let mut missing_count = 0u64;
         let total_count = (self.num_snps * self.num_individuals) as u64;
+        if total_count == 0 {
+            return 0.0;
+        }
+        let mut missing_count = 0u64;
 
         for snp_idx in 0..self.num_snps {
             let base = snp_idx * self.words_per_snp * 2;
@@ -372,5 +376,11 @@ mod tests {
         assert_eq!(op.means.len(), 50);
         assert_eq!(op.std_devs.len(), 50);
         assert!(op.is_stats_valid);
+    }
+
+    #[test]
+    fn test_estimate_missing_rate_empty() {
+        let op = GenomicOperator::new(0, 0);
+        assert_eq!(op.estimate_missing_rate(), 0.0);
     }
 }
