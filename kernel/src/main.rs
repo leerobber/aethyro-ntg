@@ -32,7 +32,7 @@ const MAX_TRACKED_INTENTS: usize = 256;
 /// Intent strings longer than this are treated as "_other" to prevent key-bloat.
 const MAX_INTENT_KEY_LEN: usize = 64;
 
-// ── routing decision ──────────────────────────────────────────────────────────
+// ── routing decision ────────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
 enum Backend {
@@ -54,7 +54,7 @@ impl Backend {
     }
 }
 
-// ── memory (per-intent call stats) ───────────────────────────────────────────
+// ── memory (per-intent call stats) ────────────────────────────────────────────────────
 
 #[derive(Default)]
 struct IntentStats {
@@ -82,7 +82,7 @@ impl IntentStats {
     }
 }
 
-// ── the nano-agent ────────────────────────────────────────────────────────────
+// ── the nano-agent ────────────────────────────────────────────────────────────────────────────────
 
 struct NanoKeymaster {
     model: CalibModel,
@@ -151,13 +151,14 @@ impl NanoKeymaster {
         );
 
         // 5. Update memory — capped to prevent unbounded growth from adversarial intent strings.
-        let mem_key: &str = if intent.len() > MAX_INTENT_KEY_LEN {
-            "_other"
-        } else if self.memory.len() >= MAX_TRACKED_INTENTS && !self.memory.contains_key(intent) {
-            "_other"
-        } else {
-            intent
-        };
+        let mem_key: &str =
+            if intent.len() > MAX_INTENT_KEY_LEN
+                || (self.memory.len() >= MAX_TRACKED_INTENTS && !self.memory.contains_key(intent))
+            {
+                "_other"
+            } else {
+                intent
+            };
         let stats = self.memory.entry(mem_key.to_string()).or_default();
         stats.calls += 1;
         stats.sum_raw_score += raw_score;
@@ -296,7 +297,7 @@ impl NanoKeymaster {
     }
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────────────────────
 
 fn extract_text(payload: &Value) -> String {
     payload
@@ -356,7 +357,7 @@ fn load_or_train_model() -> CalibModel {
     model
 }
 
-// ── main loop ─────────────────────────────────────────────────────────────────
+// ── main loop ─────────────────────────────────────────────────────────────────────────────────
 
 fn main() {
     let external_url = std::env::var("KEYMASTER_BACKEND_URL").ok();
