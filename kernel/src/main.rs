@@ -26,6 +26,12 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::time::Instant;
 
+/// Maximum number of distinct intent keys tracked in the memory map.
+/// Overflow intents are aggregated into the "_other" bucket to bound memory.
+const MAX_TRACKED_INTENTS: usize = 256;
+/// Intent strings longer than this are treated as "_other" to prevent key-bloat.
+const MAX_INTENT_KEY_LEN: usize = 64;
+
 // ── routing decision ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -83,17 +89,17 @@ struct NanoKeymaster {
     ledger: TamperEvidentLedger,
     /// Per-intent call statistics (the memory layer).
     memory: HashMap<String, IntentStats>,
-    /// External backend URL, if configured. Credential vault.
-    external_url: Option<String>,
+    /// Whether an external backend URL is configured. Credential vault — URL not re-emitted.
+    external_configured: bool,
     call_counter: u64,
 }
 
 impl NanoKeymaster {
-    fn new(model: CalibModel, external_url: Option<String>) -> Self {
+    fn new(model: CalibModel, external_configured: bool) -> Self {
         Self {
             ledger: TamperEvidentLedger::new(None).expect("ledger init"),
             memory: HashMap::new(),
-            external_url,
+            external_configured,
             call_counter: 0,
             model,
         }
@@ -144,8 +150,15 @@ impl NanoKeymaster {
             call_id,
         );
 
-        // 5. Update memory.
-        let stats = self.memory.entry(intent.to_string()).or_default();
+        // 5. Update memory — capped to prevent unbounded growth from adversarial intent strings.
+        let mem_key: &str = if intent.len() > MAX_INTENT_KEY_LEN {
+            "_other"
+        } else if self.memory.len() >= MAX_TRACKED_INTENTS && !self.memory.contains_key(intent) {
+            "_other"
+        } else {
+            intent
+        };
+        let stats = self.memory.entry(mem_key.to_string()).or_default();
         stats.calls += 1;
         stats.sum_raw_score += raw_score;
         match backend {
@@ -176,7 +189,7 @@ impl NanoKeymaster {
             "classify" | "score" | "predict" => {
                 if score >= self.model.threshold {
                     Backend::Local
-                } else if self.external_url.is_some() {
+                } else if self.external_configured {
                     Backend::External
                 } else {
                     Backend::LocalFallback
@@ -184,7 +197,7 @@ impl NanoKeymaster {
             }
             // Unknown intent: escalate externally if available.
             _ => {
-                if self.external_url.is_some() {
+                if self.external_configured {
                     Backend::External
                 } else {
                     Backend::LocalFallback
@@ -214,10 +227,12 @@ impl NanoKeymaster {
             }
             (_, Backend::External) => {
                 // HTTP client not yet wired. Routing decision is made + logged.
+                // URL is intentionally not echoed to callers (credential vault).
+                let preview: String = text.chars().take(80).collect();
                 json!({
                     "note": "external backend selected — HTTP client not yet implemented",
-                    "would_call": self.external_url,
-                    "preview": &text[..text.len().min(80)],
+                    "external_configured": true,
+                    "preview": preview,
                 })
             }
             _ => {
@@ -249,7 +264,7 @@ impl NanoKeymaster {
             "ledger_entries": self.ledger.len(),
             "model_nonzero_weights": self.model.nonzero_count(),
             "model_threshold": self.model.threshold,
-            "external_backend": self.external_url,
+            "external_backend_configured": self.external_configured,
             "intent_memory": intent_memory,
         })
     }
@@ -293,13 +308,14 @@ fn extract_text(payload: &Value) -> String {
         .to_string()
 }
 
-/// Map raw score relative to threshold to [0.0, 1.0].
+/// Map raw score relative to the decision boundary to [0.0, 1.0].
+///
+/// Centers on the threshold: score == threshold → 0.5; higher → toward 1.0.
+/// Works correctly for both positive and negative thresholds.
 fn normalize_confidence(score: i64, threshold: i64) -> f64 {
-    if threshold == 0 {
-        return 0.5;
-    }
-    let ratio = score as f64 / threshold.abs() as f64;
-    (ratio * 0.5 + 0.5).clamp(0.0, 1.0)
+    let denom = threshold.abs().max(1) as f64;
+    let ratio = (score - threshold) as f64 / denom;
+    (0.5 + 0.5 * ratio).clamp(0.0, 1.0)
 }
 
 /// FNV-1a 64-bit hash — used to create stable fingerprints for ledger entries.
@@ -344,6 +360,7 @@ fn load_or_train_model() -> CalibModel {
 
 fn main() {
     let external_url = std::env::var("KEYMASTER_BACKEND_URL").ok();
+    let external_configured = external_url.is_some();
 
     eprintln!("[keymaster] NanoKeymaster booting");
     let model = load_or_train_model();
@@ -352,14 +369,17 @@ fn main() {
         model.nonzero_count(),
         model.threshold
     );
-    match &external_url {
-        Some(url) => eprintln!("[keymaster] external backend configured: {}", url),
-        None => eprintln!("[keymaster] external backend: none (local-only mode)"),
+    if external_configured {
+        eprintln!("[keymaster] external backend configured (URL is credential-vaulted)");
+    } else {
+        eprintln!("[keymaster] external backend: none (local-only mode)");
     }
     eprintln!("[keymaster] accepting JSON on stdin — one object per line");
     eprintln!("[keymaster] example: {{\"intent\":\"classify\",\"payload\":{{\"text\":\"fn main() {{}}\"}}}}");
 
-    let mut km = NanoKeymaster::new(model, external_url);
+    // external_url is held only for the actual HTTP call (not yet wired); only the bool is kept.
+    drop(external_url);
+    let mut km = NanoKeymaster::new(model, external_configured);
 
     let stdin = io::stdin();
     let stdout = io::stdout();
