@@ -290,8 +290,12 @@ fn test_observability_metrics() -> Result<(), NtgError> {
     let density2 = pt.compute_density();
     assert_eq!(density2, 0.0);
 
-    // Cycle tracking
-    let (_result, cycles) = tobl_dot_product(&pt, &pt, None)?;
+    // Cycle tracking: use a non-zero tensor so the kernel does real work.
+    // An all-zero pt has density=0 and the sparse path legitimately
+    // short-circuits, returning 0 cycles on real hardware.
+    let mut pt_active = PackedTernary::new(100);
+    pt_active.set_from_slice(&[1i8; 100])?;
+    let (_result, cycles) = tobl_dot_product(&pt_active, &pt_active, Some(ToblKernelPath::Scalar))?;
     pt.record_cycles(cycles);
     assert!(pt.last_op_cycles > 0);
 
