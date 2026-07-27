@@ -82,31 +82,39 @@ mod tests {
     fn test_ld_matrix_computation() {
         let mut op = GenomicOperator::new(100, 20);
 
+        // SNP 0 and SNP 1: identical alternating pattern → perfect LD (r=1.0)
+        // Non-constant values are required so variance > 0 for a meaningful r.
         for ind in 0..100 {
-            op.set(0, ind, 1); // SNP 0: all heterozygous
-            op.set(1, ind, 1); // SNP 1: all heterozygous (perfect LD)
-            op.set(2, ind, 0); // SNP 2: all homozygous ref (independent)
+            let val = if ind < 50 { 0u8 } else { 2u8 };
+            op.set(0, ind, val);
+            op.set(1, ind, val);
+            op.set(2, ind, 0); // SNP 2: monomorphic (all ref)
         }
+        // SNPs 3-19 remain all-zero (monomorphic)
 
         let ld_matrix = op.compute_ld_matrix();
 
         assert_eq!(ld_matrix.len(), 20 * 20);
 
-        // Diagonal should be 1.0 (self-correlation)
+        // Diagonal should be 1.0 (self-correlation) for every SNP
         for i in 0..20 {
-            assert!((ld_matrix[i * 20 + i] - 1.0).abs() < 0.01);
+            assert!((ld_matrix[i * 20 + i] - 1.0).abs() < 0.01,
+                "diagonal SNP {i} = {}", ld_matrix[i * 20 + i]);
         }
 
-        // SNP 0 and 1 should have high LD (close to 1.0)
-        assert!(ld_matrix[0 * 20 + 1] > 0.9);
-        assert!(ld_matrix[1 * 20 + 0] > 0.9);
+        // SNP 0 and SNP 1 share the same genotype pattern → r should be ~1.0
+        assert!(ld_matrix[0 * 20 + 1] > 0.9,
+            "expected r(0,1) > 0.9, got {}", ld_matrix[0 * 20 + 1]);
+        assert!(ld_matrix[1 * 20 + 0] > 0.9,
+            "expected r(1,0) > 0.9, got {}", ld_matrix[1 * 20 + 0]);
 
-        // Symmetric
+        // Matrix must be symmetric
         for i in 0..20 {
             for j in 0..20 {
                 let r_ij = ld_matrix[i * 20 + j];
                 let r_ji = ld_matrix[j * 20 + i];
-                assert!((r_ij - r_ji).abs() < 0.0001);
+                assert!((r_ij - r_ji).abs() < 0.0001,
+                    "symmetry broken at ({i},{j}): {r_ij} vs {r_ji}");
             }
         }
     }
