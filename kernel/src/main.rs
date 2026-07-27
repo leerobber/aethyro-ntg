@@ -11,7 +11,7 @@
 //!
 //! Environment variables:
 //!   KEYMASTER_MODEL=<path>        load a frozen CalibModel (.calib) instead of training from fixtures
-//!   KEYMASTER_BACKEND_URL=<url>   external fallback backend (routing decision is made; HTTP not yet wired)
+//!   KEYMASTER_BACKEND_URL=<url>   external fallback backend (POST intent+payload as JSON; 10 s timeout)
 //!
 //! Run:
 //!   cargo run --release --bin kernel_host
@@ -24,13 +24,15 @@ use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Maximum number of distinct intent keys tracked in the memory map.
 /// Overflow intents are aggregated into the "_other" bucket to bound memory.
 const MAX_TRACKED_INTENTS: usize = 256;
 /// Intent strings longer than this are treated as "_other" to prevent key-bloat.
 const MAX_INTENT_KEY_LEN: usize = 64;
+/// HTTP timeout for external backend calls.
+const EXTERNAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ── routing decision ────────────────────────────────────────────────────────────────────────────────
 
@@ -40,7 +42,7 @@ enum Backend {
     Local,
     /// Local kernel, confidence below threshold (external unavailable or unset).
     LocalFallback,
-    /// External API selected — HTTP client not yet wired; routing decision logged.
+    /// External API selected — POSTs intent+payload as JSON.
     External,
 }
 
@@ -89,20 +91,24 @@ struct NanoKeymaster {
     ledger: TamperEvidentLedger,
     /// Per-intent call statistics (the memory layer).
     memory: HashMap<String, IntentStats>,
-    /// Whether an external backend URL is configured. Credential vault — URL not re-emitted.
-    external_configured: bool,
+    /// Credential vault: URL never echoed in any response or log line.
+    external_url: Option<String>,
     call_counter: u64,
 }
 
 impl NanoKeymaster {
-    fn new(model: CalibModel, external_configured: bool) -> Self {
+    fn new(model: CalibModel, external_url: Option<String>) -> Self {
         Self {
             ledger: TamperEvidentLedger::new(None).expect("ledger init"),
             memory: HashMap::new(),
-            external_configured,
+            external_url,
             call_counter: 0,
             model,
         }
+    }
+
+    fn external_configured(&self) -> bool {
+        self.external_url.is_some()
     }
 
     /// The outer interface. Every call goes through:
@@ -121,7 +127,7 @@ impl NanoKeymaster {
         let backend = self.route(intent, raw_score);
 
         // 3. Act: execute against chosen backend.
-        let result = self.execute(intent, payload, &text, raw_score, &backend);
+        let result = self.execute(intent, payload, raw_score, &backend);
 
         let elapsed_us = t0.elapsed().as_micros() as u64;
 
@@ -190,7 +196,7 @@ impl NanoKeymaster {
             "classify" | "score" | "predict" => {
                 if score >= self.model.threshold {
                     Backend::Local
-                } else if self.external_configured {
+                } else if self.external_configured() {
                     Backend::External
                 } else {
                     Backend::LocalFallback
@@ -198,7 +204,7 @@ impl NanoKeymaster {
             }
             // Unknown intent: escalate externally if available.
             _ => {
-                if self.external_configured {
+                if self.external_configured() {
                     Backend::External
                 } else {
                     Backend::LocalFallback
@@ -207,14 +213,7 @@ impl NanoKeymaster {
         }
     }
 
-    fn execute(
-        &self,
-        intent: &str,
-        _payload: &Value,
-        text: &str,
-        score: i64,
-        backend: &Backend,
-    ) -> Value {
+    fn execute(&self, intent: &str, payload: &Value, score: i64, backend: &Backend) -> Value {
         match (intent, backend) {
             ("classify" | "predict", Backend::Local) => {
                 let accepted = score >= self.model.threshold;
@@ -227,14 +226,25 @@ impl NanoKeymaster {
                 json!({ "score": score, "threshold": self.model.threshold })
             }
             (_, Backend::External) => {
-                // HTTP client not yet wired. Routing decision is made + logged.
-                // URL is intentionally not echoed to callers (credential vault).
-                let preview: String = text.chars().take(80).collect();
-                json!({
-                    "note": "external backend selected — HTTP client not yet implemented",
-                    "external_configured": true,
-                    "preview": preview,
-                })
+                // POST {"intent": ..., "payload": ...} to the external backend.
+                // URL is never echoed — credential vault.
+                let url = self
+                    .external_url
+                    .as_deref()
+                    .expect("external_url set when Backend::External is chosen");
+                let body = json!({ "intent": intent, "payload": payload });
+                match ureq::post(url).timeout(EXTERNAL_TIMEOUT).send_json(&body) {
+                    Ok(resp) => resp.into_json::<Value>().unwrap_or_else(|e| {
+                        json!({
+                            "error": format!("external backend non-JSON response: {e}"),
+                            "external": true,
+                        })
+                    }),
+                    Err(e) => json!({
+                        "error": format!("external backend error: {e}"),
+                        "external": true,
+                    }),
+                }
             }
             _ => {
                 // LocalFallback: best-effort local response below confidence threshold.
@@ -265,13 +275,12 @@ impl NanoKeymaster {
             "ledger_entries": self.ledger.len(),
             "model_nonzero_weights": self.model.nonzero_count(),
             "model_threshold": self.model.threshold,
-            "external_backend_configured": self.external_configured,
+            "external_backend_configured": self.external_configured(),
             "intent_memory": intent_memory,
         })
     }
 
     /// Evolution rail: after N calls, report which intents are confidently local.
-    /// These observations are where future routing policy mutations would be proposed.
     fn emit_learning_update(&self) {
         let mut observations = Vec::new();
         for (intent, stats) in &self.memory {
@@ -361,7 +370,6 @@ fn load_or_train_model() -> CalibModel {
 
 fn main() {
     let external_url = std::env::var("KEYMASTER_BACKEND_URL").ok();
-    let external_configured = external_url.is_some();
 
     eprintln!("[keymaster] NanoKeymaster booting");
     let model = load_or_train_model();
@@ -370,7 +378,7 @@ fn main() {
         model.nonzero_count(),
         model.threshold
     );
-    if external_configured {
+    if external_url.is_some() {
         eprintln!("[keymaster] external backend configured (URL is credential-vaulted)");
     } else {
         eprintln!("[keymaster] external backend: none (local-only mode)");
@@ -378,9 +386,7 @@ fn main() {
     eprintln!("[keymaster] accepting JSON on stdin — one object per line");
     eprintln!("[keymaster] example: {{\"intent\":\"classify\",\"payload\":{{\"text\":\"fn main() {{}}\"}}}}");
 
-    // external_url is held only for the actual HTTP call (not yet wired); only the bool is kept.
-    drop(external_url);
-    let mut km = NanoKeymaster::new(model, external_configured);
+    let mut km = NanoKeymaster::new(model, external_url);
 
     let stdin = io::stdin();
     let stdout = io::stdout();
