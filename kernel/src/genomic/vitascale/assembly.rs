@@ -209,6 +209,23 @@ impl Crown {
             h.restore();
         }
     }
+
+    /// Count of agents currently in any quarantine state.
+    pub fn quarantined_count(&self) -> usize {
+        self.handles
+            .iter()
+            .filter(|h| matches!(h.status, NanoStatus::Quarantined(_)))
+            .count()
+    }
+
+    /// IDs of all agents currently in quarantine.
+    pub fn quarantined_ids(&self) -> Vec<u32> {
+        self.handles
+            .iter()
+            .filter(|h| matches!(h.status, NanoStatus::Quarantined(_)))
+            .map(|h| h.agent_id)
+            .collect()
+    }
 }
 
 #[cfg(test)]

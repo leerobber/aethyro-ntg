@@ -17,6 +17,7 @@ use ntg_kernel::genomic::vitascale::{
     },
     oculus_organ::{EyeStream, Oculus},
     organ_live::TissueLive,
+    self_awareness::SelfAwarenessProbe,
 };
 
 // ---------------------------------------------------------------------------
@@ -167,26 +168,35 @@ fn main() {
 
     println!("Crown: {} tissues registered.\n", crown.tissue_count());
 
-    // 6. PressureMesh: aggregate fitness across nano reports.
+    // 6. PressureMesh + SelfAwarenessProbe.
     let mesh = PressureMesh::new(FederationWeights::default(), 0.0);
+    let mut probe = SelfAwarenessProbe::new(16);
 
     // 7. Run the VITASCALE loop for 10 ticks.
-    let mut all_results: Vec<ntg_kernel::genomic::vitascale::nano_agent::NanoTickResult> = Vec::new();
+    println!("Tick  utility  safety  coverage  health  alarm  drops");
+    println!("----  -------  ------  --------  ------  -----  -----");
     for tick_i in 0..10u32 {
         let results = crown.tick_all();
-        for r in &results {
-            all_results.push(r.clone());
-        }
+        let n = crown.tissue_count();
+        let q = crown.quarantined_count();
+        let report = probe.sense(&results, &[], None, &crown.bus, q, n);
+
+        println!(
+            "{:4}  {:.3}    {:.3}   {:.3}     {:.3}   {}      {}",
+            tick_i + 1,
+            report.mean_utility,
+            report.min_safety,
+            report.awareness_coverage,
+            report.health_score(),
+            if report.deterministic_alarm { "ALARM" } else { "ok   " },
+            crown.bus.total_drops(),
+        );
+
         if tick_i == 9 {
-            // Final-tick pressure report.
             let hint = mesh.federate(&results);
             println!(
-                "Tick {}: mean_utility={:.3}, min_safety={:.3}, stress={:.3}, veto={}",
-                tick_i + 1,
-                hint.mean_utility,
-                hint.min_safety,
-                hint.stress_level,
-                hint.selection_veto
+                "\nFinal-tick PressureMesh: mean_utility={:.3}, min_safety={:.3}, stress={:.3}, veto={}",
+                hint.mean_utility, hint.min_safety, hint.stress_level, hint.selection_veto
             );
         }
     }
@@ -194,12 +204,13 @@ fn main() {
     // 8. Gestalt summary.
     let proposals = crown.take_proposals();
     println!("\n--- Gestalt Summary ---");
-    println!("Ticks run: 10");
-    println!("Bus drops: {}", crown.bus.total_drops());
-    println!("Pending proposals: {}", proposals.len());
+    println!("Ticks run:          10");
+    println!("Bus drops:          {}", crown.bus.total_drops());
+    println!("Pending proposals:  {}", proposals.len());
     for p in &proposals {
         println!("  proposal[{}]: \"{}\" (urgency={:.2})", p.agent_id, p.description, p.urgency);
     }
-    println!("Bus pending after loop: {}", crown.bus.pending());
+    println!("Rolling health:     {:.3}", probe.rolling_health());
+    println!("Bus pending:        {}", crown.bus.pending());
     println!("\nVITASCALE L0 demo complete.");
 }

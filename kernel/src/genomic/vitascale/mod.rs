@@ -26,6 +26,7 @@ pub mod fitness_federation;
 pub mod oculus_organ;
 pub mod immune_organ;
 pub mod body;
+pub mod self_awareness;
 
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
@@ -53,3 +54,4 @@ pub use oculus_organ::{AwarenessFrame, EyeStream, Oculus};
 pub use immune_organ::{ImmuneConfig, PhageEvent, Phageguard};
 pub use body::{BodyAdapter, BodyCommand, BodyError, BodyFrame, BodyHealth};
 pub use body::host_cpu::IronChassis;
+pub use self_awareness::{SelfAwarenessProbe, SenseReport};
