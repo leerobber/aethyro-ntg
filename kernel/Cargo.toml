@@ -133,3 +133,6 @@ path = "src/bin/vitascale_demo.rs"
 [[bin]]
 name = "telemetry_server"
 path = "src/bin/telemetry_server.rs"
+
+[dev-dependencies]
+proptest = "1.4"
