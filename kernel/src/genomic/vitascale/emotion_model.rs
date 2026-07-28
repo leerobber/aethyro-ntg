@@ -222,7 +222,7 @@ mod tests {
         let hormones_good = make_hormones(0.9, 0.9, 0.0);
         let hormones_bad = make_hormones(0.0, 0.0, 1.0);
 
-        let s1 = model.update(hormones_good, Regime::Thriving, 0.9);
+        let _s1 = model.update(hormones_good, Regime::Thriving, 0.9);
         let s2 = model.update(hormones_bad, Regime::Catastrophic, 0.1);
 
         // Smoothing means s2 shouldn't be as extreme as just computing from bad hormones
