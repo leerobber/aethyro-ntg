@@ -1,10 +1,18 @@
 //! Aethyro NTG (Neural Ternary Graph) Engine -- kernel.
 //!
-//! Capability version 10: Phase 0–5 complete — ternary/storage, SIS graph,
-//! ledger/self-mod, calibration, precision+runtime warm-start optimization.
+//! Capability version 10: Phase 0–7 complete — ternary/storage, SIS graph,
+//! ledger/self-mod, calibration, precision+runtime warm-start optimization, 60 Hz WebSocket telemetry.
 //!
 //! **Status truth:** repo-root `docs/STATUS.md` and `docs/ROADMAP.md` —
 //! trust those over this comment if they disagree.
+//!
+//! ## Public API Stability
+//!
+//! - **STABLE:** NTG core engine (`ntg::*`), genomic pipeline (`genomic::*`), error types
+//! - **BETA:** WebSocket telemetry (`ntg::websocket`), advanced genome operations
+//! - **EXPERIMENTAL:** CUDA support (`cuda::*`), advanced scheduling
+//!
+//! See ARCHITECTURE.md for full module registry and dependency contracts.
 //!
 //! Note: a parallel crate-root `runtime`/`storage`/`kernels` sketch from
 //! an earlier remote commit was superseded by the tested `ntg::*` modules.
@@ -54,6 +62,7 @@ pub use ntg::storage::{BitSlicedBlock, BitSlicedTernary, SparseBitSlicedTernary}
 pub use ntg::ternary::{encode, encode_fixed, matmul_scalar, Ternary};
 pub use ntg::observability::{StatsCollector, StatsSnapshot};
 pub use ntg::genome::{DNAGraphNode, GenomeDelta, propose_density_delta};
+pub use ntg::websocket::{SenseReport, TelemetryStream, TelemetryMessage};
 
 /// Reports whether this build has a working ternary compute path.
 pub fn has_ternary_kernel() -> bool {
