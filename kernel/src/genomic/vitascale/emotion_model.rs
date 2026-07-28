@@ -63,10 +63,17 @@ impl EmotionalState {
 }
 
 /// Emotion model — computes emotional state from hormones + regime.
+#[derive(Clone, Debug)]
 pub struct EmotionModel {
     state: EmotionalState,
     /// EMA smoothing factor (alpha = 0.15 for gradual transitions).
     alpha: f32,
+}
+
+impl Default for EmotionModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EmotionModel {

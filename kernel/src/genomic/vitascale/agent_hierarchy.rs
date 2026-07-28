@@ -73,22 +73,12 @@ pub struct AgentSnapshot {
 }
 
 /// Hierarchy manager — coordinates multi-tier agent population.
+#[derive(Default)]
 pub struct AgentHierarchy {
     super_agent: Option<AgentSnapshot>,
     sub_agents: HashMap<u32, AgentSnapshot>,
     micro_agents: HashMap<u32, AgentSnapshot>,
     nano_agents: HashMap<u32, AgentSnapshot>,
-}
-
-impl Default for AgentHierarchy {
-    fn default() -> Self {
-        Self {
-            super_agent: None,
-            sub_agents: HashMap::new(),
-            micro_agents: HashMap::new(),
-            nano_agents: HashMap::new(),
-        }
-    }
 }
 
 impl AgentHierarchy {
@@ -141,7 +131,7 @@ impl AgentHierarchy {
             return Err("Micro tier spawn cannot exceed 1000 per call".to_string());
         }
 
-        let micro_base = (self.micro_agents.len() as u32);
+        let micro_base = self.micro_agents.len() as u32;
         for i in 0..count {
             let idx = micro_base + i;
             let id = AgentId {
@@ -168,7 +158,7 @@ impl AgentHierarchy {
             return Err("Nano tier spawn cannot exceed 50K per call".to_string());
         }
 
-        let nano_base = (self.nano_agents.len() as u32);
+        let nano_base = self.nano_agents.len() as u32;
         for i in 0..count {
             let idx = nano_base + i;
             let id = AgentId {

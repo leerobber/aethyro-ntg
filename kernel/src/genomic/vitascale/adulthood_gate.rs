@@ -1,8 +1,6 @@
 //! Adulthood stage gate — validates readiness for self-modification.
 //! ADR 0011 §9: Entry criteria for Adulthood, self-mod unlock.
 
-use super::life_course::{LifeStage, LifeCourse};
-
 /// Criteria evidence for Adulthood entry.
 #[derive(Clone, Debug)]
 pub struct AdulthoodEvidence {

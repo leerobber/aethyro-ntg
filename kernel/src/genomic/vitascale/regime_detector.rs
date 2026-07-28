@@ -26,11 +26,18 @@ impl Regime {
 }
 
 /// Regime detector — simple threshold-based state classification with hysteresis.
+#[derive(Clone, Debug)]
 pub struct RegimeDetector {
     current_regime: Regime,
     ticks_in_regime: u32,
     /// Minimum ticks in a regime before transition allowed (hysteresis).
     hysteresis_ticks: u32,
+}
+
+impl Default for RegimeDetector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RegimeDetector {

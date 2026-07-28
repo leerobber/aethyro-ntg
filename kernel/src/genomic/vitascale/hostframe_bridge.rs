@@ -2,7 +2,6 @@
 //! ADR 0010 §4: Asynchronous telemetry batching with async mpsc channel.
 
 use super::self_awareness::SenseReport;
-use std::sync::Arc;
 use std::time::Duration;
 
 /// Configuration for GCP Cloud Run backend.
@@ -80,7 +79,6 @@ impl TelemetryPayload {
 pub struct TelemetryClient {
     config: HostframeConfig,
     buffer: Vec<TelemetryPayload>,
-    last_send_tick: u64,
     total_sent: usize,
     total_dropped: usize,
 }
@@ -91,7 +89,6 @@ impl TelemetryClient {
         Self {
             config,
             buffer: Vec::with_capacity(batch_size),
-            last_send_tick: 0,
             total_sent: 0,
             total_dropped: 0,
         }

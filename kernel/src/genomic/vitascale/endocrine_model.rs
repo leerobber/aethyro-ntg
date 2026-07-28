@@ -2,8 +2,6 @@
 //! Hormones drive behavioral modulation: learning rate, exploration bias, recovery speed.
 //! ADR 0011 §6: Hormone profile with 8 dimensions.
 
-use std::f32::consts::PI;
-
 /// Hormone profile — 8 biologically plausible dimensions [0, 1] each.
 #[derive(Clone, Debug, Copy)]
 pub struct HormoneProfile {
@@ -65,12 +63,19 @@ impl HormoneProfile {
 }
 
 /// Endocrine system — updates hormones based on fitness and system state.
+#[derive(Clone, Debug)]
 pub struct EndocrineModel {
     profile: HormoneProfile,
     /// Running mean fitness (EMA with alpha=0.1).
     fitness_ema: f32,
     /// Tick counter (used for age-dependent decay of growth).
     tick: u64,
+}
+
+impl Default for EndocrineModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EndocrineModel {

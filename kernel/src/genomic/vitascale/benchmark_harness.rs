@@ -2,7 +2,7 @@
 //! ADR 0010 §6: Performance characterization at 100K agents, 10K ticks.
 
 use std::time::Instant;
-use super::agent_hierarchy::{AgentHierarchy, AgentTier};
+use super::agent_hierarchy::AgentHierarchy;
 
 /// Benchmark configuration.
 #[derive(Clone, Debug)]

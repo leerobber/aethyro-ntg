@@ -32,23 +32,12 @@ impl Default for MutationAuthorization {
 }
 
 /// Mutation lifecycle tracker — counts mutations in current window.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MutationTracker {
     pub tick_at_last_mutation: u64,
     pub mutations_in_window: usize,
     pub pending_mutation_count: usize,
     pub total_mutations_accepted: usize,
-}
-
-impl Default for MutationTracker {
-    fn default() -> Self {
-        Self {
-            tick_at_last_mutation: 0,
-            mutations_in_window: 0,
-            pending_mutation_count: 0,
-            total_mutations_accepted: 0,
-        }
-    }
 }
 
 /// Activate self-modification authority upon Adulthood graduation.
