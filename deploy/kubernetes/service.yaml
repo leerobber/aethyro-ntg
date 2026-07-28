@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kairos-super
+  namespace: kairos
+  labels:
+    app.kubernetes.io/name: kairos-super
+    app.kubernetes.io/component: super-agent
+spec:
+  selector:
+    app.kubernetes.io/name: kairos-super
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  # ClusterIP — internal-only; exposed via Cloud Run or IAP if needed externally
+  type: ClusterIP

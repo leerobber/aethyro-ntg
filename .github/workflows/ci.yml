@@ -49,3 +49,25 @@ jobs:
       - name: cargo clippy
         working-directory: kernel
         run: cargo clippy -- -D warnings
+
+  keymaster-backend:
+    name: Keymaster backend (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend/keymaster
+
+      - name: cargo test
+        working-directory: backend/keymaster
+        run: cargo test --release
+
+      - name: cargo clippy
+        working-directory: backend/keymaster
+        run: cargo clippy -- -D warnings

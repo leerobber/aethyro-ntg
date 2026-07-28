@@ -1,0 +1,146 @@
+name: Deploy (GCP)
+
+# Triggers on main merges only — PRs run CI (ci.yml) but not deploy.
+# Requires GitHub Actions secrets:
+#   GCP_PROJECT_ID         — GCP project
+#   GCP_WORKLOAD_IDENTITY  — full Workload Identity Provider resource name
+#                            (projects/NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER)
+#   GCP_SERVICE_ACCOUNT    — CI/CD service account email (needs AR writer + Cloud Run deployer)
+#   GCP_REGION             — defaults to us-central1
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+
+env:
+  REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  IMAGE_NAME: ntg-kernel
+  SERVICE_NAME: keymaster-${{ github.event.inputs.environment || 'dev' }}
+
+jobs:
+  build-push:
+    name: Build & Push container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for Workload Identity Federation
+
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.push.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/ntg-kernel/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=git-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-cloud-run:
+    name: Deploy NanoKeymaster to Cloud Run
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/ntg-kernel/${{ env.IMAGE_NAME }}@${{ needs.build-push.outputs.digest }}
+          flags: |
+            --ingress=internal
+            --max-instances=10
+            --memory=512Mi
+            --cpu=1
+            --no-allow-unauthenticated
+
+  deploy-gke:
+    name: Roll out KAIROS agent tier on GKE
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: kairos-${{ github.event.inputs.environment || 'dev' }}
+          location: ${{ env.REGION }}
+
+      - name: Substitute image tag and project in manifests
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/ntg-kernel/${{ env.IMAGE_NAME }}@${{ needs.build-push.outputs.digest }}"
+          sed -i "s|PROJECT_ID|${{ env.PROJECT_ID }}|g; s|IMAGE_TAG|${IMAGE##*:}|g" \
+            deploy/kubernetes/serviceaccount.yaml \
+            deploy/kubernetes/deployment.yaml
+          # Patch deployment image to use digest directly
+          kubectl set image deployment/kairos-super kernel-host="${IMAGE}" \
+            -n kairos --dry-run=client -o yaml > /tmp/patched_deploy.yaml
+          kubectl apply -f deploy/kubernetes/namespace.yaml
+          kubectl apply -f deploy/kubernetes/serviceaccount.yaml
+          kubectl apply -f deploy/kubernetes/configmap.yaml
+          kubectl apply -f /tmp/patched_deploy.yaml
+          kubectl apply -f deploy/kubernetes/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/kairos-super -n kairos --timeout=5m

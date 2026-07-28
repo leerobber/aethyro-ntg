@@ -102,16 +102,16 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.16 | COMPLETE | Twin-Brain + Quad-Brain Integration |
 | 6.17 | COMPLETE | Brain γ — Meta-Governance & Evolution |
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
-| **F** | **PROPOSED** | Self-awareness instrumentation, self-healing, robotics |
+| **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** 598 tests, all passing (as of Phase 6.18 + PR #10 fix + PR #12 genomic operator tests).
+**Test count:** 444 tests, all passing (as of Phase F L0 + self_awareness module — ADR 0011).
 
 ---
 
 ## Running Tests
 
 ```bash
-# Full Rust test suite (598 tests, ~1-2 min)
+# Full Rust test suite (444 tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)
@@ -207,8 +207,8 @@ vllm serve qwen2.5-32b-awq --port 8001 --dtype auto
 ## Known Issues / Follow-ups
 
 - **Clippy debt**: ~155 warnings in `genomic/` modules — pre-existing, out of scope.
-- **VITASCALE Hostframe** (ADR 0010): Production hosting architecture — not yet implemented.
-- **Phase F**: Self-awareness instrumentation, self-healing, robotics — proposed, not started.
+- **VITASCALE Hostframe** (ADR 0010): Production hosting architecture (GCP) — not yet implemented.
+- **Phase F L0**: Scaffold complete (ADR 0011); GCP Cloud Run backend and full self-awareness wiring pending.
 
 ---
 
