@@ -141,6 +141,12 @@ pub struct OptimizationDSLCompiler {
     metrics_registry: HashMap<String, f32>,  // Current metric values
 }
 
+impl Default for OptimizationDSLCompiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizationDSLCompiler {
     pub fn new() -> Self {
         Self {
@@ -203,11 +209,11 @@ impl OptimizationDSLCompiler {
                 self.evaluate_condition(left) || self.evaluate_condition(right)
             }
             Condition::Not(inner) => !self.evaluate_condition(inner),
-            Condition::AfterNCycles(n) => {
+            Condition::AfterNCycles(_n) => {
                 // Simplified: would track cycle counter in real system
                 true  // Placeholder
             }
-            Condition::PatternRepeat(cond, count) => {
+            Condition::PatternRepeat(cond, _count) => {
                 // Simplified: would maintain pattern history
                 self.evaluate_condition(cond)
             }
@@ -251,14 +257,14 @@ impl OptimizationDSLCompiler {
                     println!("[DSL] {}", msg);
                     result.executed_actions += 1;
                 }
-                Action::AdaptiveCalculation { target, formula } => {
-                    // Simplified formula evaluation
-                    if formula.contains("queue_depth") {
-                        let queue_depth = self.metrics_registry.get("queue_depth").copied().unwrap_or(100.0);
-                        let value = queue_depth / 2.0;  // e.g., "queue_depth / 2"
-                        result.changes.insert(target.clone(), value);
-                        result.executed_actions += 1;
-                    }
+                Action::AdaptiveCalculation { target, formula } if formula.contains("queue_depth") => {
+                    let queue_depth = self.metrics_registry.get("queue_depth").copied().unwrap_or(100.0);
+                    let value = queue_depth / 2.0;
+                    result.changes.insert(target.clone(), value);
+                    result.executed_actions += 1;
+                }
+                Action::AdaptiveCalculation { .. } => {
+                    // Other formula types not implemented yet
                 }
                 _ => {}
             }
@@ -354,6 +360,12 @@ pub struct RuleExecution {
     pub actions_executed: u32,
     pub speedup_achieved: f32,
     pub success: bool,
+}
+
+impl Default for AgentRuleLibrary {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AgentRuleLibrary {

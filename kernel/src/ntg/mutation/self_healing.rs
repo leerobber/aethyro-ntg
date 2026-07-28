@@ -437,7 +437,7 @@ impl SelfHealer {
 
         SelfHealerSummary {
             total_errors_detected: self.detected_errors.len(),
-            total_remediations: total_remediations,
+            total_remediations,
             successful_remediations: self.successful_remediations,
             failed_remediations: self.failed_remediations,
             success_rate,
