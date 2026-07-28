@@ -77,6 +77,12 @@ Aethyro-NTG is a Rust workspace implementing a **Neural Ternary Graph (NTG)** en
 | `ntg::bytemerge` | Byte-level diff & merge | ✅ EXPERIMENTAL | 3 | (future patches) | Minimal alignment algorithm |
 | `ntg::fsevents` | File system event streaming | ✅ EXPERIMENTAL | 2 | (development tools) | inotify wrapper (Linux) |
 
+#### Real-Time Telemetry & Streaming
+
+| Module | Purpose | Status | Tests | Used By | Notes |
+|--------|---------|--------|-------|---------|-------|
+| `ntg::websocket` | 60 Hz WebSocket telemetry streaming | ✅ BETA | 7 | telemetry_server binary | SenseReport serialization, 60 Hz ticker |
+
 ---
 
 ### Genomic Pipeline Modules
@@ -152,7 +158,8 @@ Aethyro-NTG is a Rust workspace implementing a **Neural Ternary Graph (NTG)** en
 
 | Library | Version | Purpose | Status | Why |
 |---------|---------|---------|--------|-----|
-| `tokio` | 1.38+ | Async runtime | ✅ STABLE | Multi-threaded executor for schooling |
+| `tokio` | 1.38+ | Async runtime | ✅ STABLE | Multi-threaded executor for schooling + WebSocket |
+| `tokio-tungstenite` | 0.23+ | WebSocket support | ✅ STABLE | 60 Hz telemetry streaming over WebSocket |
 | `rayon` | 1.12+ | Parallel computing | ✅ STABLE | Data-parallel LD computation |
 
 ### Serialization & Formats
@@ -292,7 +299,8 @@ For all PRs modifying code or ARCHITECTURE.md:
 | `phase4_calib` | ntg::{storage,operators,calib}, genomic::{vcf_stream,real_pipeline} | Calibration, model roundtrip | ✅ STABLE |
 | `kernel_host` | ntg::{runtime,schooling,graph}, genomic::{agents,domain_agents} | NanoKeymaster routing agent | ✅ STABLE |
 | `density_bench` | ntg::{ternary,simd,storage} | SIMD throughput benchmark | ✅ STABLE |
-| (test suite) | All 31 modules, 405 tests total | Regression & integration | ✅ STABLE |
+| `telemetry_server` | ntg::{websocket,observability} | 60 Hz WebSocket telemetry streaming | ✅ BETA |
+| (test suite) | All 32 modules, 412 tests total | Regression & integration | ✅ STABLE |
 
 ---
 
