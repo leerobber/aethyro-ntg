@@ -1,5 +1,8 @@
-//! GenomicBrain: Bio-inspired neural architecture from chromosome LD patterns
+//! GenomicBrain: Bio-inspired neural architecture from chromosome LD patterns — Phase F L0 Scaffolding
 //! Learns memory techniques from genetic diversity
+//!
+//! **Status:** Phase F L0 — currently a prototype for self-awareness instrumentation.
+//! Dead code suppressions are intentional (fields used in Debug output or future phases).
 
 use std::collections::HashMap;
 use std::fs::File;

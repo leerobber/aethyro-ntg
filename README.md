@@ -7,14 +7,16 @@ graph topology with an audit ledger).
 
 ---
 
-## Verified status (2026-07-19)
+## Verified status (2026-07-28 — Phase 7 Complete)
 
 | Metric | Value | How verified |
 |--------|-------|---------------|
-| Build | Clean, 0 errors | `cargo build --release` |
-| Tests | 386 passing, 0 failing | `cargo test --release`, counted directly from output |
-| Lines of Rust | ~30,400 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs cat \| wc -l` |
+| Build | Clean, 0 errors, `-D warnings` | `cargo build --release` + `cargo clippy -- -D warnings` |
+| Tests | 412 passing, 0 failing (100% pass) | `cargo test --release`, counted from output |
+| Phases Complete | 0–7, 7.5 in progress | TASKLOG.md + git commit history |
+| Lines of Rust | ~31,200 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe blocks | ~26 | `grep -rn "^\s*unsafe " kernel/src` (FFI boundary + SIMD intrinsics) |
+| Modules | 42 (27 NTG + 15 Genomic) | ARCHITECTURE.md module registry |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -49,6 +51,11 @@ measured and are reproducible by running the code in this repo — see
 agent-lifecycle framework with staged capability gating. This is the least
 mature part of the codebase and the least externally verifiable — read the
 source before relying on any claim about it.
+
+**WebSocket telemetry** (`kernel/src/ntg/websocket/`, Phase 7): real-time 60 Hz
+streaming of SenseReport metrics (hormone levels, energy, safety scores, coherence)
+over WebSocket for desktop app integration and live monitoring. Includes async Tokio
+runtime, 3600-report circular buffer (60-second retention), and JSON serialization.
 
 ---
 
@@ -90,14 +97,27 @@ readiness, and what's actually product-ready vs. research-stage.
 
 ```bash
 cd kernel
-cargo build --release     # Build
-cargo test --release      # Run the real test suite (386 tests as of this writing)
+
+# Build (Rust 1.70+)
+cargo build --release
+
+# Test (412 tests, ~2 min)
+cargo test --release
+
+# Lint (0 warnings required by CI)
+cargo clippy -- -D warnings
+
+# Run telemetry server demo (60 Hz WebSocket streaming)
+cargo run --release --bin telemetry_server
 ```
 
 ## Documentation
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — complete module registry (42 modules) and dependency contracts
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — contribution guidelines
+- [TASKLOG.md](./TASKLOG.md) — phase completion log with verification records
+- [PROTOCOL.md](./PROTOCOL.md) — enterprise governance and code review standards
+- `docs/TELEMETRY.md` — WebSocket telemetry streaming integration guide (Phase 7)
 - `docs/architecture/` — architecture decision records (ADRs)
 
 Historical per-phase session logs from earlier development have been moved

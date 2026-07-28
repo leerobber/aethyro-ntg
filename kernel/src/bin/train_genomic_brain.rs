@@ -14,8 +14,7 @@ struct TrainConfig {
     window_size: usize,
 }
 
-// cycle/duration_ms are populated for Debug output but not read back
-// programmatically elsewhere in this binary.
+/// Stores cycle metrics; cycle and duration_ms are printed but not read programmatically
 #[allow(dead_code)]
 #[derive(Debug)]
 struct TrainingMetrics {

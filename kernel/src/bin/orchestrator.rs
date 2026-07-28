@@ -1,6 +1,10 @@
-//! GenomicBrain Complete Pipeline Orchestrator
+//! GenomicBrain Complete Pipeline Orchestrator — Phase F L0 Scaffolding
 //! Phases A-H: Data → Training → Synthesis → Reasoning → Multi-Agent → Meta-Optimization
 //! End-to-end execution with full Rust implementation, no Python
+//!
+//! **Status:** Phase F L0 — currently a simulation harness with stub implementations.
+//! Full multi-phase orchestration pending Phase F implementation.
+//! Dead code suppressions are intentional (fields used in Debug output or future phases).
 
 use std::fs;
 use std::path::{Path, PathBuf};
