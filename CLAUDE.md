@@ -104,14 +104,14 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** 438 tests, all passing (as of Phase F L0 — ADR 0011).
+**Test count:** 444 tests, all passing (as of Phase F L0 + self_awareness module — ADR 0011).
 
 ---
 
 ## Running Tests
 
 ```bash
-# Full Rust test suite (598 tests, ~1-2 min)
+# Full Rust test suite (444 tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)
