@@ -36,6 +36,10 @@ pub mod endocrine_model;
 pub mod regime_detector;
 pub mod emotion_model;
 
+// Phase F C — Lifecycle transitions and self-modification.
+pub mod adulthood_gate;
+pub mod mutation_activation;
+
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
     SRC_SELECT, SRC_LD, SRC_PHAGE, SRC_OCULUS, KIND_BEGIN, KIND_END, KIND_TICK, KIND_DROP,
@@ -64,3 +68,5 @@ pub use body::{BodyAdapter, BodyCommand, BodyError, BodyFrame, BodyHealth};
 pub use body::host_cpu::IronChassis;
 pub use self_awareness::{SelfAwarenessProbe, SenseReport};
 pub use hostframe_bridge::{HostframeConfig, TelemetryClient, TelemetryPayload, TelemetryStats};
+pub use adulthood_gate::{AdulthoodEvidence, AdulthoodGraduation};
+pub use mutation_activation::{MutationAuthorization, MutationTracker, activate_on_graduation, is_mutation_allowed, log_mutation_to_ledger};
