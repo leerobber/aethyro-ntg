@@ -1,0 +1,47 @@
+{
+  "reports": [
+    {
+      "tick": 100,
+      "timestamp_ms": 1690000000000,
+      "mean_utility": 0.85,
+      "min_safety": 0.92,
+      "quarantine_fraction": 0.0,
+      "bus_drop_rate": 0.001,
+      "awareness_coverage": 1.0,
+      "phage_events_this_tick": 0,
+      "phage_events_total": 5,
+      "deterministic_alarm": false,
+      "health_score": 0.87,
+      "needs_healing": false
+    },
+    {
+      "tick": 101,
+      "timestamp_ms": 1690000016667,
+      "mean_utility": 0.84,
+      "min_safety": 0.91,
+      "quarantine_fraction": 0.01,
+      "bus_drop_rate": 0.002,
+      "awareness_coverage": 0.99,
+      "phage_events_this_tick": 1,
+      "phage_events_total": 6,
+      "deterministic_alarm": false,
+      "health_score": 0.86,
+      "needs_healing": false
+    },
+    {
+      "tick": 102,
+      "timestamp_ms": 1690000033333,
+      "mean_utility": 0.83,
+      "min_safety": 0.90,
+      "quarantine_fraction": 0.02,
+      "bus_drop_rate": 0.003,
+      "awareness_coverage": 0.98,
+      "phage_events_this_tick": 0,
+      "phage_events_total": 6,
+      "deterministic_alarm": false,
+      "health_score": 0.85,
+      "needs_healing": false
+    }
+  ],
+  "sent_at_ms": 1690000050000
+}

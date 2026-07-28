@@ -1,0 +1,14 @@
+# Example Terraform configuration for Hostframe backend
+# Copy to terraform.tfvars and fill in your values
+
+gcp_project            = "your-gcp-project-id"
+gcp_region             = "us-central1"
+container_image        = "gcr.io/your-gcp-project-id/hostframe-backend:latest"
+bq_dataset             = "aethyro_telemetry"
+bq_table               = "telemetry_events"
+bq_data_expiration_days = 90
+cloud_run_cpu          = "2"
+cloud_run_memory       = "1Gi"
+cloud_run_max_instances = 100
+environment            = "production"
+alert_email            = "ops@example.com"
