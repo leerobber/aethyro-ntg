@@ -31,6 +31,11 @@ pub mod self_awareness;
 // Phase F A — Hostframe integration.
 pub mod hostframe_bridge;
 
+// Phase F B — Self-awareness telemetry expansion.
+pub mod endocrine_model;
+pub mod regime_detector;
+pub mod emotion_model;
+
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
     SRC_SELECT, SRC_LD, SRC_PHAGE, SRC_OCULUS, KIND_BEGIN, KIND_END, KIND_TICK, KIND_DROP,
