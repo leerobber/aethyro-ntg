@@ -1,136 +1,61 @@
-# GenomicBrain Architecture
+# System Architecture
 
-**Complete system design for production genomic processing with autonomous agents**
-
----
-
-## System Overview
-
-GenomicBrain is organized into 5 core layers:
-
-### Layer 1: Data Ingestion & Storage
-- **VCF Stream Module:** Parses 1000 Genomes VCF files
-- **Bitsliced Storage:** Compresses 1.3M variants × 2.5K samples to ~1GB
-- **Efficient Access:** Fast retrieval of genotype data at scale
-
-### Layer 2: Genomic Processing
-- **LD Compute Module:** Computes linkage disequilibrium (1.3M pairs/chromosome)
-- **Haplotype Blocks:** Identifies regions of co-inherited genetic information
-- **Statistical Validation:** Hardy-Weinberg equilibrium, allele frequencies
-
-### Layer 3: Autonomous Agents (KAIROS)
-- **Lifecycle Framework:** Agent capability progression through stages
-- **Safety Gating:** Agents cannot exceed their readiness level
-- **Training Pipeline:** Real training with genomic data
-
-### Layer 4: LLM Integration
-- **Ollama Backend:** v0.18.3 production-tested integration
-- **Real Inference:** LLM reasoning on genomic patterns
-- **Domain Integration:** Bridging genomics + NLP
-
-### Layer 5: Quality Assurance
-- **396 Tests:** Unit, integration, end-to-end, performance
-- **Cryptographic Audit Trail:** Hash chain verification for reproducibility
-- **Performance Benchmarks:** SIMD vs scalar, storage efficiency, inference latency
+**Version:** 1.0.0  
+**Last Updated:** 2026-07-28  
+**Status:** Active Development  
+**Maintainer:** Development Governance Board
 
 ---
 
-## Data Flow
+## Module Registry
 
-```
-1000 Genomes VCF
-    ↓
-VcfStream (Parse + Bitslice)
-    ↓
-LD Computation (SIMD-optimized)
-    ↓
-Haplotype Block Detection
-    ↓
-KAIROS Agent Training
-    ↓
-Ollama LLM Integration
-    ↓
-Cryptographic Verification
-    ↓
-Output: Predictions + Proof
-```
+### Core Modules (STABLE) — Production Ready
 
----
+Aethyro-NTG consists of multiple modules supporting neuromorphic ternary graph processing:
 
-## Performance Characteristics
+| Module | Purpose | Status | Notes |
+|--------|---------|--------|-------|
+| `ntg::storage` | Ternary bit storage | ✅ STABLE | Core storage format |
+| `genomic::vcf` | VCF file parsing | ✅ STABLE | Genomic variant reading |
+| `genomic::ld` | Linkage disequilibrium | ✅ STABLE | Statistical genetics |
+| `mutation::adaptive` | Adaptive strategies | ✅ STABLE | Domain-aware mutations |
+| `mutation::portfolio_learning` | Portfolio management | ✅ STABLE | Strategic diversification |
 
-### Time Complexity
-- VCF Parsing: O(variants × samples)
-- LD Computation: O(variants²) → O(variants) with pruning
-- Agent Training: O(data × iterations)
+### External Dependencies (PRODUCTION)
 
-### Space Complexity
-- Bitsliced Genotypes: 3 bits/sample/variant (vs 32 bits naive)
-- Overall: ~1GB for 5M variants × 2.5K samples
-
-### Wall-Clock Performance
-- VCF Parse + Bitslice: ~5 minutes
-- LD Computation: ~25 minutes (SIMD)
-- Agent Training: ~10 minutes per epoch
-- Total Pipeline: ~45 minutes end-to-end
-
-### Baseline Comparison
-```
-Python equivalent: ~6+ hours
-GenomicBrain: ~45 minutes
-Speedup: 8x overall
-```
+| Library | Version | Purpose | Status |
+|---------|---------|---------|--------|
+| tokio | 1.38+ | Async runtime | ✅ STABLE |
+| actix-web | 4.4+ | Web framework | ✅ STABLE |
+| serde | 1.0+ | Serialization | ✅ STABLE |
+| rayon | 1.7+ | Parallel computing | ✅ STABLE |
 
 ---
 
-## Key Design Decisions
+## Dependency Health Check
 
-1. **Rust (not Python):** 4,000x performance improvement required SIMD + systems language
-2. **Bitsliced Storage:** 99% memory savings for million-scale genomic data
-3. **KAIROS Gating:** Autonomous systems need safety constraints
-4. **Cryptographic Verification:** Scientific reproducibility is non-negotiable
-5. **Ollama Integration:** LLM + Genomics = powerful understanding
+### Import Validation Rules
 
----
+1. **All imports must reference STABLE or BETA modules only**
+2. **Module must be registered in this file before importing**
+3. **No circular dependencies allowed**
 
-## Testing Strategy
+### Validation Procedures
 
-### Unit Tests (305)
-- Algorithm correctness
-- Component isolation
-- Edge case handling
-
-### Integration Tests (56)
-- Multi-component workflows
-- End-to-end data pipelines
-- Agent lifecycle progression
-
-### End-to-End Tests (15)
-- Complete genomic workflows
-- Real-world use cases
-- Reproducibility validation
-
-### Performance Tests (20+)
-- Benchmarks with SIMD
-- Storage efficiency
-- Inference latency
+- **Pre-commit:** Run `./scripts/validate-imports.sh`
+- **CI/CD:** Run `./scripts/audit-modules.sh` on every push
+- **Review:** Check ARCHITECTURE.md updated in all PRs
 
 ---
 
-## Deployment
+## Module Status Definitions
 
-**Development:**
-```bash
-cargo build → cargo test → cargo bench
-```
-
-**Production:**
-```bash
-Linux binary with LTO, PGO, SIMD enabled
-Docker container with Ollama sidecar
-Kubernetes-compatible deployment
-```
+- **STABLE**: Production-ready, 100% test pass rate, used by 2+ binaries
+- **BETA**: Tested and integrated, may be used by 1-2 binaries
+- **EXPERIMENTAL**: Under development, limited testing
+- **DISABLED**: Not available for import, binary cannot run
 
 ---
 
-For detailed analysis, see source code in `kernel/src/`
+**Maintained by:** Development Governance Board  
+**Last Updated:** 2026-07-28
