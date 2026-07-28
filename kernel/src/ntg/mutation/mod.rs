@@ -195,8 +195,7 @@ mod tests {
 
     #[test]
     fn mutation_cycle_with_enabled_config_succeeds() -> Result<(), NtgError> {
-        let mut config = SelfModConfig::default();
-        config.enabled = true;
+        let config = SelfModConfig { enabled: true, ..Default::default() };
         let cycle = MutationCycle::new(config, (5000, 1024))?;
         assert_eq!(cycle.mutations_proposed.len(), 0);
         assert_eq!(cycle.mutations_accepted.len(), 0);
@@ -205,8 +204,7 @@ mod tests {
 
     #[test]
     fn propose_mutation() -> Result<(), NtgError> {
-        let mut config = SelfModConfig::default();
-        config.enabled = true;
+        let config = SelfModConfig { enabled: true, ..Default::default() };
         let mut cycle = MutationCycle::new(config, (5000, 1024))?;
 
         let rule = MutationRule {
@@ -219,9 +217,7 @@ mod tests {
 
     #[test]
     fn exceeding_mutation_limit_fails() -> Result<(), NtgError> {
-        let mut config = SelfModConfig::default();
-        config.enabled = true;
-        config.max_mutations_per_cycle = 2;
+        let config = SelfModConfig { enabled: true, max_mutations_per_cycle: 2, ..Default::default() };
         let mut cycle = MutationCycle::new(config, (5000, 1024))?;
 
         for i in 0..3 {
@@ -241,9 +237,7 @@ mod tests {
 
     #[test]
     fn fitness_improvement_check() -> Result<(), NtgError> {
-        let mut config = SelfModConfig::default();
-        config.enabled = true;
-        config.fitness_improvement_threshold = 1.01; // 1% improvement required
+        let config = SelfModConfig { enabled: true, fitness_improvement_threshold: 1.01, ..Default::default() };
         let cycle = MutationCycle::new(config, (5000, 1024))?;
 
         // 5% improvement in both: accepted

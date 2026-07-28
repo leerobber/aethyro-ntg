@@ -103,10 +103,10 @@ mod tests {
         }
 
         // SNP 0 and SNP 1 share the same genotype pattern → r should be ~1.0
-        assert!(ld_matrix[0 * 20 + 1] > 0.9,
-            "expected r(0,1) > 0.9, got {}", ld_matrix[0 * 20 + 1]);
-        assert!(ld_matrix[1 * 20 + 0] > 0.9,
-            "expected r(1,0) > 0.9, got {}", ld_matrix[1 * 20 + 0]);
+        assert!(ld_matrix[1] > 0.9,
+            "expected r(0,1) > 0.9, got {}", ld_matrix[1]);
+        assert!(ld_matrix[20] > 0.9,
+            "expected r(1,0) > 0.9, got {}", ld_matrix[20]);
 
         // Matrix must be symmetric
         for i in 0..20 {
@@ -209,7 +209,7 @@ mod tests {
     fn test_bulk_load_export() {
         let op = GenomicOperator::new(20, 10);
 
-        let genotypes = vec![0u8; 20 * 10];
+        let genotypes = [0u8; 200];
 
         assert_eq!(genotypes.len(), op.num_individuals * op.num_snps);
     }

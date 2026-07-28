@@ -141,3 +141,10 @@ path = "src/bin/vitascale_demo.rs"
 [[bin]]
 name = "telemetry_server"
 path = "src/bin/telemetry_server.rs"
+
+[[bench]]
+name = "simd_benchmark"
+path = "benches/simd_benchmark.rs"
+
+[dev-dependencies]
+criterion = "0.5"

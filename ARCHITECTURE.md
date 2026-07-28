@@ -15,7 +15,7 @@ Aethyro-NTG is a Rust workspace implementing a **Neural Ternary Graph (NTG)** en
 - **`genomic::*`** — Genomic pipeline (VCF parsing, LD computation, phenotype analysis)
 - **`cuda::*`** — GPU acceleration (experimental, Blackwell-optimized)
 
-**Total test coverage:** 405 tests, 100% pass rate (as of 2026-07-28).
+**Total test coverage:** 412 tests, 100% pass rate (as of 2026-07-28, Phase 7 complete).
 
 ---
 
