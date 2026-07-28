@@ -1,6 +1,11 @@
 //! Shared multi-axis selection loop for demos, campaigns, and tests.
 //!
 //! Emits optional JSONL metrics (Phase F observability, minimal form).
+//!
+//! # Deprecation
+//! This module is deprecated as of Phase 7.5.3 and will be removed in the next release cycle.
+//! Functionality is superseded by EvolutionSim for standard genome evolution workflows.
+//! Tests and demos should migrate to use EvolutionSim directly.
 
 use crate::genomic::sovereign_brain::SovereignBrain;
 use crate::genomic::sovereign_fitness::SovereignFitnessContext;

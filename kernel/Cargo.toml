@@ -95,20 +95,12 @@ name = "domain_disease_test"
 path = "src/bin/domain_disease_test.rs"
 
 [[bin]]
-name = "domain_disease_complete"
-path = "src/bin/domain_disease_complete.rs"
-
-[[bin]]
 name = "phase_c_synthesis"
 path = "src/bin/phase_c_synthesis.rs"
 
 [[bin]]
 name = "phase_d_quality_control"
 path = "src/bin/phase_d_quality_control.rs"
-
-[[bin]]
-name = "phase_e_extended_validation"
-path = "src/bin/phase_e_extended_validation.rs"
 
 [[bin]]
 name = "system_evolution_node"
