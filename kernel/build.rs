@@ -89,9 +89,9 @@ fn find_cuda_path() -> PathBuf {
 
 fn compile_cuda_file(
     cu_file: &str,
-    cuda_path: &PathBuf,
+    cuda_path: &std::path::Path,
     gpu_arch: &str,
-    output_dir: &PathBuf,
+    output_dir: &std::path::Path,
     kernel_name: &str,
 ) {
     let nvcc = cuda_path.join("bin/nvcc");
@@ -127,7 +127,7 @@ fn compile_cuda_file(
     println!("cargo:rustc-link-lib=static={}", kernel_name);
 }
 
-fn link_cuda(cuda_path: &PathBuf, out_dir: &PathBuf) {
+fn link_cuda(cuda_path: &std::path::Path, _out_dir: &std::path::Path) {
     // Link CUDA runtime
     let cuda_lib_dir = cuda_path.join("lib64");
     println!("cargo:rustc-link-search=native={}", cuda_lib_dir.display());

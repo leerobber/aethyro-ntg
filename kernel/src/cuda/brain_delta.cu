@@ -59,9 +59,8 @@ __global__ void aggregate_cluster_metrics(
                 agent_embeddings[agent_id * embedding_dim + d]
             );
         }
-        if (d == 0) {
-            atomicAdd(&cluster_counts[cluster_id], 1.0f);
-        }
+        // Count this agent only once per cluster
+        atomicAdd(&cluster_counts[cluster_id], 1.0f);
     }
 }
 

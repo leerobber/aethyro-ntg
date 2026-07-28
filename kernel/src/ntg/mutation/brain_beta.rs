@@ -9,7 +9,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use super::super::error::NtgError;
-use super::domain_coordination::{AgentId, AgentLevel, MutationProposal, PatternAffinity};
+use super::domain_coordination::{AgentId, AgentLevel, MutationProposal};
 
 /// Learned mutation pattern.
 #[derive(Clone, Debug)]
@@ -456,7 +456,7 @@ impl BrainBeta {
 
     /// Learn from a successful mutation.
     pub fn learn_success(&mut self, domain: String, mutation_type: String, gain: f32) {
-        let pattern_id = self.pattern_learner.learn_success(domain, mutation_type, gain);
+        let _pattern_id = self.pattern_learner.learn_success(domain, mutation_type, gain);
         self.pattern_discoveries += 1;
     }
 

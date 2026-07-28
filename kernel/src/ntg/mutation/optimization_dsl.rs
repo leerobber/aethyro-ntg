@@ -162,7 +162,7 @@ impl OptimizationDSLCompiler {
 
         // Parse metadata
         let expected_speedup = self.extract_float(dsl_text, "expect_speedup")?;
-        let risk_level = self.extract_string(dsl_text, "risk")?;
+        let risk_level = self.extract_string(dsl_text, "risk").unwrap_or_else(|_| "safe".to_string());
         let risk_profile = match risk_level.as_str() {
             "safe" => RiskProfile::Safe,
             "experimental" => RiskProfile::Experimental,

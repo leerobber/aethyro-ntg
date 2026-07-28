@@ -9,7 +9,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use super::super::error::NtgError;
-use super::domain_coordination::{AgentId, AgentLevel, DomainSnapshot};
+use super::domain_coordination::{AgentId, AgentLevel};
 
 /// Behavioral state snapshot for synchronization.
 #[derive(Clone, Debug)]
@@ -317,7 +317,7 @@ impl BrainAlpha {
     pub fn observe_behavior(&mut self, signature: BehavioralSignature) -> (bool, String) {
         self.drift_detector.observe(signature.clone());
 
-        let (is_drifting, drift_amount, reason) = self.drift_detector.detect_drift();
+        let (is_drifting, _drift_amount, reason) = self.drift_detector.detect_drift();
 
         if is_drifting {
             self.drifts_detected += 1;
@@ -363,8 +363,8 @@ impl BrainAlpha {
     /// Apply a repair action.
     pub fn apply_repair(&mut self, action: RepairAction) -> Result<(), NtgError> {
         match action {
-            RepairAction::Rollback { reason } => {
-                if let Some(cp) = self.rollback_manager.latest_checkpoint() {
+            RepairAction::Rollback { .. } => {
+                if let Some(_cp) = self.rollback_manager.latest_checkpoint() {
                     self.rollbacks_triggered += 1;
                     self.repairs_successful += 1;
                     Ok(())
@@ -372,12 +372,12 @@ impl BrainAlpha {
                     Err(NtgError::InvalidInput("No checkpoint available".to_string()))
                 }
             }
-            RepairAction::DriftCorrection { reason, target_efficiency } => {
+            RepairAction::DriftCorrection { target_efficiency, .. } => {
                 self.drift_detector.baseline_efficiency = target_efficiency;
                 self.repairs_successful += 1;
                 Ok(())
             }
-            RepairAction::ReconnectParent { reason } => {
+            RepairAction::ReconnectParent { .. } => {
                 self.health_monitor.parent_connection_quality = 0.5;
                 self.repairs_successful += 1;
                 Ok(())

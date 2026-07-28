@@ -14,7 +14,7 @@
 //! - Quad-brain cycle: δ perceive → α sync → β learn → γ govern → feedback
 
 use crate::ntg::mutation::domain_coordination::{AgentId, AgentLevel};
-use super::brain_alpha::{BrainAlpha, RepairAction, BehavioralSignature};
+use super::brain_alpha::{BrainAlpha, BehavioralSignature};
 use super::brain_beta::BrainBeta;
 use std::collections::VecDeque;
 

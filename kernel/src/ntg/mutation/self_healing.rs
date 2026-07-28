@@ -220,7 +220,7 @@ impl SelfHealer {
         metric_name: &str,
         current_value: f32,
         baseline_value: f32,
-        threshold_degradation: f32,  // e.g., 0.2 = 20% degradation
+        threshold_degradation: f32,  // e.g., 0.2 = alert if > 20% threshold
     ) -> Result<Option<DiagnosedError>, NtgError> {
         let degradation = match metric_name {
             "memory_usage" | "latency" | "lock_contention" | "thread_queue_depth" | "gpu_memory" => {
@@ -231,7 +231,8 @@ impl SelfHealer {
             }
         };
 
-        if degradation < threshold_degradation {
+        // Alert if degradation exceeds threshold
+        if degradation <= threshold_degradation {
             return Ok(None);  // No error
         }
 
@@ -437,7 +438,7 @@ impl SelfHealer {
 
         SelfHealerSummary {
             total_errors_detected: self.detected_errors.len(),
-            total_remediations: total_remediations,
+            total_remediations,
             successful_remediations: self.successful_remediations,
             failed_remediations: self.failed_remediations,
             success_rate,
