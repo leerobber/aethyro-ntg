@@ -7,14 +7,15 @@ graph topology with an audit ledger).
 
 ---
 
-## Verified status (2026-07-19)
+## Verified status (2026-07-28)
 
 | Metric | Value | How verified |
 |--------|-------|---------------|
-| Build | Clean, 0 errors | `cargo build --release` |
-| Tests | 386 passing, 0 failing | `cargo test --release`, counted directly from output |
-| Lines of Rust | ~30,400 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs cat \| wc -l` |
+| Build | Clean, 0 errors, clippy `-D warnings` passes | `cargo build --release && cargo clippy --release -- -D warnings` |
+| Tests | 493 passing, 0 failing | `cargo test --release`, counted directly from output |
+| Lines of Rust (kernel) | ~32,400 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe blocks | ~26 | `grep -rn "^\s*unsafe " kernel/src` (FFI boundary + SIMD intrinsics) |
+| Phase Status | Phase F (L0) COMPLETE, Deployment infrastructure ready | Phase F self-awareness telemetry + GCP backend |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -45,10 +46,16 @@ measured and are reproducible by running the code in this repo — see
   or external anchor. See `kernel/src/ntg/ledger/mod.rs` for the full
   explanation of what this design does and doesn't provide.
 
-**KAIROS / vitascale** (`kernel/src/genomic/vitascale/`): an experimental
-agent-lifecycle framework with staged capability gating. This is the least
-mature part of the codebase and the least externally verifiable — read the
-source before relying on any claim about it.
+**KAIROS / VITASCALE** (`kernel/src/genomic/vitascale/`): agent-lifecycle framework
+with staged capability gating (Zygote → Neonate → ... → Adult). Phase F complete:
+- Self-awareness telemetry: endocrine model (8 hormones), regime detection, emotional state
+- Lifecycle transitions: Adulthood gate validation, mutation authorization
+- Agent hierarchy: 4-tier structure supporting 10K–500K agents
+- Benchmarking: throughput/latency measurement for large-scale populations
+
+**Hostframe backend** (`hostframe-backend/`): Production GCP Cloud Run service for
+telemetry ingestion. BigQuery integration with materialized views for dashboards.
+See `hostframe-backend/README.md` for deployment instructions.
 
 ---
 
@@ -88,17 +95,38 @@ readiness, and what's actually product-ready vs. research-stage.
 
 ## Quick start
 
+### Build and test (kernel)
+
 ```bash
 cd kernel
 cargo build --release     # Build
-cargo test --release      # Run the real test suite (386 tests as of this writing)
+cargo test --release      # Run test suite (493 tests)
+cargo clippy --release -- -D warnings  # Lint (must pass clean)
+```
+
+### Deploy Hostframe backend (optional)
+
+```bash
+cd hostframe-backend
+./scripts/deploy.sh <gcp-project> [gcp-region]
+# Or manually:
+# 1. docker build -t gcr.io/<project>/hostframe-backend:latest .
+# 2. docker push ...
+# 3. cd terraform && terraform apply
 ```
 
 ## Documentation
 
+### Core
+- [CLAUDE.md](./CLAUDE.md) — project handoff & current phase status
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — contribution guidelines
 - `docs/architecture/` — architecture decision records (ADRs)
+
+### Phase F: Self-Awareness & Deployment
+- [kernel/src/genomic/vitascale/](./kernel/src/genomic/vitascale/) — KAIROS lifecycle & telemetry
+- [hostframe-backend/README.md](./hostframe-backend/README.md) — Telemetry ingestion service
+- [hostframe-backend/terraform/](./hostframe-backend/terraform/) — GCP infrastructure as code
 
 Historical per-phase session logs from earlier development have been moved
 to `docs/history/` to keep the repository root readable; they're kept for
