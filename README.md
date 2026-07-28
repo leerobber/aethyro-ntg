@@ -12,10 +12,10 @@ graph topology with an audit ledger).
 | Metric | Value | How verified |
 |--------|-------|---------------|
 | Build | Clean, 0 errors, clippy `-D warnings` passes | `cargo build --release && cargo clippy --release -- -D warnings` |
-| Tests | 493 passing, 0 failing | `cargo test --release`, counted directly from output |
-| Lines of Rust (kernel) | ~32,400 | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
+| Tests | 526 passing, 0 failing | `cargo test --release`, counted directly from output |
+| Lines of Rust (kernel) | ~32,000 (dead code removed) | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe blocks | ~26 | `grep -rn "^\s*unsafe " kernel/src` (FFI boundary + SIMD intrinsics) |
-| Phase Status | Phase F (L0) COMPLETE, Deployment infrastructure ready | Phase F self-awareness telemetry + GCP backend |
+| Phase Status | Phase F (L0) COMPLETE, Phase 7.5.3–7.5.4 IN PROGRESS | Deployment ready, API cleanup & consolidation ongoing |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -26,7 +26,7 @@ measured and are reproducible by running the code in this repo — see
 ## What this actually does
 
 **Genomic pipeline** (`kernel/src/genomic/`, ~11K lines):
-- Streaming VCF parsing with bit-packed (2-bit) genotype storage
+- Streaming VCF parsing with bit-packed (2-bit) genotype storage via `Source` trait abstraction
 - Linkage disequilibrium (Pearson r²) computation, including a bit-parallel
   popcount-based fast path cross-validated against a scalar reference
   (`ld_compute.rs` — this is the most solid, tested part of the codebase)
@@ -34,6 +34,7 @@ measured and are reproducible by running the code in this repo — see
   structure from real 1000 Genomes data
 - Population genetics utilities: Hardy-Weinberg, Kimura fixation probability,
   quality control checks
+- Unified `Brain` trait enabling swappable brain implementations (ChromosomeBrain, SovereignBrain)
 
 **NTG kernel** (`kernel/src/ntg/`, ~12K lines):
 - Ternary weight representation and scalar/SIMD matmul

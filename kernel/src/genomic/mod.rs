@@ -4,8 +4,18 @@
 //! Phase C: Genome Synthesis & Evolution with G×E
 //! Phase D: Quality Control & Validation
 //! Phase E: Extended Validation (all 22 chromosomes, multi-population, locus power)
-//! Report Generation: Pure Rust CSV/JSON/HTML generation
+//!
+//! # Module Organization
+//! - `io_traits`: Pluggable Source/Sink abstractions for file I/O
+//! - `input`: VCF/CSV parsing and import (uses io_traits)
+//! - `analysis`: LD computation, haplotype blocks, quality control
+//! - `simulation`: Genome synthesis and evolution
+//! - `brain`: Chromosome brain architecture and agents
+//! - `persistence`: Snapshot saving/loading
+//! - `vitascale`: KAIROS agent lifecycle framework
 
+pub mod io_traits;
+pub mod brain_trait;
 pub mod bitsliced_genotypes;
 pub mod vcf_stream;
 pub mod ld_compute;
@@ -29,6 +39,8 @@ pub mod selection_loop;
 pub mod sovereign_persist;
 pub mod vitascale;
 
+pub use io_traits::{Source, Sink};
+pub use brain_trait::{Brain, StructureMeasurement, BrainDescription};
 pub use bitsliced_genotypes::BitstreamGenotypes;
 pub use vcf_stream::{VcfParser, VcfChromosome, SnpRecord};
 pub use ld_compute::{LdComputer, LdMatrix, LdPair};
