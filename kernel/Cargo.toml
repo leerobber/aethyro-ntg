@@ -12,6 +12,10 @@ serde_json = "1.0"
 rayon = "1.7"
 ureq = { version = "2", features = ["json"] }
 
+[features]
+default = []
+cuda = []  # Enable CUDA GPU acceleration for Brain δ/γ
+
 [lib]
 name = "ntg_kernel"
 crate-type = ["cdylib", "rlib"]

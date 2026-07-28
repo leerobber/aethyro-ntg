@@ -12,6 +12,9 @@
 pub mod ntg;
 pub mod genomic;
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
 pub use ntg::chain::{ChainEntry, ChainLog};
 pub use genomic::{
     VcfParser, VcfChromosome, BitstreamGenotypes, LdComputer, LdMatrix, LdPair, BlockDetector,

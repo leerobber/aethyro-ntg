@@ -13,6 +13,8 @@ pub mod rules;
 pub mod evaluator;
 pub mod budget;
 pub mod multi_axis;
+pub mod self_healing;
+pub mod optimization_dsl;
 
 pub use multi_axis::{
     MultiAxisFitness, MultiAxisEvaluator, SelectionOutcome as MultiAxisSelectionOutcome,
