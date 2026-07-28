@@ -54,6 +54,9 @@ pub use guardian::{
 };
 pub use trajectory::{TrajectoryCharter, TrajectoryPillar};
 pub use kairos::{Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport};
+pub use endocrine_model::{HormoneProfile, EndocrineModel};
+pub use regime_detector::{Regime, RegimeDetector};
+pub use emotion_model::{EmotionalState, EmotionModel};
 
 // Phase F L0 re-exports.
 pub use awareness_bus::{NeuroSignal, Sensefield, StreamId};
