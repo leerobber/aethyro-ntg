@@ -39,6 +39,7 @@ pub mod emotion_model;
 // Phase F C — Lifecycle transitions and self-modification.
 pub mod adulthood_gate;
 pub mod mutation_activation;
+pub mod agent_hierarchy;
 
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
@@ -70,3 +71,4 @@ pub use self_awareness::{SelfAwarenessProbe, SenseReport};
 pub use hostframe_bridge::{HostframeConfig, TelemetryClient, TelemetryPayload, TelemetryStats};
 pub use adulthood_gate::{AdulthoodEvidence, AdulthoodGraduation};
 pub use mutation_activation::{MutationAuthorization, MutationTracker, activate_on_graduation, is_mutation_allowed, log_mutation_to_ledger};
+pub use agent_hierarchy::{AgentTier, AgentId, AgentSnapshot, AgentHierarchy};
