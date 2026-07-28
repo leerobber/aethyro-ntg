@@ -28,6 +28,20 @@ pub mod immune_organ;
 pub mod body;
 pub mod self_awareness;
 
+// Phase F A — Hostframe integration.
+pub mod hostframe_bridge;
+
+// Phase F B — Self-awareness telemetry expansion.
+pub mod endocrine_model;
+pub mod regime_detector;
+pub mod emotion_model;
+
+// Phase F C — Lifecycle transitions and self-modification.
+pub mod adulthood_gate;
+pub mod mutation_activation;
+pub mod agent_hierarchy;
+pub mod benchmark_harness;
+
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
     SRC_SELECT, SRC_LD, SRC_PHAGE, SRC_OCULUS, KIND_BEGIN, KIND_END, KIND_TICK, KIND_DROP,
@@ -40,6 +54,9 @@ pub use guardian::{
 };
 pub use trajectory::{TrajectoryCharter, TrajectoryPillar};
 pub use kairos::{Kairos, KairosReport, NurseryGenomeSpec, NeonateCareReport};
+pub use endocrine_model::{HormoneProfile, EndocrineModel};
+pub use regime_detector::{Regime, RegimeDetector};
+pub use emotion_model::{EmotionalState, EmotionModel};
 
 // Phase F L0 re-exports.
 pub use awareness_bus::{NeuroSignal, Sensefield, StreamId};
@@ -55,3 +72,8 @@ pub use immune_organ::{ImmuneConfig, PhageEvent, Phageguard};
 pub use body::{BodyAdapter, BodyCommand, BodyError, BodyFrame, BodyHealth};
 pub use body::host_cpu::IronChassis;
 pub use self_awareness::{SelfAwarenessProbe, SenseReport};
+pub use hostframe_bridge::{HostframeConfig, TelemetryClient, TelemetryPayload, TelemetryStats};
+pub use adulthood_gate::{AdulthoodEvidence, AdulthoodGraduation};
+pub use mutation_activation::{MutationAuthorization, MutationTracker, activate_on_graduation, is_mutation_allowed, log_mutation_to_ledger};
+pub use agent_hierarchy::{AgentTier, AgentId, AgentSnapshot, AgentHierarchy};
+pub use benchmark_harness::{BenchmarkConfig, BenchmarkResult, run_benchmark};
