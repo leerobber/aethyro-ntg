@@ -48,7 +48,7 @@ impl TelemetryStream {
     pub fn new() -> Self {
         Self {
             reports: Arc::new(RwLock::new(Vec::new())),
-            hz_60_ticker: Duration::from_millis(16), // 60 Hz = 16.67ms per tick
+            hz_60_ticker: Duration::from_secs_f64(1.0 / 60.0),
             cycle_counter: 0,
             start_time: Instant::now(),
         }
@@ -133,7 +133,8 @@ mod tests {
     fn test_telemetry_stream_new() {
         let stream = TelemetryStream::new();
         assert_eq!(stream.cycle_counter, 0);
-        assert_eq!(stream.hz_60_tick_duration(), Duration::from_millis(16));
+        let expected = Duration::from_secs_f64(1.0 / 60.0);
+        assert_eq!(stream.hz_60_tick_duration(), expected);
     }
 
     #[tokio::test]
@@ -191,7 +192,7 @@ mod tests {
     fn test_elapsed_ms() {
         let stream = TelemetryStream::new();
         let elapsed = stream.elapsed_ms();
-        assert!(elapsed >= 0);
+        assert!(elapsed < 1000);
     }
 
     #[test]

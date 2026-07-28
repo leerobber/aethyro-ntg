@@ -11,8 +11,8 @@ async fn main() {
     let mut telemetry = TelemetryStream::new();
     let cycle_counter = Arc::new(RwLock::new(0u64));
 
-    // Simulate 60 Hz ticker (16.67ms between ticks)
-    let mut ticker = interval(Duration::from_millis(16));
+    // Simulate 60 Hz ticker (16.667ms between ticks)
+    let mut ticker = interval(Duration::from_secs_f64(1.0 / 60.0));
 
     println!("✓ Telemetry stream initialized");
     println!("✓ 60 Hz ticker ready (16.67ms intervals)");
@@ -34,7 +34,7 @@ async fn main() {
             hormone_cortisol: 0.3 + ((*cycle as f32 * 0.5).cos() * 0.15),
             hormone_serotonin: 0.7 + ((*cycle as f32 * 0.3).sin() * 0.1),
             active_nodes: ((*cycle as usize) % 256) + 64,
-            mutations_queued: ((*cycle as usize / 2) % 8),
+            mutations_queued: (*cycle as usize / 2) % 8,
             safety_score: 0.95 - ((*cycle as f32 * 0.01).sin() * 0.05),
             behavioral_drift: ((*cycle as f32 * 0.02).sin().abs() * 0.1),
             energy_consumed_uj: (*cycle as f32) * 2.5,
