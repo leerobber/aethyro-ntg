@@ -28,6 +28,9 @@ pub mod immune_organ;
 pub mod body;
 pub mod self_awareness;
 
+// Phase F A — Hostframe integration.
+pub mod hostframe_bridge;
+
 pub use pulsewire::{
     PulseEvent, Pulsewire, VitalMeters, PulseHandles, SRC_HEARTBEAT, SRC_ACTIVATE, SRC_SCORE,
     SRC_SELECT, SRC_LD, SRC_PHAGE, SRC_OCULUS, KIND_BEGIN, KIND_END, KIND_TICK, KIND_DROP,
@@ -55,3 +58,4 @@ pub use immune_organ::{ImmuneConfig, PhageEvent, Phageguard};
 pub use body::{BodyAdapter, BodyCommand, BodyError, BodyFrame, BodyHealth};
 pub use body::host_cpu::IronChassis;
 pub use self_awareness::{SelfAwarenessProbe, SenseReport};
+pub use hostframe_bridge::{HostframeConfig, TelemetryClient, TelemetryPayload, TelemetryStats};
