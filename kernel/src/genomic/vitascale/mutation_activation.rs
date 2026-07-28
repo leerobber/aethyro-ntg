@@ -79,7 +79,7 @@ pub fn is_mutation_allowed(
     auth: &MutationAuthorization,
     tracker: &MutationTracker,
     current_tick: u64,
-    max_ticks_since_last: u64,
+    _max_ticks_since_last: u64,
 ) -> bool {
     // 1. Must be enabled
     if !auth.enabled {
