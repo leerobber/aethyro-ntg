@@ -222,7 +222,14 @@ impl SelfHealer {
         baseline_value: f32,
         threshold_degradation: f32,  // e.g., 0.2 = 20% degradation
     ) -> Result<Option<DiagnosedError>, NtgError> {
-        let degradation = (baseline_value - current_value) / baseline_value;
+        let degradation = match metric_name {
+            "memory_usage" | "latency" | "lock_contention" | "thread_queue_depth" | "gpu_memory" => {
+                (current_value - baseline_value).abs() / baseline_value
+            }
+            _ => {
+                (baseline_value - current_value) / baseline_value
+            }
+        };
 
         if degradation < threshold_degradation {
             return Ok(None);  // No error
@@ -462,7 +469,7 @@ mod tests {
 
         let error = healer.detect_error(
             "memory_usage",
-            1500.0,  // Current: 1.5GB
+            1600.0,  // Current: 1.6GB (> 1.5x baseline)
             1000.0,  // Baseline: 1.0GB
             0.2,     // Alert if > 20% increase
         )?;

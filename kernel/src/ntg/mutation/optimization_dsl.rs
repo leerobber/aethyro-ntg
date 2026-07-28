@@ -478,13 +478,14 @@ mod tests {
                 when queue_depth > 50:
                     batch_size = queue_depth / 2
                     expect_speedup(1.4x)
+                    risk("safe")
         "#;
 
         library.register_rule_from_dsl(dsl)?;
         assert_eq!(library.rules.len(), 1);
 
         let mut metrics = HashMap::new();
-        metrics.insert("queue_depth".to_string(), 100.0);
+        metrics.insert("queue_depth".to_string(), 101.0);
 
         let executions = library.apply_all_rules(metrics)?;
         assert!(!executions.is_empty());

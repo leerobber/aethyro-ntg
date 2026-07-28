@@ -385,10 +385,10 @@ impl NanoKeymaster {
 
         // Action 2: Determine degradation signal from real HealthMonitor metrics.
         let degradation_signal = Some(DegradationSignal::from_metrics(
-            self.health_monitor.baseline_latency_us,
-            self.health_monitor.baseline_memory_bytes,
-            self.health_monitor.current_latency_us,
-            self.health_monitor.current_memory_bytes,
+            self.health_monitor.baseline_latency_us(),
+            self.health_monitor.baseline_memory_bytes(),
+            self.health_monitor.current_latency_us(),
+            self.health_monitor.current_memory_bytes(),
         ));
 
         // Action 3: Run autonomous improvement loop if degradation is significant.
