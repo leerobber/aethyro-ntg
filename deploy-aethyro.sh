@@ -54,28 +54,46 @@ else
     # Detect OS and architecture
     OS=$(uname -s)
     ARCH=$(uname -m)
+    TFVER="1.7.5"
 
-    if [[ "$OS" == "MINGW64"* ]] || [[ "$OS" == "MSYS"* ]]; then
-        TFVER="1.7.5"
+    if [[ "$OS" == "Linux" ]]; then
+        [[ "$ARCH" == "x86_64" ]] && TFARCH="amd64" || TFARCH="$ARCH"
+        TFURL="https://releases.hashicorp.com/terraform/${TFVER}/terraform_${TFVER}_linux_${TFARCH}.zip"
+        TFDIR="/usr/local/bin"
+        NEED_SUDO=true
+    elif [[ "$OS" == "Darwin" ]]; then
+        [[ "$ARCH" == "arm64" ]] && TFARCH="arm64" || TFARCH="amd64"
+        TFURL="https://releases.hashicorp.com/terraform/${TFVER}/terraform_${TFVER}_darwin_${TFARCH}.zip"
+        TFDIR="/usr/local/bin"
+        NEED_SUDO=true
+    elif [[ "$OS" == "MINGW64"* ]] || [[ "$OS" == "MSYS"* ]]; then
         TFURL="https://releases.hashicorp.com/terraform/${TFVER}/terraform_${TFVER}_windows_amd64.zip"
         TFDIR="${USERPROFILE}/.terraform"
+        NEED_SUDO=false
         mkdir -p "$TFDIR"
-        cd "$TFDIR"
-
-        echo "  Downloading Terraform for Windows..."
-        curl -fsSL -o terraform.zip "$TFURL"
-        unzip -o terraform.zip
-        rm terraform.zip
-
-        # Add to PATH
         export PATH="$TFDIR:$PATH"
-        echo "  ✓ Terraform installed to: $TFDIR"
-        echo "  NOTE: Add $TFDIR to your PATH permanently in Environment Variables"
     else
-        echo "  ERROR: Unsupported OS for automated Terraform install: $OS"
-        echo "  Please download from: https://www.terraform.io/downloads"
+        echo "  ERROR: Unsupported OS: $OS"
         exit 1
     fi
+
+    echo "  Downloading Terraform ${TFVER}..."
+    TMPDIR="/tmp/tf-install-$$"
+    mkdir -p "$TMPDIR"
+    cd "$TMPDIR"
+    curl -fsSL -o terraform.zip "$TFURL"
+    unzip -q terraform.zip
+
+    if [[ "$NEED_SUDO" == "true" ]]; then
+        sudo mv terraform "$TFDIR/"
+        sudo chmod +x "$TFDIR/terraform"
+    else
+        mv terraform "$TFDIR/"
+        chmod +x "$TFDIR/terraform"
+    fi
+
+    rm -rf "$TMPDIR"
+    echo "  ✓ Terraform $TFVER installed to $TFDIR"
 fi
 
 # ============================================================================
@@ -101,7 +119,8 @@ echo "  ✓ Authenticated as: $CURRENT_ACCOUNT"
 echo ""
 echo "[3/6] Building Docker image..."
 
-cd "$(pwd)/aethyro-ntg/hostframe-backend"
+REPO_ROOT=$(cd "$(dirname "$0")" && pwd)
+cd "$REPO_ROOT/hostframe-backend"
 
 IMAGE_REPO="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/ntg-kernel"
 IMAGE="${IMAGE_REPO}/ntg-kernel:${IMAGE_TAG}"
@@ -138,7 +157,7 @@ echo "  ✓ All APIs enabled"
 echo ""
 echo "[5/6] Initializing Terraform..."
 
-cd deploy/terraform
+cd "$REPO_ROOT/deploy/terraform"
 
 # Create terraform.tfvars for this deployment
 cat > terraform.tfvars <<EOF
