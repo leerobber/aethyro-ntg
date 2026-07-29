@@ -11,11 +11,15 @@
 
 pub mod ntg;
 pub mod genomic;
+pub mod self_awareness;
 
 #[cfg(feature = "cuda")]
 pub mod cuda;
 
 pub use ntg::chain::{ChainEntry, ChainLog};
+pub use self_awareness::{
+    TelemetryPayload, LdComputeStats, SafetyScoreSnapshot, SystemStats, TelemetryError,
+};
 pub use genomic::{
     VcfParser, VcfChromosome, BitstreamGenotypes, LdComputer, LdMatrix, LdPair, BlockDetector,
     HaplotypeBlock, BlockStatistics, compute_block_statistics,
