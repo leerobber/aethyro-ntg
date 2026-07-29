@@ -8,9 +8,11 @@ name: Deploy (GCP)
 #   GCP_SERVICE_ACCOUNT    — CI/CD service account email (needs AR writer + Cloud Run deployer)
 #   GCP_REGION             — defaults to us-central1
 
+# Parked: GCP billing is not enabled on the aethyro-ntg project, so this
+# pipeline cannot succeed yet (auth/API-enable/deploy all require billing).
+# Manual dispatch only until billing is turned on — re-add the `push`
+# trigger on `main` at that point.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:

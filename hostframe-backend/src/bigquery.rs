@@ -2,7 +2,7 @@
 
 use crate::config::Config;
 use crate::error::HostframeError;
-use crate::telemetry::{MetricsSnapshot, TelemetryPayload};
+use crate::telemetry::TelemetryPayload;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
