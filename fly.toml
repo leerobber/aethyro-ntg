@@ -1,0 +1,23 @@
+app = "aethyro-ntg"
+primary_region = "sjc"
+
+[build]
+dockerfile = "./hostframe-backend/Dockerfile"
+
+[env]
+RUST_LOG = "info"
+
+[[services]]
+internal_port = 8080
+processes = ["app"]
+
+[services.http_checks]
+enabled = true
+grace_period = "10s"
+interval = "30s"
+method = "GET"
+min_interval = "10s"
+path = "/health"
+protocol = "http"
+restart_limit = 0
+timeout = "5s"
