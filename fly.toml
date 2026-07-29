@@ -2,10 +2,13 @@ app = "aethyro-ntg"
 primary_region = "sjc"
 
 [build]
-dockerfile = "./hostframe-backend/Dockerfile"
+dockerfile = "Dockerfile"
+builtin = "dockerfile"
+context = "hostframe-backend"
 
 [env]
 RUST_LOG = "info"
+PORT = "8080"
 
 [[services]]
 internal_port = 8080
