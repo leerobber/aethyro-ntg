@@ -1,4 +1,4 @@
 [workspace]
 members = ["kernel"]
-exclude = ["backend/keymaster", "hostframe-backend"]
+exclude = ["backend/keymaster", "hostframe-backend", "dashboard"]
 resolver = "2"
