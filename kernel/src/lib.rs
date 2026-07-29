@@ -11,22 +11,24 @@
 
 pub mod ntg;
 pub mod genomic;
+pub mod self_awareness;
 
 #[cfg(feature = "cuda")]
 pub mod cuda;
 
 pub use ntg::chain::{ChainEntry, ChainLog};
+pub use self_awareness::{
+    TelemetryPayload, LdComputeStats, SafetyScoreSnapshot, SystemStats, TelemetryError,
+};
 pub use genomic::{
     VcfParser, VcfChromosome, BitstreamGenotypes, LdComputer, LdMatrix, LdPair, BlockDetector,
     HaplotypeBlock, BlockStatistics, compute_block_statistics,
     ChromosomeBrain, ChromosomeId, NeuronId, Synapse, GenomicNeuron, KairosState, BrainSummary,
     init_chromosome_brain, ChromosomeAgent, AgentQuery, AgentResponse, AgentCoordinator,
     CoordinatorResponse, DomainAgent, DomainType, DomainQuery, DiseaseDiagnosis, PatternSignature,
-    RiskSeverity, TestResults, DomainResult, AggregateStats,
+    RiskSeverity,
     Genome, GenomeSampler, EvolutionSim, FitnessModel, DefaultFitnessModel, GenerationStats,
     PhenotypeHead, Environment, GxEEngine,
-    RecombinationMap, RecombinationComparator, RecombinationComparison,
-    HaplotypeBlockComparator, HaplotypeBlockComparison,
     SovereignBrain, WorkingSet, LtmMotif, LtmStats, GlobalNeuronRef, StructuralMetrics,
     ConsolidateReport, SovereignFitnessContext, reference_from_brain, synthetic_from_brain,
     ld_coverage, LanguageOrgan, fixture_docs, Organ, run_selection_loop, format_summary,

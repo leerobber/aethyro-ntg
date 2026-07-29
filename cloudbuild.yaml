@@ -1,0 +1,89 @@
+steps:
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/ntg-kernel/ntg-kernel:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/ntg-kernel/ntg-kernel:latest'
+      - '-f'
+      - 'hostframe-backend/Dockerfile'
+      - 'hostframe-backend/'
+
+  # Step 2: Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/ntg-kernel/ntg-kernel:${SHORT_SHA}'
+
+  # Step 3: Enable APIs
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - run
+      - gcloud
+      - services
+      - enable
+      - run.googleapis.com
+      - container.googleapis.com
+      - artifactregistry.googleapis.com
+      - secretmanager.googleapis.com
+      - bigquery.googleapis.com
+      - storage.googleapis.com
+      - cloudkms.googleapis.com
+
+  # Step 4: Install Terraform
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y wget unzip
+        wget https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
+        unzip terraform_1.7.5_linux_amd64.zip
+        mv terraform /usr/local/bin/
+        terraform --version
+
+  # Step 5: Terraform Init
+  - name: 'hashicorp/terraform:1.7.5'
+    entrypoint: 'terraform'
+    args:
+      - 'init'
+    dir: 'deploy/terraform'
+    env:
+      - 'TF_VAR_project_id=${PROJECT_ID}'
+      - 'TF_VAR_region=${_REGION}'
+      - 'TF_VAR_image_tag=${SHORT_SHA}'
+
+  # Step 6: Terraform Plan
+  - name: 'hashicorp/terraform:1.7.5'
+    entrypoint: 'terraform'
+    args:
+      - 'plan'
+      - '-var=project_id=${PROJECT_ID}'
+      - '-var=region=${_REGION}'
+      - '-var=image_tag=${SHORT_SHA}'
+      - '-out=tfplan'
+    dir: 'deploy/terraform'
+
+  # Step 7: Terraform Apply
+  - name: 'hashicorp/terraform:1.7.5'
+    entrypoint: 'terraform'
+    args:
+      - 'apply'
+      - '-auto-approve'
+      - 'tfplan'
+    dir: 'deploy/terraform'
+
+substitutions:
+  _REGION: 'us-central1'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/ntg-kernel/ntg-kernel:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/ntg-kernel/ntg-kernel:latest'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '3600s'
