@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Aethyro NTG — Control Panel</title>
+<meta name="theme-color" content="#0d1117" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Aethyro" />
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --border: #2a323c;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #a371f7;
+    --ok: #3fb950;
+    --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body { display: flex; flex-direction: column; }
+  header {
+    padding: max(14px, env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
+  h1 span { color: var(--accent); }
+  .status-strip { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.up { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .dot.down { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+  .dot.unknown { background: var(--muted); }
+
+  main {
+    flex: 1; overflow-y: auto; padding: 16px; max-width: 720px; width: 100%;
+    margin: 0 auto; display: flex; flex-direction: column; gap: 10px;
+  }
+  .bubble {
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5;
+  }
+  .bubble.user { align-self: flex-end; background: #1c2530; border-color: #2f3b48; max-width: 80%; }
+  .bubble.system { align-self: flex-start; max-width: 90%; }
+  .bubble .meta { color: var(--muted); font-size: 11px; margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .bubble .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .bubble .badge.local { color: var(--ok); border-color: var(--ok); }
+  .bubble .badge.external { color: var(--accent2); border-color: var(--accent2); }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--text); }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; margin-top: 40px; }
+
+  form {
+    border-top: 1px solid var(--border); padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    display: flex; gap: 8px; max-width: 720px; width: 100%; margin: 0 auto;
+  }
+  .intent-toggle { display: flex; gap: 6px; }
+  .intent-toggle button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 0 10px; font-size: 12px; cursor: pointer;
+  }
+  .intent-toggle button.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  textarea {
+    flex: 1; resize: none; background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    font-family: inherit; min-height: 42px; max-height: 120px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  button.send {
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+    border: none; border-radius: 10px; padding: 0 18px; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  button.send:disabled { opacity: 0.5; cursor: default; }
+  button.ghost {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 10px; padding: 0 14px; font-size: 12px; cursor: pointer;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Aethyro <span>NTG</span> — Control Panel</h1>
+    <div class="status-strip">
+      <span id="s-kernel"><span class="dot unknown"></span>kernel_host</span>
+      <span id="s-backend"><span class="dot unknown"></span>keymaster-backend</span>
+      <span id="s-ollama"><span class="dot unknown"></span>ollama</span>
+      <button class="ghost" id="verify-btn" type="button">Verify ledger</button>
+    </div>
+  </header>
+
+  <main id="log">
+    <div class="empty">Chat with gh05t3-sovereign (grounded in this repo's docs), or switch to Classify / Score to query the local ternary brain directly.</div>
+  </main>
+
+  <form id="form">
+    <div class="intent-toggle">
+      <button type="button" data-intent="chat" class="active">Chat</button>
+      <button type="button" data-intent="classify">Classify</button>
+      <button type="button" data-intent="score">Score</button>
+    </div>
+    <textarea id="input" placeholder="Ask about the project…" rows="1"></textarea>
+    <button class="send" id="send-btn" type="submit">Send</button>
+  </form>
+
+<script>
+const log = document.getElementById('log');
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
+const verifyBtn = document.getElementById('verify-btn');
+const sKernel = document.getElementById('s-kernel');
+const sBackend = document.getElementById('s-backend');
+let intent = 'chat';
+let empty = true;
+
+const placeholders = {
+  chat: 'Ask about the project…',
+  classify: 'Enter text or code…',
+  score: 'Enter text or code…',
+};
+
+document.querySelectorAll('.intent-toggle button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.intent-toggle button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    intent = b.dataset.intent;
+    input.placeholder = placeholders[intent] || '';
+  });
+});
+
+function clearEmpty() {
+  if (empty) { log.innerHTML = ''; empty = false; }
+}
+
+function addBubble(kind, html) {
+  clearEmpty();
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.innerHTML = html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const sOllama = document.getElementById('s-ollama');
+
+async function refreshHealth() {
+  try {
+    const r = await fetch('/api/health');
+    const j = await r.json();
+    sKernel.innerHTML = `<span class="dot ${j.kernel_host === 'up' ? 'up' : 'down'}"></span>kernel_host`;
+    sBackend.innerHTML = `<span class="dot ${j.keymaster_backend === 'up' ? 'up' : 'down'}"></span>keymaster-backend`;
+    const ollamaLabel = j.ollama === 'up'
+      ? (j.rag_index_ready ? `ollama (${j.rag_chunks} docs indexed)` : 'ollama (indexing…)')
+      : 'ollama';
+    sOllama.innerHTML = `<span class="dot ${j.ollama === 'up' ? 'up' : 'down'}"></span>${ollamaLabel}`;
+  } catch {
+    sKernel.innerHTML = `<span class="dot down"></span>kernel_host`;
+    sBackend.innerHTML = `<span class="dot down"></span>keymaster-backend`;
+    sOllama.innerHTML = `<span class="dot down"></span>ollama`;
+  }
+}
+refreshHealth();
+setInterval(refreshHealth, 5000);
+
+verifyBtn.addEventListener('click', async () => {
+  addBubble('system', '<div class="meta">verify_ledger</div><pre>checking…</pre>').querySelector('pre').textContent = 'checking…';
+  try {
+    const r = await fetch('/api/verify_ledger');
+    const j = await r.json();
+    addBubble('system', `<div class="meta">ledger check</div><pre>${escapeHtml(JSON.stringify(j, null, 2))}</pre>`);
+  } catch (e) {
+    addBubble('system', `<div class="meta">ledger check — error</div><pre>${escapeHtml(String(e))}</pre>`);
+  }
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  addBubble('user', `<div class="meta">${intent}</div><pre>${escapeHtml(text)}</pre>`);
+  input.value = '';
+  sendBtn.disabled = true;
+  const thinking = addBubble('system', '<div class="meta">…</div><pre>thinking</pre>');
+  try {
+    if (intent === 'chat') {
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || JSON.stringify(j));
+      const sourceTags = (j.sources || []).map(s => `<span class="badge">${escapeHtml(s)}</span>`).join(' ');
+      const indexNote = j.index_ready === false ? '<span class="badge">still indexing docs…</span>' : '';
+      thinking.innerHTML = `<div class="meta">${sourceTags}${indexNote}</div><pre>${escapeHtml(j.reply || '(empty reply)')}</pre>`;
+    } else {
+      const r = await fetch('/api/' + intent, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const j = await r.json();
+      const backend = j.backend || 'unknown';
+      thinking.innerHTML = `<div class="meta">
+          <span class="badge ${backend}">${backend}</span>
+          confidence ${j.confidence ?? '—'} · latency ${j.latency_us ?? '—'}µs
+        </div><pre>${escapeHtml(JSON.stringify(j, null, 2))}</pre>`;
+    }
+  } catch (err) {
+    thinking.innerHTML = `<div class="meta">error</div><pre>${escapeHtml(String(err))}</pre>`;
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
