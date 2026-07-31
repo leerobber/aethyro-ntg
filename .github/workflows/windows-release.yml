@@ -1,0 +1,171 @@
+name: Windows Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Build Windows x86_64 (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo (kernel)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kernel
+          key: windows-kernel
+
+      - name: Cache cargo (dashboard)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dashboard
+          key: windows-dashboard
+
+      - name: Build kernel_host (release)
+        working-directory: kernel
+        run: cargo build --release --bin kernel_host
+
+      - name: Build aethyro-dashboard (release)
+        working-directory: dashboard
+        run: cargo build --release --bin aethyro-dashboard
+
+      - name: Stage portable package
+        shell: pwsh
+        run: |
+          $root = "dist/aethyro-ntg-windows"
+          New-Item -ItemType Directory -Force -Path "$root/bin" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/static" | Out-Null
+
+          Copy-Item "kernel/target/release/kernel_host.exe" "$root/bin/"
+          Copy-Item "dashboard/target/release/aethyro-dashboard.exe" "$root/bin/"
+
+          # PWA assets — required for Android/Chrome "Add to Home Screen"
+          Copy-Item -Recurse -Force "dashboard/static/*" "$root/static/"
+
+          # Launcher script so KERNEL_HOST_BIN and static dir resolve correctly
+          @'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          set KERNEL_HOST_BIN=%~dp0bin\kernel_host.exe
+          set DASHBOARD_STATIC_DIR=%~dp0static
+          set PORT=4000
+          echo.
+          echo  Aethyro-NTG Control Panel
+          echo  -------------------------
+          echo  Dashboard:  http://localhost:4000
+          echo  On Android: open that URL in Chrome → menu → "Add to Home screen"
+          echo  Press Ctrl+C to stop.
+          echo.
+          "%~dp0bin\aethyro-dashboard.exe"
+          '@ | Set-Content -Encoding ASCII "$root/start-dashboard.bat"
+
+          @'
+          Aethyro-NTG — Windows portable package
+          ======================================
+
+          CONTENTS
+            bin/kernel_host.exe          Local NTG kernel (stdin/stdout JSON)
+            bin/aethyro-dashboard.exe    HTTP bridge + installable PWA UI
+            static/                      PWA assets (manifest, icons, service worker)
+            start-dashboard.bat          One-click launcher
+
+          WINDOWS — RUN
+            1. Double-click start-dashboard.bat
+               (or run bin\aethyro-dashboard.exe with env vars set as in the bat file)
+            2. Open http://localhost:4000 in a browser
+
+          ANDROID — INSTALL AS APP (PWA)
+            1. Start the dashboard on a machine reachable from the phone
+               (same LAN: use the PC's IP, e.g. http://192.168.1.10:4000)
+            2. On Android, open that URL in Chrome
+            3. Chrome menu → "Add to Home screen" / "Install app"
+            4. The control panel opens fullscreen like a native app
+
+            Requirements: HTTPS or localhost. For LAN installs, either use a
+            reverse proxy with TLS or temporarily use Chrome flags for insecure
+            origins; the included service worker and manifest.json are already
+            configured for standalone display.
+
+          OPTIONAL ENV
+            PORT                    Dashboard listen port (default 4000)
+            KERNEL_HOST_BIN         Path to kernel_host.exe
+            DASHBOARD_STATIC_DIR    Path to static/ (PWA assets)
+            OLLAMA_URL              Local Ollama for /api/chat RAG (optional)
+            KEYMASTER_BACKEND_URL   Keymaster backend if used
+
+          SYSTEM
+            Windows 10/11 x64, ~50 MB disk, no admin rights required for the
+            portable ZIP. Firewall may prompt on first listen.
+
+          Source: https://github.com/leerobber/aethyro-ntg
+          '@ | Set-Content -Encoding UTF8 "$root/README.txt"
+
+          # ZIP for artifact + release
+          Compress-Archive -Path $root -DestinationPath "aethyro-ntg-windows-x64.zip" -Force
+
+      - name: Upload portable ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethyro-ntg-windows-x64
+          path: aethyro-ntg-windows-x64.zip
+          retention-days: 30
+
+      - name: Smoke-test dashboard health
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $env:KERNEL_HOST_BIN = (Resolve-Path "dist/aethyro-ntg-windows/bin/kernel_host.exe").Path
+          $env:DASHBOARD_STATIC_DIR = (Resolve-Path "dist/aethyro-ntg-windows/static").Path
+          $env:PORT = "4000"
+          $proc = Start-Process -FilePath "dist/aethyro-ntg-windows/bin/aethyro-dashboard.exe" `
+            -PassThru -WindowStyle Hidden
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:4000/api/health" -UseBasicParsing -TimeoutSec 2
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) { throw "Health check did not return 200 within timeout" }
+            Write-Host "Health check OK: $($r.Content)"
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: aethyro-ntg-windows-x64.zip
+          body: |
+            ## Aethyro-NTG Windows portable
+
+            **Install on Windows**
+            1. Download `aethyro-ntg-windows-x64.zip` and extract
+            2. Run `start-dashboard.bat`
+            3. Open http://localhost:4000
+
+            **Install on Android (PWA)**
+            1. Run the dashboard so the phone can reach it (same Wi‑Fi)
+            2. In Chrome on Android open `http://<pc-ip>:4000`
+            3. Menu → **Add to Home screen** / **Install app**
+
+            Includes `kernel_host.exe`, `aethyro-dashboard.exe`, and full PWA static assets (manifest, icons, service worker).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
