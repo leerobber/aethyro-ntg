@@ -69,11 +69,8 @@ jobs:
 
           Copy-Item $kernelBin "$root/bin/"
           Copy-Item $dashBin "$root/bin/"
-
-          # PWA assets — required for Android/Chrome "Add to Home Screen"
           Copy-Item -Recurse -Force "dashboard/static/*" "$root/static/"
 
-          # Launcher script so KERNEL_HOST_BIN and static dir resolve correctly
           @'
           @echo off
           setlocal
@@ -103,37 +100,19 @@ jobs:
 
           WINDOWS - RUN
             1. Double-click start-dashboard.bat
-               (or run bin\aethyro-dashboard.exe with env vars set as in the bat file)
             2. Open http://localhost:4000 in a browser
 
           ANDROID - INSTALL AS APP (PWA)
             1. Start the dashboard on a machine reachable from the phone
-               (same LAN: use the PC's IP, e.g. http://192.168.1.10:4000)
-            2. On Android, open that URL in Chrome
-            3. Chrome menu - "Add to Home screen" / "Install app"
-            4. The control panel opens fullscreen like a native app
-
-            Requirements: HTTPS or localhost. For LAN installs, either use a
-            reverse proxy with TLS or temporarily use Chrome flags for insecure
-            origins; the included service worker and manifest.json are already
-            configured for standalone display.
+            2. On Android Chrome open http://<pc-ip>:4000
+            3. Menu - Add to Home screen / Install app
 
           OPTIONAL ENV
-            PORT                    Dashboard listen port (default 4000)
-            KERNEL_HOST_BIN         Path to kernel_host.exe
-            DASHBOARD_STATIC_DIR    Path to static/ (PWA assets)
-            OLLAMA_URL              Local Ollama for /api/chat RAG (optional)
-            KEYMASTER_BACKEND_URL   Keymaster backend if used
-
-          SYSTEM
-            Windows 10/11 x64, ~50 MB disk, no admin rights required for the
-            portable ZIP. Firewall may prompt on first listen.
+            PORT, KERNEL_HOST_BIN, DASHBOARD_STATIC_DIR, OLLAMA_URL, KEYMASTER_BACKEND_URL
 
           Source: https://github.com/leerobber/aethyro-ntg
           '@ | Set-Content -Encoding UTF8 "$root/README.txt"
 
-          # Verify package contents
-          Get-ChildItem -Recurse $root | Select-Object FullName, Length
           $kh = Get-Item "$root/bin/kernel_host.exe"
           $ad = Get-Item "$root/bin/aethyro-dashboard.exe"
           if ($kh.Length -lt 10000 -or $ad.Length -lt 10000) {
@@ -142,7 +121,7 @@ jobs:
           }
 
           Compress-Archive -Path $root -DestinationPath "aethyro-ntg-windows-x64.zip" -Force
-          Write-Host "Packaged: $(Resolve-Path aethyro-ntg-windows-x64.zip)"
+          Write-Host "Packaged: $(Resolve-Path aethyro-ntg-windows-x64.zip) size=$((Get-Item aethyro-ntg-windows-x64.zip).Length)"
 
       - name: Upload portable ZIP artifact
         uses: actions/upload-artifact@v4
@@ -162,17 +141,14 @@ jobs:
           $outLog = Join-Path $pwd "dash-stdout.txt"
           $errLog = Join-Path $pwd "dash-stderr.txt"
 
-          # Clear any stale env; set what the dashboard reads
           $env:KERNEL_HOST_BIN = $kernel
           $env:DASHBOARD_STATIC_DIR = $static
           $env:PORT = "4000"
-          $env:RUST_LOG = "info,tower_http=info,aethyro_dashboard=info"
+          $env:RUST_LOG = "info"
 
           Write-Host "KERNEL_HOST_BIN=$env:KERNEL_HOST_BIN"
-          Write-Host "DASHBOARD_STATIC_DIR=$env:DASHBOARD_STATIC_DIR"
           Write-Host "WorkingDirectory=$pkg"
 
-          # Start with redirected streams so we can diagnose spawn failures
           $proc = Start-Process -FilePath $dash `
             -WorkingDirectory $pkg `
             -PassThru -NoNewWindow `
@@ -195,9 +171,7 @@ jobs:
                   $content = $r.Content
                   break
                 }
-              } catch {
-                # still starting
-              }
+              } catch {}
             }
 
             Write-Host "--- stdout ---"
@@ -206,14 +180,7 @@ jobs:
             if (Test-Path $errLog) { Get-Content $errLog -ErrorAction SilentlyContinue }
 
             if (-not $ok) {
-              # Package is still valid; CI runners can block console child spawn.
-              # Fail soft only if binaries were produced (already verified above).
-              Write-Warning "Health check did not return 200. Artifact still uploaded."
-              if ($proc.HasExited -and $proc.ExitCode -ne 0) {
-                Write-Host "Exit code: $($proc.ExitCode)"
-              }
-              # Soft-pass: builds + package succeeded; runtime smoke is best-effort on GHA Windows
-              exit 0
+              throw "Health check did not return 200 within timeout"
             }
             Write-Host "Health check OK: $content"
           } finally {
@@ -240,6 +207,6 @@ jobs:
             2. In Chrome on Android open `http://<pc-ip>:4000`
             3. Menu → **Add to Home screen** / **Install app**
 
-            Includes `kernel_host.exe`, `aethyro-dashboard.exe`, and full PWA static assets (manifest, icons, service worker).
+            Includes `kernel_host.exe`, `aethyro-dashboard.exe`, and full PWA static assets.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
