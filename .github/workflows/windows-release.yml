@@ -49,8 +49,26 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$root/bin" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/static" | Out-Null
 
-          Copy-Item "kernel/target/release/kernel_host.exe" "$root/bin/"
-          Copy-Item "dashboard/target/release/aethyro-dashboard.exe" "$root/bin/"
+          # Workspace member (kernel) writes to repo-root target/, not kernel/target/
+          $kernelBin = "target/release/kernel_host.exe"
+          if (-not (Test-Path $kernelBin)) {
+            $kernelBin = "kernel/target/release/kernel_host.exe"
+          }
+          if (-not (Test-Path $kernelBin)) {
+            Write-Error "kernel_host.exe not found under target/release or kernel/target/release"
+            Get-ChildItem -Recurse -Filter kernel_host.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+            exit 1
+          }
+
+          $dashBin = "dashboard/target/release/aethyro-dashboard.exe"
+          if (-not (Test-Path $dashBin)) {
+            Write-Error "aethyro-dashboard.exe not found at $dashBin"
+            Get-ChildItem -Recurse -Filter aethyro-dashboard.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+            exit 1
+          }
+
+          Copy-Item $kernelBin "$root/bin/"
+          Copy-Item $dashBin "$root/bin/"
 
           # PWA assets — required for Android/Chrome "Add to Home Screen"
           Copy-Item -Recurse -Force "dashboard/static/*" "$root/static/"
@@ -67,14 +85,14 @@ jobs:
           echo  Aethyro-NTG Control Panel
           echo  -------------------------
           echo  Dashboard:  http://localhost:4000
-          echo  On Android: open that URL in Chrome → menu → "Add to Home screen"
+          echo  On Android: open that URL in Chrome - menu - Add to Home screen
           echo  Press Ctrl+C to stop.
           echo.
           "%~dp0bin\aethyro-dashboard.exe"
           '@ | Set-Content -Encoding ASCII "$root/start-dashboard.bat"
 
           @'
-          Aethyro-NTG — Windows portable package
+          Aethyro-NTG - Windows portable package
           ======================================
 
           CONTENTS
@@ -83,16 +101,16 @@ jobs:
             static/                      PWA assets (manifest, icons, service worker)
             start-dashboard.bat          One-click launcher
 
-          WINDOWS — RUN
+          WINDOWS - RUN
             1. Double-click start-dashboard.bat
                (or run bin\aethyro-dashboard.exe with env vars set as in the bat file)
             2. Open http://localhost:4000 in a browser
 
-          ANDROID — INSTALL AS APP (PWA)
+          ANDROID - INSTALL AS APP (PWA)
             1. Start the dashboard on a machine reachable from the phone
                (same LAN: use the PC's IP, e.g. http://192.168.1.10:4000)
             2. On Android, open that URL in Chrome
-            3. Chrome menu → "Add to Home screen" / "Install app"
+            3. Chrome menu - "Add to Home screen" / "Install app"
             4. The control panel opens fullscreen like a native app
 
             Requirements: HTTPS or localhost. For LAN installs, either use a
@@ -116,6 +134,7 @@ jobs:
 
           # ZIP for artifact + release
           Compress-Archive -Path $root -DestinationPath "aethyro-ntg-windows-x64.zip" -Force
+          Write-Host "Packaged: $(Resolve-Path aethyro-ntg-windows-x64.zip)"
 
       - name: Upload portable ZIP artifact
         uses: actions/upload-artifact@v4
@@ -135,15 +154,16 @@ jobs:
             -PassThru -WindowStyle Hidden
           try {
             $ok = $false
+            $content = ""
             for ($i = 0; $i -lt 20; $i++) {
               Start-Sleep -Seconds 1
               try {
                 $r = Invoke-WebRequest -Uri "http://127.0.0.1:4000/api/health" -UseBasicParsing -TimeoutSec 2
-                if ($r.StatusCode -eq 200) { $ok = $true; break }
+                if ($r.StatusCode -eq 200) { $ok = $true; $content = $r.Content; break }
               } catch {}
             }
             if (-not $ok) { throw "Health check did not return 200 within timeout" }
-            Write-Host "Health check OK: $($r.Content)"
+            Write-Host "Health check OK: $content"
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
           }
@@ -162,7 +182,7 @@ jobs:
             3. Open http://localhost:4000
 
             **Install on Android (PWA)**
-            1. Run the dashboard so the phone can reach it (same Wi‑Fi)
+            1. Run the dashboard so the phone can reach it (same Wi-Fi)
             2. In Chrome on Android open `http://<pc-ip>:4000`
             3. Menu → **Add to Home screen** / **Install app**
 
