@@ -49,7 +49,11 @@ impl KernelHost {
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-        Ok(Self { child, stdin, stdout })
+        Ok(Self {
+            child,
+            stdin,
+            stdout,
+        })
     }
 
     /// Send one request line, skip any non-JSON banner/log noise, return the first valid JSON reply.
@@ -81,7 +85,8 @@ impl KernelHost {
     }
 }
 
-type SharedKernel = Arc<Mutex<KernelHost>>;
+/// Optional so the HTTP server can bind even when kernel_host is not yet available.
+type SharedKernel = Arc<Mutex<Option<KernelHost>>>;
 
 #[derive(Clone)]
 struct AppState {
@@ -95,20 +100,34 @@ struct AppState {
 
 async fn ensure_alive(state: &SharedKernel) -> anyhow::Result<()> {
     let mut guard = state.lock().await;
-    if !guard.alive() {
-        *guard = KernelHost::spawn().await?;
+    let needs_spawn = match guard.as_mut() {
+        None => true,
+        Some(k) => !k.alive(),
+    };
+    if needs_spawn {
+        *guard = Some(KernelHost::spawn().await?);
     }
     Ok(())
 }
 
-async fn call_intent(state: &SharedKernel, req: Value) -> Result<Json<Value>, (StatusCode, String)> {
+async fn call_intent(
+    state: &SharedKernel,
+    req: Value,
+) -> Result<Json<Value>, (StatusCode, String)> {
     ensure_alive(state)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let mut guard = state.lock().await;
-    match guard.request(&req).await {
+    let kernel = guard
+        .as_mut()
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "kernel_host not running".into()))?;
+    match kernel.request(&req).await {
         Ok(v) => Ok(Json(v)),
-        Err(e) => Err((StatusCode::BAD_GATEWAY, e.to_string())),
+        Err(e) => {
+            // Drop dead child so next call re-spawns
+            *guard = None;
+            Err((StatusCode::BAD_GATEWAY, e.to_string()))
+        }
     }
 }
 
@@ -157,10 +176,11 @@ struct OllamaChatResponse {
 }
 
 async fn chat(State(state): State<AppState>, Json(body): Json<ChatBody>) -> impl IntoResponse {
-    let query_embedding = match rag::embed(&state.http, &state.ollama_url, &state.embed_model, &body.message).await {
-        Ok(e) => e,
-        Err(e) => return Err((StatusCode::BAD_GATEWAY, format!("embedding failed: {e}"))),
-    };
+    let query_embedding =
+        match rag::embed(&state.http, &state.ollama_url, &state.embed_model, &body.message).await {
+            Ok(e) => e,
+            Err(e) => return Err((StatusCode::BAD_GATEWAY, format!("embedding failed: {e}"))),
+        };
 
     let (context, sources, index_ready) = {
         let idx = state.rag.read().await;
@@ -212,7 +232,10 @@ async fn chat(State(state): State<AppState>, Json(body): Json<ChatBody>) -> impl
             "sources": sources,
             "index_ready": index_ready,
         }))),
-        Err(e) => Err((StatusCode::BAD_GATEWAY, format!("ollama response parse error: {e}"))),
+        Err(e) => Err((
+            StatusCode::BAD_GATEWAY,
+            format!("ollama response parse error: {e}"),
+        )),
     }
 }
 
@@ -236,7 +259,13 @@ async fn probe_http(addr: &str, path: &str) -> bool {
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let kernel_alive = { state.kernel.lock().await.alive() };
+    let kernel_alive = {
+        let mut guard = state.kernel.lock().await;
+        match guard.as_mut() {
+            Some(k) => k.alive(),
+            None => false,
+        }
+    };
     let keymaster_backend_up = probe_http("127.0.0.1:8080", "/health").await;
     let (rag_ready, rag_chunks) = {
         let idx = state.rag.read().await;
@@ -255,6 +284,7 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         "ollama": if ollama_up { "up" } else { "down" },
         "rag_index_ready": rag_ready,
         "rag_chunks": rag_chunks,
+        "dashboard": "up",
     }))
 }
 
@@ -264,12 +294,23 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let kernel = KernelHost::spawn().await?;
-    let kernel: SharedKernel = Arc::new(Mutex::new(kernel));
+    // Best-effort spawn: dashboard must still bind so PWA / health work without kernel.
+    let kernel: SharedKernel = Arc::new(Mutex::new(match KernelHost::spawn().await {
+        Ok(k) => {
+            tracing::info!("kernel_host spawned");
+            Some(k)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "kernel_host spawn failed; will retry on API calls");
+            None
+        }
+    }));
 
     let ollama_url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
-    let chat_model = std::env::var("OLLAMA_CHAT_MODEL").unwrap_or_else(|_| "gh05t3-sovereign".into());
-    let embed_model = std::env::var("OLLAMA_EMBED_MODEL").unwrap_or_else(|_| "nomic-embed-text".into());
+    let chat_model =
+        std::env::var("OLLAMA_CHAT_MODEL").unwrap_or_else(|_| "gh05t3-sovereign".into());
+    let embed_model =
+        std::env::var("OLLAMA_EMBED_MODEL").unwrap_or_else(|_| "nomic-embed-text".into());
     let repo_root = std::env::var("REPO_ROOT").unwrap_or_else(|_| ".".into());
     let http = reqwest::Client::new();
     let rag_index = Arc::new(RwLock::new(RagIndex::empty()));
@@ -282,7 +323,14 @@ async fn main() -> anyhow::Result<()> {
         rag_index.clone(),
     ));
 
-    let state = AppState { kernel, rag: rag_index, http, ollama_url, chat_model, embed_model };
+    let state = AppState {
+        kernel,
+        rag: rag_index,
+        http,
+        ollama_url,
+        chat_model,
+        embed_model,
+    };
 
     let static_dir = std::env::var("DASHBOARD_STATIC_DIR").unwrap_or_else(|_| "static".into());
 
@@ -297,7 +345,10 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(4000);
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(4000);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!(%addr, static_dir, "aethyro-dashboard listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
