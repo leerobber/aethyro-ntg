@@ -46,7 +46,7 @@ measured and are reproducible by running the code in this repo — see
   small trained network. On the real pretrained BitNet b1.58 2B-4T it keeps
   accuracy (perplexity within 0.15%, ARC-Easy unchanged within noise) and runs
   the decode matmuls 7.7x to 8.5x faster than bf16 on one core; prefill is
-  slower than torch and it has not been compared with `bitnet.cpp`. One shared
+  slower than torch. Against `bitnet.cpp` on the same VM the whole-model decode is 1.3x (one thread) to 3.5x (four) slower here, with kernel-level parity unknown (`docs/results/bitnet_cpp/`). One shared
   VM, caveats in `docs/EXPERIMENTS.md` (2026-10-26). The earlier "143.6x" was
   against a naive scalar loop.
 - A self-modifying graph topology with 5 safety rails (off by default,
