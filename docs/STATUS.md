@@ -2,7 +2,8 @@
 
 **As of:** 2026-10-26 (facts re-measured; narrative sections below are from 2026-07-12 unless noted)  
 **Capability version:** 10 (`ternary_capability()` — Phase 5 runtime calib supported)  
-**Build:** `cargo test --release` green: <!--tests-->540<!--/tests--> passed, 0 failed, 0 ignored. `cargo clippy --all-targets -- -D warnings` clean. Whole-stack smoke passes. Details: [BASELINE_2026-10-26.md](BASELINE_2026-10-26.md)  
+**Build:** `cargo test --release` green: <!--tests-->649<!--/tests--> passed, 0 failed, 0 ignored. `cargo clippy --all-targets -- -D warnings` clean. Whole-stack smoke passes. Details: [BASELINE_2026-10-26.md](BASELINE_2026-10-26.md)  
+**Phase 6 kernel gate (2026-10-26): does not pass on throughput.** Against SIMD f32 sgemm the ternary kernel is slower in this build (0.15x to 1.05x), with 16x smaller operands and bit-exact results; the July "143.6x" was against a triple-loop scalar baseline. Details and caveats: [EXPERIMENTS.md](EXPERIMENTS.md) (2026-10-26). **Quad-Brain:** now on `main`, with γ and δ genuinely wired and `kernel_host` feeding it real routing behaviour (see [CLAUDE.md](../CLAUDE.md)); previously it existed only on an unmerged branch.  
 **Known stub:** `hostframe-backend` accepts `/ingest` and serves `/metrics`, but its BigQuery client is a stub: it keeps counters in memory and does not write to BigQuery (startup only needs `GCP_PROJECT`). The telemetry → BigQuery → dashboard loop is therefore not wired end to end.  
 **Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md). **Phase names:** the 0–5 / 6.x / F scheme in the root [CLAUDE.md](../CLAUDE.md) phase table is the one vocabulary; the “7.5.x” labels in `PHASE_7_5_ROADMAP.md` were planning labels for a hygiene pass, not project phases. **Test counts** in README, CLAUDE.md and this file are checked against real test output by `scripts/check-doc-counts.sh` in CI.
 
@@ -56,7 +57,7 @@ do not start N+1 until N is certified.
 
 | Check | Result |
 |-------|--------|
-| `cargo test --release` (kernel) | <!--tests-->540<!--/tests--> passed, 0 failed, 0 ignored (capability v10; calib model/sparse/compare tests included) |
+| `cargo test --release` (kernel) | <!--tests-->649<!--/tests--> passed, 0 failed, 0 ignored (capability v10; calib model/sparse/compare tests included) |
 | `cargo build --release` | Success (`libntg_kernel.{so,rlib}`, `phase4_calib`, benches) |
 | CI | `.github/workflows/ci.yml`: kernel test + phase4 smoke + model roundtrip + density_bench + clippy + doc-count check; keymaster test + clippy; whole-stack smoke (dashboard + kernel_host + keymaster) |
 | Host hardware (audit machine) | x86_64 with AVX2 + AVX-512F/VPOPCNTDQ advertised |
@@ -166,7 +167,7 @@ do not start N+1 until N is certified.
 - Optional `--self-mod` probe ledgered, fitness may reject
 
 ### Phase 5 and later
-Phase 5 is certified COMPLETE (see the phase-gate table above). Later work is tracked under the 6.x / F scheme in [CLAUDE.md](../CLAUDE.md): 6.0–6.18 complete, Phase F (L0) scaffold complete but no verified live deployment. Still open: Phase 6 host product path (WASM/FFI) per the gate protocol, and the aethyro.com head-to-head.
+Phase 5 is certified COMPLETE (see the phase-gate table above). Later work is tracked under the 6.x / F scheme in [CLAUDE.md](../CLAUDE.md): 6.0 re-measured (kernel gate fails on throughput, see EXPERIMENTS.md 2026-10-26), 6.1–6.18 present with the caveats in CLAUDE.md, Phase F (L0) scaffold complete but no verified live deployment. Still open: Phase 6 host product path (WASM/FFI) per the gate protocol, and the aethyro.com head-to-head.
 
 ---
 
@@ -183,7 +184,7 @@ Phase 5 is certified COMPLETE (see the phase-gate table above). Later work is tr
 | `self_parse` | 3 | Real repo docs parse without panic |
 | `sovereign_integration` | 2 | SovereignBrain integration |
 | `test_genomic_operator` | 11 | Genomic operator |
-| **Total** | **<!--tests-->540<!--/tests-->** | measured 2026-10-26 |
+| **Total** | **<!--tests-->649<!--/tests-->** | measured 2026-10-26 |
 
 ### Known test honesty notes
 - Sparse `ternary_matmul` is **chunk-level score → ±1 gate**, not full dense GEMM.

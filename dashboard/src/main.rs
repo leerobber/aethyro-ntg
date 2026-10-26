@@ -149,6 +149,26 @@ async fn verify_ledger(State(state): State<AppState>) -> impl IntoResponse {
     call_intent(&state.kernel, json!({ "intent": "_verify_ledger" })).await
 }
 
+async fn quad_brain(State(state): State<AppState>) -> impl IntoResponse {
+    call_intent(&state.kernel, json!({ "intent": "_quad_brain" })).await
+}
+
+#[derive(Deserialize)]
+struct HierarchyBody {
+    nano: Option<u64>,
+}
+
+async fn hierarchy(
+    State(state): State<AppState>,
+    Json(body): Json<HierarchyBody>,
+) -> impl IntoResponse {
+    call_intent(
+        &state.kernel,
+        json!({ "intent": "_hierarchy", "payload": { "nano": body.nano.unwrap_or(10_000) } }),
+    )
+    .await
+}
+
 async fn classify(State(state): State<AppState>, Json(body): Json<TextBody>) -> impl IntoResponse {
     call_intent(
         &state.kernel,
@@ -349,6 +369,8 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api/status", get(status))
         .route("/api/verify_ledger", get(verify_ledger))
+        .route("/api/quad_brain", get(quad_brain))
+        .route("/api/hierarchy", post(hierarchy))
         .route("/api/classify", post(classify))
         .route("/api/score", post(score))
         .route("/api/chat", post(chat))

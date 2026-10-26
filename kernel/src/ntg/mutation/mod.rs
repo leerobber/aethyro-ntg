@@ -15,10 +15,43 @@ pub mod budget;
 pub mod multi_axis;
 pub mod self_healing;
 pub mod optimization_dsl;
+pub mod domain_coordination;
+pub mod brain_alpha;
+pub mod brain_beta;
+pub mod brain_gamma;
+pub mod brain_delta;
+pub mod brain_integration;
 
 pub use multi_axis::{
     MultiAxisFitness, MultiAxisEvaluator, SelectionOutcome as MultiAxisSelectionOutcome,
     proxy_task_from_structure, proxy_biology_from_structure,
+};
+
+pub use domain_coordination::{
+    DomainCoordinationEngine, AgentId, AgentLevel, PatternAffinity, MutationProposal,
+    ConsensusDecision, QueuedMutation, PatternTransfer, DomainSnapshot, CoordinationConfig,
+    AgentMetadata,
+};
+pub use brain_alpha::{
+    BrainAlpha, BehavioralDriftDetector, BehavioralSignature, HealthMonitor, ConnectionStatus,
+    SyncState, RollbackManager, Checkpoint, RepairAction,
+};
+pub use brain_beta::{
+    BrainBeta, PatternLearner, MutationPattern, StrategyOptimizer, Strategy, MutationRouter,
+    RoutingDecision, LoadPredictor,
+};
+pub use brain_gamma::{
+    BrainGamma, PolicyDirective, PolicyPriority, PolicyScope, EvolutionPlan, MutationType,
+    LineageObjective, MutationOutcome, LineageRecord, GovernanceMetrics, GammaReport,
+};
+pub use brain_delta::{
+    BrainDelta, LocalMetrics, ClusterMetrics, SwarmMetrics, HormoneLevels, PerceptionSnapshot,
+    RepresentationState, ForecastState, DeltaReport,
+};
+pub use brain_integration::{
+    TwinBrainAgent, CrossBrainChannel, SyncHint, RoutingHint, BrainDecision, TwinBrainReport,
+    TwinBrainMetrics, QuadBrainAgent, QuadBrainMetrics, QuadBrainReport, HealthSnapshot,
+    StrategySnapshot, ForecastSnapshot,
 };
 
 use super::error::NtgError;
