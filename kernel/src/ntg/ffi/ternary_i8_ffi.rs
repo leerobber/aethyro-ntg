@@ -10,7 +10,7 @@
 //! across the boundary.
 
 use crate::ntg::storage::spin_pool::{DEFAULT_SPIN_ITERS, DEFAULT_YIELD_ITERS};
-use crate::ntg::storage::{Int8Activations, PackedTernaryMatrix, SpinPool, TernaryI8Kernel};
+use crate::ntg::storage::{Int8Activations, Int8Matrix, PackedTernaryMatrix, SpinPool, TernaryI8Kernel};
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 
@@ -132,6 +132,78 @@ pub unsafe extern "C" fn ntg_ternary_forward_f32(
     0
 }
 
+/// Quantise a `rows x cols` bf16 matrix (raw `u16` bit patterns, row-major) to int8 with one
+/// scale per row, for the output projection. Returns null on a zero dimension or null input.
+///
+/// # Safety
+/// `weights` must be valid for reads of `rows * cols` `u16` values.
+#[no_mangle]
+pub unsafe extern "C" fn ntg_int8_matrix_new_bf16(weights: *const u16, rows: usize, cols: usize) -> *mut c_void {
+    if weights.is_null() || rows == 0 || cols == 0 {
+        return std::ptr::null_mut();
+    }
+    let Some(len) = rows.checked_mul(cols) else { return std::ptr::null_mut() };
+    let w = std::slice::from_raw_parts(weights, len);
+    match Int8Matrix::from_bf16_bits(w, rows, cols) {
+        Ok(m) => Box::into_raw(Box::new(m)) as *mut c_void,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Bytes of weight storage for a handle, or 0 for null.
+///
+/// # Safety
+/// `m` must be null or a live handle from [`ntg_int8_matrix_new_bf16`].
+#[no_mangle]
+pub unsafe extern "C" fn ntg_int8_matrix_bytes(m: *const c_void) -> usize {
+    (m as *const Int8Matrix).as_ref().map_or(0, |m| m.bytes())
+}
+
+/// Free a handle. Null is ignored.
+///
+/// # Safety
+/// `m` must be null or a handle from [`ntg_int8_matrix_new_bf16`] that is not used again.
+#[no_mangle]
+pub unsafe extern "C" fn ntg_int8_matrix_free(m: *mut c_void) {
+    if !m.is_null() {
+        drop(Box::from_raw(m as *mut Int8Matrix));
+    }
+}
+
+/// `out[b][n] = (sum_k W[n][k] * q(x[b])[k]) * x_scale[b] * row_scale[n]` for a batch of f32
+/// rows (`batch x cols`), writing `batch x rows` f32 values. Activations are quantised the
+/// BitNet way (per row, 127 / max). Returns 0 on success.
+///
+/// # Safety
+/// `m` must be a live handle; `x` valid for `batch * cols` reads; `out` valid for
+/// `batch * rows` writes.
+#[no_mangle]
+pub unsafe extern "C" fn ntg_int8_forward_f32(m: *const c_void, x: *const f32, batch: usize, out: *mut f32) -> i32 {
+    let Some(m) = (m as *const Int8Matrix).as_ref() else { return -1 };
+    if x.is_null() || out.is_null() || batch == 0 {
+        return -2;
+    }
+    let x = std::slice::from_raw_parts(x, batch * m.cols());
+    let out = std::slice::from_raw_parts_mut(out, batch * m.rows());
+    let Ok(acts) = Int8Activations::quantize_f32_bitnet(x, batch, m.cols()) else { return -3 };
+    let kernel = TernaryI8Kernel::best_available();
+    let mut acc = vec![0i32; batch * m.rows()];
+    let ran = match pool() {
+        Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, &p),
+        None => m.gemm_i8(&acts, &mut acc, kernel),
+    };
+    if ran.is_err() {
+        return -4;
+    }
+    for b in 0..batch {
+        let sx = acts.scales()[b];
+        for (n, &sw) in m.scales().iter().enumerate() {
+            out[b * m.rows() + n] = acc[b * m.rows() + n] as f32 * sx * sw;
+        }
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +247,36 @@ mod tests {
             assert_eq!(ntg_ternary_matrix_bytes(std::ptr::null()), 0);
         }
         assert!((0..=2).contains(&ntg_ternary_best_kernel()));
+    }
+    #[test]
+    fn int8_forward_matches_the_rust_api_and_rejects_bad_input() {
+        let (rows, cols, batch) = (70usize, 300usize, 2usize);
+        // bf16 bit patterns: the top 16 bits of the f32 representation.
+        let w: Vec<u16> = (0..rows * cols)
+            .map(|i| ((((i * 31 + i / 5) % 4000) as f32 / 1000.0 - 2.0).to_bits() >> 16) as u16)
+            .collect();
+        let x: Vec<f32> = (0..batch * cols).map(|i| ((i * 13) % 97) as f32 / 10.0 - 4.0).collect();
+        let mut out = vec![0f32; batch * rows];
+        unsafe {
+            let h = ntg_int8_matrix_new_bf16(w.as_ptr(), rows, cols);
+            assert!(!h.is_null());
+            assert!(ntg_int8_matrix_bytes(h) >= rows * cols);
+            assert_eq!(ntg_int8_forward_f32(h, x.as_ptr(), batch, out.as_mut_ptr()), 0);
+            ntg_int8_matrix_free(h);
+            assert!(ntg_int8_matrix_new_bf16(std::ptr::null(), 4, 4).is_null());
+            assert_eq!(ntg_int8_forward_f32(std::ptr::null(), x.as_ptr(), 1, out.as_mut_ptr()), -1);
+            ntg_int8_matrix_free(std::ptr::null_mut());
+            assert_eq!(ntg_int8_matrix_bytes(std::ptr::null()), 0);
+        }
+        let m = Int8Matrix::from_bf16_bits(&w, rows, cols).unwrap();
+        let acts = Int8Activations::quantize_f32_bitnet(&x, batch, cols).unwrap();
+        let mut acc = vec![0i32; batch * rows];
+        m.gemm_i8(&acts, &mut acc, TernaryI8Kernel::Scalar).unwrap();
+        for b in 0..batch {
+            for n in 0..rows {
+                let want = acc[b * rows + n] as f32 * acts.scales()[b] * m.scales()[n];
+                assert_eq!(out[b * rows + n], want, "({b},{n})");
+            }
+        }
     }
 }
