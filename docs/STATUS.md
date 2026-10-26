@@ -3,6 +3,7 @@
 **As of:** 2026-10-26 (facts re-measured; narrative sections below are from 2026-07-12 unless noted)  
 **Capability version:** 10 (`ternary_capability()` — Phase 5 runtime calib supported)  
 **Build:** `cargo test --release` green: <!--tests-->540<!--/tests--> passed, 0 failed, 0 ignored. `cargo clippy --all-targets -- -D warnings` clean. Whole-stack smoke passes. Details: [BASELINE_2026-10-26.md](BASELINE_2026-10-26.md)  
+**Known stub:** `hostframe-backend` accepts `/ingest` and serves `/metrics`, but its BigQuery client is a stub: it keeps counters in memory and does not write to BigQuery (startup only needs `GCP_PROJECT`). The telemetry → BigQuery → dashboard loop is therefore not wired end to end.  
 **Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md). **Phase names:** the 0–5 / 6.x / F scheme in the root [CLAUDE.md](../CLAUDE.md) phase table is the one vocabulary; the “7.5.x” labels in `PHASE_7_5_ROADMAP.md` were planning labels for a hygiene pass, not project phases. **Test counts** in README, CLAUDE.md and this file are checked against real test output by `scripts/check-doc-counts.sh` in CI.
 
 ### Sovereign stack (2026-07-12 — post Phase F rungs)

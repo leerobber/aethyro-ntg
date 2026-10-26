@@ -116,6 +116,8 @@ cargo clippy --all-targets -- -D warnings
 
 ### Deploy Hostframe backend (optional; no verified live deployment yet)
 
+Shortest path to a verified deployment: [docs/DEPLOY.md](docs/DEPLOY.md) (`scripts/verify-deploy.sh <url>` checks it from outside). Heavier GCP route below.
+
 ```bash
 cd hostframe-backend
 ./scripts/deploy.sh <gcp-project> [gcp-region]
