@@ -98,7 +98,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 3 | COMPLETE | Self-modification safety rails + audit ledger |
 | 4 | COMPLETE | Calibration (phase4_calib binary, model roundtrip) |
 | 5 | COMPLETE | Storage integration |
-| 6.0 | RE-MEASURED 2026-10-26 | Ternary vs f32 head-to-head. The July "143.6×" was against a triple-loop scalar f32 baseline; against SIMD f32 sgemm the kernel is slower (0.15–1.05×), with 16× smaller operands. See `docs/EXPERIMENTS.md` |
+| 6.0 | RE-MEASURED 2026-10-26 | Ternary vs f32 head-to-head. The July "143.6×" was against a triple-loop scalar f32 baseline. Against SIMD f32 the ternary×ternary popcount kernel is slower (0.15–1.05×); the new ternary-weight × int8-activation kernel (`ntg::storage::ternary_i8_gemm`) is 3–24× faster than the best f32 on one core, with a 2–7 point accuracy cost on a small trained model. Caveats in `docs/EXPERIMENTS.md` |
 | 6.1 | COMPLETE | NanoKeymaster routing agent |
 | 6.2 | COMPLETE | External HTTP backend (ureq POST) |
 | 6.11 | COMPLETE | Ternary Memory Graph / HyperVector (8192-dim HDC) |
@@ -111,7 +111,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** <!--tests-->649<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
+**Test count:** <!--tests-->659<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
 `docs/BASELINE_2026-10-26.md`; CI fails if this number drifts).
 
 ---
@@ -125,7 +125,7 @@ scripts/build-all.sh
 # Whole-stack smoke (dashboard + kernel_host + keymaster)
 scripts/smoke-whole.sh
 
-# Full Rust test suite (<!--tests-->649<!--/tests--> tests, ~1-2 min)
+# Full Rust test suite (<!--tests-->659<!--/tests--> tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)

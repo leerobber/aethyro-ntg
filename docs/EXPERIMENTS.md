@@ -764,3 +764,56 @@ Speedup columns are f32 time / ternary time (below 1.0x means ternary is slower)
 **Not measured:** multi-threading, GPU, trained-model task accuracy (no such comparison exists in this repo), and the aethyro.com comparison.
 
 **Verdict:** the kernel gate does **not** pass on throughput. Do not quote 143.6x as an NTG speedup. Closing the gap needs a ternary-weight x int8-activation kernel with a real SIMD popcount or lookup path (T-MAC / bitnet.cpp style) and a trained model to measure accuracy on; optimising before that measurement exists is premature.
+
+
+## 2026-10-26 (later): ternary-weight x int8-activation kernel
+
+**Goal:** Act on the previous entry's verdict. The ternary x ternary popcount kernel lost to SIMD f32, so build the kernel that is meant to win (2-bit weights, int8 activations, in-register unpack, VNNI) and measure it the same fair way, plus accuracy on a real trained model.
+
+**Kernel** (`ntg::storage::ternary_i8_gemm`): weights stored 2 bits each as codes `w+1`; a 64-byte load is split with shift/mask into four vectors that line up with four contiguous 64-element int8 loads (no shuffles); `vpdpbusd` (AVX-512 VNNI) or `vpmaddubsw` (AVX2) multiplies code x activation, and `sum_k x_k` (shared by every output row) is subtracted to remove the +1 offset. Results are exact `i32`; scalar, AVX2 and VNNI paths are bit-identical and chosen at run time. Tests cover pack/unpack across shapes, all kernels against naive integer math (including `-128`/`127` extremes that bound the AVX2 `i16` intermediate), and error handling.
+
+**Method** (`kernel/benches/ternary_i8_vs_f32.rs`, `cargo bench --bench ternary_i8_vs_f32`):
+- Equal output: every method is asserted to produce the identical integers before timing (exact in f32 since all partial sums are integers below 2^24).
+- Opponents: `matrixmultiply::sgemm` **and** a direct AVX-512 FMA row-dot kernel; the table uses the better one per cell. The first version used sgemm alone and showed 44-58x at batch 1, which was an artefact: sgemm repacks the whole weight matrix on every call. The row-dot baseline removed that artefact and cut the batch-1 number roughly in half.
+- Control: a dense int8 VNNI kernel (1 byte/weight, same loop, nothing to unpack), to separate "int8 is fast" from "2-bit packing pays".
+- Weights do not fit in cache: each shape cycles through 16 or 64 distinct layers, so a pass streams the whole model as real inference does.
+- Single thread for every method. Shared 4-vCPU Xeon (AVX-512 VNNI), run twice.
+
+**Result, K=N=4096, 16 layers** (weights: f32 1074 MB, int8 268 MB, ternary 67 MB), second run, µs per layer:
+
+| batch | f32 sgemm | f32 row-dot | int8 dense | ternary | ternary + quantise | vs best f32 | vs best f32 (+quantise) | vs int8 dense |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 1 | 19308 | 6723 | 1537 | 325 | 329 | 20.7x | 20.5x | 4.7x |
+| 4 | 17284 | 9987 | 2528 | 1083 | 1041 | 9.2x | 9.6x | 2.3x |
+| 16 | 15728 | 36052 | 6827 | 3456 | 3452 | 4.6x | 4.6x | 2.0x |
+| 64 | 31389 | 99514 | 16089 | 8802 | 9356 | 3.6x | 3.4x | 1.8x |
+
+K=N=1024, 64 layers (268 MB f32 / 17 MB ternary): 18-25x at batch 1, 14-19x at batch 4, 5.5-5.6x at batch 16, 2.5-3.0x at batch 64.
+
+**Range over the two runs** (vs best f32, K=N=4096): batch 1 20.7-24.0x, batch 4 8.5-9.2x, batch 16 4.6-6.4x, batch 64 3.1-3.6x. Run-to-run spread is roughly +/-20%.
+
+**Accuracy on a trained model** (`scripts/train_ternary_digits.py`, `kernel/tests/ternary_trained_mlp.rs`): scikit-learn digits, MLP 64-128-10, 449 held-out samples, trained three ways:
+
+| model | accuracy |
+|---|--:|
+| f32 | 97.78% |
+| ternary weights + int8 activations, quantisation-aware trained | 95.78% (-2.0 points) |
+| same architecture, f32-trained then ternarised, no retraining | 90.44% (-7.3 points) |
+
+The Rust test runs the QAT model through every available kernel and requires identical predictions on all 449 samples, identical layer-1 `i32` accumulators and logits within 1e-4 of the Python integer pipeline.
+
+**What this shows**
+- With int8 activations and an in-register unpack, the ternary kernel is **3x to 24x faster than the best f32 implementation** on one core, the gap shrinking as batch grows (compute-bound) and largest at batch 1 (memory-bound). It also beats a dense int8 kernel by 1.2-6x, so the 2-bit packing pays for itself rather than costing decode time.
+- Accuracy cost is real and depends on training: about 2 points with QAT on this task, about 7 points without it.
+- Activation quantisation adds 0 to 50% on top of the matmul (largest at big batch, where `quantize_f32` is a scalar loop that has not been optimised).
+
+**Caveats that matter**
+- The host has a very large shared L3 (about 260 MB), so the 67 MB ternary model stays cache-resident while the 1 GB f32 model streams from DRAM. On a machine where both stream from DRAM, the batch-1 ratio approaches the bandwidth ratio (16x vs f32) and is bounded by kernel compute; I did not measure that.
+- f32 is a weak production baseline. Real deployments use fp16/bf16, int8 or 4-bit weights. Against fp16 the bandwidth-bound advantage is about half of the f32 figure; against dense int8 it is the 1.2-6x measured here; 4-bit was not measured.
+- Single thread only. Multi-threaded f32 reaches memory bandwidth sooner, which narrows memory-bound gaps; compute-bound ratios should hold.
+- The accuracy evidence is a 64-128-10 digits network. It says nothing about LLM-scale accuracy, which is the open question for ternary weights.
+- Tiny layers waste packed space: rows are padded to 256 elements, so a 64-wide layer packs to 4x, not 16x.
+- Requires AVX-512 VNNI (Intel Ice Lake and later, AMD Zen 4 and later) for the fast path; AVX2 is the fallback. I did not run this on tatortot.
+- The dense-int8 control and the ternary kernel share one loop structure and neither is cache-blocked for large batches.
+
+**Verdict:** the kernel gate **passes in the ternary x int8 regime** against f32, with the caveats above. It is not a claim about a production model or a production baseline; the next evidence needed is a trained model at meaningful scale and a comparison against fp16/int8 weights on the target machine.
