@@ -1,0 +1,9 @@
+{
+  // Serves only the dashboard's static PWA shell. The /api/* endpoints need
+  // kernel_host and run in the Rust dashboard binary, not on Workers.
+  "name": "aethyro-ntg",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dashboard/static"
+  }
+}
