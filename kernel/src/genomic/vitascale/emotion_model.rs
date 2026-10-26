@@ -255,8 +255,10 @@ mod tests {
     #[test]
     fn emotion_curiosity_high_on_growth() {
         let mut model = EmotionModel::new();
-        let mut high_growth = HormoneProfile::default();
-        high_growth.growth = 1.0;
+        let high_growth = HormoneProfile {
+            growth: 1.0,
+            ..Default::default()
+        };
 
         let state = model.update(high_growth, Regime::Thriving, 0.7);
         assert!(state.curiosity > 0.5);

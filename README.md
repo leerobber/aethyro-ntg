@@ -7,15 +7,16 @@ graph topology with an audit ledger).
 
 ---
 
-## Verified status (2026-07-28)
+## Verified status (2026-10-26)
 
 | Metric | Value | How verified |
 |--------|-------|---------------|
-| Build | Clean, 0 errors, clippy `-D warnings` passes | `cargo build --release && cargo clippy --release -- -D warnings` |
-| Tests | 526 passing, 0 failing | `cargo test --release`, counted directly from output |
-| Lines of Rust (kernel) | ~32,000 (dead code removed) | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
-| Unsafe blocks | ~26 | `grep -rn "^\s*unsafe " kernel/src` (FFI boundary + SIMD intrinsics) |
-| Phase Status | Phase F (L0) COMPLETE, Phase 7.5.3–7.5.4 IN PROGRESS | Deployment ready, API cleanup & consolidation ongoing |
+| Build | Clean, 0 errors; clippy `-D warnings` clean on all targets | `cargo build --release && cargo clippy --all-targets -- -D warnings` |
+| Tests | <!--tests-->540<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
+| Lines of Rust (kernel) | 34,965 src + 1,615 tests + 194 benches | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
+| Unsafe | 19 `unsafe` blocks + 5 `unsafe fn` in `kernel/src` | `grep -rnE "unsafe\s*\{" kernel/src` (FFI boundary + SIMD intrinsics) |
+| Whole stack | dashboard + kernel_host + keymaster smoke passes | `scripts/smoke-whole.sh`; also the `whole-stack` CI job |
+| Phase Status | Phase F (L0) IN PROGRESS: scaffold complete, no verified live deployment | Phase vocabulary is defined in [CLAUDE.md](CLAUDE.md); full measurements in [docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md) |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -90,22 +91,30 @@ document** — read it before trusting any claim in this README or
 elsewhere in the repo. It already explicitly names "docs and marketing
 language outrunning measurements" as the project's primary risk, and
 already marks the old root-level session-summary docs as historical.
-This README's numbers are a snapshot verified 2026-07-19; `docs/STATUS.md`
-is updated more frequently and is more authoritative on current phase,
-readiness, and what's actually product-ready vs. research-stage.
+This README's numbers are a snapshot verified 2026-10-26 (see
+[docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md)); the test count is
+checked against real test output in CI. `docs/STATUS.md` is more authoritative
+on readiness and what's actually product-ready vs. research-stage.
 
 ## Quick start
 
-### Build and test (kernel)
+### Build and test (everything)
+
+```bash
+scripts/build-all.sh          # kernel + keymaster + dashboard + hostframe: build, test, clippy
+scripts/smoke-whole.sh        # start dashboard + kernel_host + keymaster, hit the API
+```
+
+### Kernel only
 
 ```bash
 cd kernel
-cargo build --release     # Build
-cargo test --release      # Run test suite (493 tests)
-cargo clippy --release -- -D warnings  # Lint (must pass clean)
+cargo build --release
+cargo test --release                    # <!--tests-->540<!--/tests--> tests
+cargo clippy --all-targets -- -D warnings
 ```
 
-### Deploy Hostframe backend (optional)
+### Deploy Hostframe backend (optional; no verified live deployment yet)
 
 ```bash
 cd hostframe-backend

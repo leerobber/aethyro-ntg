@@ -2,7 +2,7 @@
 # For Claude CLI and new sessions
 
 Session origin: https://claude.ai/code/session_0163sRLcjECJkSUJSrtfFGSN
-Last updated: 2026-07-27
+Last updated: 2026-10-26
 
 ---
 
@@ -104,18 +104,25 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** 444 tests, all passing (as of Phase F L0 + self_awareness module — ADR 0011).
+**Test count:** <!--tests-->540<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
+`docs/BASELINE_2026-10-26.md`; CI fails if this number drifts).
 
 ---
 
 ## Running Tests
 
 ```bash
-# Full Rust test suite (444 tests, ~1-2 min)
+# Everything: build + test + clippy for all four crates
+scripts/build-all.sh
+
+# Whole-stack smoke (dashboard + kernel_host + keymaster)
+scripts/smoke-whole.sh
+
+# Full Rust test suite (<!--tests-->540<!--/tests--> tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)
-cd kernel && cargo clippy -- -D warnings
+cd kernel && cargo clippy --all-targets -- -D warnings
 
 # CPU/GPU benchmark (tatortot)
 python3 scripts/bench_cpu_gpu.py --reps 20 --warmup 5
@@ -206,7 +213,7 @@ vllm serve qwen2.5-32b-awq --port 8001 --dtype auto
 
 ## Known Issues / Follow-ups
 
-- **Clippy debt**: ~155 warnings in `genomic/` modules — pre-existing, out of scope.
+- **Clippy**: clean on all targets as of 2026-10-26 (the older "~155 warnings in `genomic/`" note no longer reproduces).
 - **VITASCALE Hostframe** (ADR 0010): Production hosting architecture (GCP) — not yet implemented.
 - **Phase F L0**: Scaffold complete (ADR 0011); GCP Cloud Run backend and full self-awareness wiring pending.
 
