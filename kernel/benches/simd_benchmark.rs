@@ -14,7 +14,6 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ntg_kernel::ntg::{
     ternary::matmul_scalar,
     simd::matmul_auto,
-    error::NtgError,
 };
 
 fn benchmark_scalar_1000x1000(c: &mut Criterion) {

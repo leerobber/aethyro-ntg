@@ -170,7 +170,7 @@ mod tests {
     fn build_hierarchy_respects_agent_count() {
         let hier = build_benchmark_hierarchy(50000);
         // 50K Nano + 1 Super + 50 Sub + ~2500 Micro (50K/20)
-        let expected_hierarchy = 50000 + 1 + 50 + (50000 / 20).min(1000);
+        let expected_hierarchy = 50000 + 1 + 50 + 1000;
         assert_eq!(hier.total_agents(), expected_hierarchy);
     }
 

@@ -1,5 +1,7 @@
 # Phase 7.5: Codebase Hygiene & Alignment Audit
 
+> **Historical planning doc.** "7.5.x" are labels for a July 2026 hygiene pass, not project phases; the phase vocabulary is the 0–5 / 6.x / F table in [CLAUDE.md](../CLAUDE.md). Test counts below were true when written; current measured numbers are in [BASELINE_2026-10-26.md](BASELINE_2026-10-26.md).
+
 **Status:** Near Complete (Phases 7.5.1–7.5.5 complete; 7.5.6–7.5.7 foundation laid)
 
 ---

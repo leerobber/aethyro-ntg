@@ -22,7 +22,10 @@ jobs:
 
       - name: cargo test
         working-directory: kernel
-        run: cargo test
+        run: set -o pipefail && cargo test 2>&1 | tee /tmp/kernel-test.log
+
+      - name: documented test counts match executed tests
+        run: scripts/check-doc-counts.sh /tmp/kernel-test.log
 
       - name: phase4 calib smoke (fixtures)
         working-directory: kernel
@@ -46,9 +49,9 @@ jobs:
         working-directory: kernel
         run: cargo run --release --bin density_bench
 
-      - name: cargo clippy
+      - name: cargo clippy (all targets)
         working-directory: kernel
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   keymaster-backend:
     name: Keymaster backend (Rust)

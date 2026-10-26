@@ -1,9 +1,10 @@
 # Aethyro NTG Engine — Project Status Report
 
-**As of:** 2026-07-12  
+**As of:** 2026-10-26 (facts re-measured; narrative sections below are from 2026-07-12 unless noted)  
 **Capability version:** 10 (`ternary_capability()` — Phase 5 runtime calib supported)  
-**Build:** `cargo test` + `cargo build --release` green on host  
-**Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md).
+**Build:** `cargo test --release` green: <!--tests-->540<!--/tests--> passed, 0 failed, 0 ignored. `cargo clippy --all-targets -- -D warnings` clean. Whole-stack smoke passes. Details: [BASELINE_2026-10-26.md](BASELINE_2026-10-26.md)  
+**Known stub:** `hostframe-backend` accepts `/ingest` and serves `/metrics`, but its BigQuery client is a stub: it keeps counters in memory and does not write to BigQuery (startup only needs `GCP_PROJECT`). The telemetry → BigQuery → dashboard loop is therefore not wired end to end.  
+**Authority:** This document is the single source of truth for “where the project is.” Older session notes (`BUILD_STATUS.md`, `BREAKTHROUGH_SUMMARY.md`, `PHASE3_SUMMARY.md`) are historical; prefer this file and [ROADMAP.md](ROADMAP.md). **Phase names:** the 0–5 / 6.x / F scheme in the root [CLAUDE.md](../CLAUDE.md) phase table is the one vocabulary; the “7.5.x” labels in `PHASE_7_5_ROADMAP.md` were planning labels for a hygiene pass, not project phases. **Test counts** in README, CLAUDE.md and this file are checked against real test output by `scripts/check-doc-counts.sh` in CI.
 
 ### Sovereign stack (2026-07-12 — post Phase F rungs)
 
@@ -55,9 +56,9 @@ do not start N+1 until N is certified.
 
 | Check | Result |
 |-------|--------|
-| `cargo test` (kernel) | Unit + integration suites green (capability v9; calib model/sparse/compare tests included) |
+| `cargo test --release` (kernel) | <!--tests-->540<!--/tests--> passed, 0 failed, 0 ignored (capability v10; calib model/sparse/compare tests included) |
 | `cargo build --release` | Success (`libntg_kernel.{so,rlib}`, `phase4_calib`, benches) |
-| CI | `.github/workflows/ci.yml`: test + phase4 smoke + model roundtrip + density_bench + clippy |
+| CI | `.github/workflows/ci.yml`: kernel test + phase4 smoke + model roundtrip + density_bench + clippy + doc-count check; keymaster test + clippy; whole-stack smoke (dashboard + kernel_host + keymaster) |
 | Host hardware (audit machine) | x86_64 with AVX2 + AVX-512F/VPOPCNTDQ advertised |
 
 ---
@@ -164,8 +165,8 @@ do not start N+1 until N is certified.
 - Real docs WIN: bal_acc≈0.61, rec≈0.25, fp≈12; self-mod off by default
 - Optional `--self-mod` probe ledgered, fitness may reject
 
-### Phase 5–8 — **NOT STARTED** (Phase 5 may begin)
-GPU/optimization, WASM, product head-to-head remain later.
+### Phase 5 and later
+Phase 5 is certified COMPLETE (see the phase-gate table above). Later work is tracked under the 6.x / F scheme in [CLAUDE.md](../CLAUDE.md): 6.0–6.18 complete, Phase F (L0) scaffold complete but no verified live deployment. Still open: Phase 6 host product path (WASM/FFI) per the gate protocol, and the aethyro.com head-to-head.
 
 ---
 
@@ -173,12 +174,16 @@ GPU/optimization, WASM, product head-to-head remain later.
 
 | Suite | Count | What it proves |
 |-------|------:|----------------|
-| Unit (`--lib`) | 182 | Core algorithms, ledger, mutation, storage, runtime, graph, accel |
+| Unit (`--lib`) | 485 | Core algorithms, ledger, mutation, storage, runtime, graph, accel, genomic, VITASCALE |
+| `hostframe_integration` | 7 | Telemetry payloads against a mock backend |
 | `phase1_2_3_simd_ffi` | 11 | SIMD parity, FFI, OpStats |
 | `phase1_2_3_storage_integration` | 10 | PackedTernary + TOBL + ledger glue |
 | `phase3_integration` | 7 | All five ADR 0002 rails end-to-end |
+| `prop_ld_compute` | 4 | LD fast path vs scalar reference (property tests) |
 | `self_parse` | 3 | Real repo docs parse without panic |
-| **Total** | **213** | |
+| `sovereign_integration` | 2 | SovereignBrain integration |
+| `test_genomic_operator` | 11 | Genomic operator |
+| **Total** | **<!--tests-->540<!--/tests-->** | measured 2026-10-26 |
 
 ### Known test honesty notes
 - Sparse `ternary_matmul` is **chunk-level score → ±1 gate**, not full dense GEMM.
@@ -233,16 +238,12 @@ GPU/optimization, WASM, product head-to-head remain later.
 
 ## 8. Git / delivery state (audit host)
 
-- Branch: `main`, **ahead of origin by 5 commits** with large uncommitted local work (storage, runtime, accel, graph split, docs).
-- Recommendation: one clean commit series after STATUS/ROADMAP sync:
-  1. storage + TOBL correctness
-  2. sparse + runtime + accel
-  3. graph adj_list + GraphNode
-  4. docs STATUS package
+- This section described a 2026-07-12 local tree that has long since been committed and merged; use `git log` for delivery state.
+- Open PRs/branches are tracked in GitHub, not here.
 
 ---
 
-## 9. Capability snapshot (v8)
+## 9. Capability snapshot (v10)
 
 ```
 scalar_supported: true
@@ -257,7 +258,9 @@ chain_log_supported: true
 bit_sliced_supported: true
 sparse_bit_sliced_supported: true
 native_parallel_forward_supported: true
-version: 8
+phase4_calibration_supported: true
+phase5_runtime_calib_supported: true
+version: 10
 ```
 
 ---
@@ -272,4 +275,4 @@ version: 8
 | **Security / sovereignty** | Ledger + off-by-default self-mod is the right shape; needs threat model review before air-gap product claims. |
 
 **Status classification:** `RESEARCH-READY / PRE-PRODUCT`  
-**Merge readiness of local tree:** code green locally; docs consolidated here; commit & CI push still required.
+**Merge readiness:** `main` is green in CI (kernel, keymaster, whole-stack smoke).
