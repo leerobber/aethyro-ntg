@@ -48,6 +48,13 @@ def load_lib():
     lib.ntg_ternary_set_threads.restype = ctypes.c_int
     lib.ntg_ternary_set_threads.argtypes = [ctypes.c_size_t]
     lib.ntg_ternary_best_kernel.restype = ctypes.c_int
+    lib.ntg_int8_matrix_new_bf16.restype = ctypes.c_void_p
+    lib.ntg_int8_matrix_new_bf16.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
+    lib.ntg_int8_matrix_free.argtypes = [ctypes.c_void_p]
+    lib.ntg_int8_matrix_bytes.restype = ctypes.c_size_t
+    lib.ntg_int8_matrix_bytes.argtypes = [ctypes.c_void_p]
+    lib.ntg_int8_forward_f32.restype = ctypes.c_int
+    lib.ntg_int8_forward_f32.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
     return lib
 
 
@@ -85,6 +92,36 @@ class KernelLinear(torch.nn.Module):
     def __del__(self):
         try:
             self.lib.ntg_ternary_matrix_free(self.handle)
+        except Exception:
+            pass
+
+
+class KernelLMHead(torch.nn.Module):
+    """The output projection (a bf16 matrix, 0.66 GB for this model) quantised to int8 per
+    output row and run through libntg_kernel. Not ternary, so this is a lossy change on top of
+    the exact ternary kernel; measure it separately."""
+
+    def __init__(self, lib, ref: torch.nn.Linear):
+        super().__init__()
+        assert ref.weight.dtype == torch.bfloat16 and ref.bias is None
+        self.lib = lib
+        w = ref.weight.detach().contiguous()
+        self.rows, self.cols = w.shape
+        self.handle = lib.ntg_int8_matrix_new_bf16(w.view(torch.int16).data_ptr(), self.rows, self.cols)
+        assert self.handle, "ntg_int8_matrix_new_bf16 failed"
+        self.packed_bytes = lib.ntg_int8_matrix_bytes(self.handle)
+
+    def forward(self, x):
+        lead = x.shape[:-1]
+        xf = x.reshape(-1, self.cols).to(torch.float32).contiguous()
+        out = torch.empty(xf.shape[0], self.rows, dtype=torch.float32)
+        rc = self.lib.ntg_int8_forward_f32(self.handle, xf.data_ptr(), xf.shape[0], out.data_ptr())
+        assert rc == 0, f"int8 kernel returned {rc}"
+        return out.to(x.dtype).reshape(*lead, self.rows)
+
+    def __del__(self):
+        try:
+            self.lib.ntg_int8_matrix_free(self.handle)
         except Exception:
             pass
 
@@ -168,6 +205,8 @@ def main():
                     help="threads for the ternary kernel pool (default: --threads). Torch's own threads and a\n                    spinning kernel pool compete for cores; try --threads 1 --kernel-threads N")
     ap.add_argument("--gen-tokens", type=int, default=48)
     ap.add_argument("--check", action="store_true", help="one short window, no generation")
+    ap.add_argument("--int8-lm-head", action="store_true",
+                    help="also run the output projection through the int8 kernel (lossy; not ternary)")
     ap.add_argument("--arc", type=int, default=0, help="also run N zero-shot ARC-Easy questions")
     ap.add_argument("--arc-only", action="store_true", help="skip perplexity and generation")
     ap.add_argument("--dtype", choices=["bfloat16", "float32"], default="bfloat16",
@@ -212,7 +251,7 @@ def main():
 
     prompt = "The capital of France is"
     results = {"model": "microsoft/bitnet-b1.58-2B-4T", "windows": len(windows), "seqlen": args.seqlen,
-               "threads": args.threads, "kernel_threads": kthreads, "dtype": args.dtype,
+               "threads": args.threads, "kernel_threads": kthreads, "int8_lm_head": args.int8_lm_head, "dtype": args.dtype,
                "kernel": kernel_names[lib.ntg_ternary_best_kernel()]}
 
     results["official"], results["kernel_path"] = {}, {}
@@ -244,6 +283,11 @@ def main():
     # ---- kernel path
     n_swapped, f32_bytes, packed = swap_linears(model, lib)
     results["swapped_linears"] = n_swapped
+    if args.int8_lm_head:
+        head = KernelLMHead(lib, model.lm_head)
+        model.lm_head = head
+        results["int8_lm_head_bytes"] = head.packed_bytes
+        print(f"int8 lm_head: bf16 {head.rows * head.cols * 2 / 1e9:.2f} GB -> int8 {head.packed_bytes / 1e9:.2f} GB", flush=True)
     results["linear_weight_bytes_f32"] = f32_bytes
     results["linear_weight_bytes_packed"] = packed
     print(f"swapped {n_swapped} linears: f32 {f32_bytes / 1e9:.2f} GB -> packed {packed / 1e9:.3f} GB", flush=True)
