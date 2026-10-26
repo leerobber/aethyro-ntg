@@ -876,10 +876,41 @@ Batch 8, one thread: ternary 161-205 ms/token, 11-14x faster than f32, 7.1-8.3x 
 
 ### What did not go well
 - **Prefill is slower.** Scoring 512-token windows took 133 s on the kernel path vs 40 s for the official path (3.3x slower); the ARC run took 1,104 s vs 416 s (2.7x slower). This CPU has AMX (`amx_bf16`, `amx_int8`), which torch's bf16 matmul can use (I did not confirm it does); the VNNI kernel has no cache blocking beyond four batch columns and the activation quantiser is a scalar loop. The vendor's own README says the transformers path will not show efficiency gains and points to `bitnet.cpp`.
-- **Multi-threading scales poorly for the ternary kernel**: 59-65 ms at one thread to 40-41 ms at four (1.5-1.6x), against 2.8-2.9x for f32, 2.9-3.0x for bf16 and 2.6-2.7x for int8. Each ternary matmul is only about 250 microseconds, so waking the rayon pool on a virtual machine costs a large fraction of it. The four-thread ternary numbers therefore understate the kernel; a spinning pool or running independent matmuls (q/k/v, gate/up) concurrently would be the fix.
+- **Multi-threading scaled poorly with rayon** (59-65 ms at one thread to 40-41 at four, 1.5-1.6x). Fixed in the follow-up entry below (spin pool, 2.6-3.1x).
 - **bitnet.cpp is faster end to end, and kernel-level parity is unknown.** Run on the same VM (`docs/results/bitnet_cpp/`): bitnet.cpp decodes 6.7 tok/s at one thread and 21 at four (3.2x scaling) against 5.2 and 6.0 for this kernel inside Hugging Face `generate`, and its prefill is about 3x faster than ours. That compares whole systems, not kernels: my path carries Python overhead and bitnet.cpp could not be profiled per operator, so I cannot say whose matmul is faster. The vendor's 29 ms/token on other hardware is not comparable.
 - **Run-to-run noise on this VM is large** (ternary 1-thread: 54, 86, 65 and 59 ms across four runs; f32 was stable), so the ratios above carry roughly +/-25%.
 - The accuracy sample is modest: 8,176 perplexity tokens and 300 ARC-Easy questions. No other benchmark was run.
 
 ### Verdict
 On a real pretrained, natively ternary model the kernel **preserves accuracy** (perplexity within 0.15%, ARC-Easy statistically unchanged, closeness to the exact model equal to the official implementation's) while cutting the linear-layer weights 16x versus f32 and 8x versus bf16, and running the decode-time matmuls **7.7-8.5x faster than a bf16 kernel and 3.0-3.3x faster than dense int8 on one core (4.3x and 1.8-1.9x on four)**. End-to-end it is only 1.8x faster in this harness, prefill is slower than torch's AMX path, and it has not been compared with `bitnet.cpp`. The remaining engineering is clear: a prefill kernel (blocking, AMX or wider tiles), a spinning thread pool, a vectorised activation quantiser, and a quantised lm_head.
+
+## 2026-10-26 (last): thread scaling, a spinning pool
+
+**Problem.** The ternary kernel scaled 1.5x from one to four threads while `bitnet.cpp` scaled 3.2x on the same VM (`docs/results/bitnet_cpp/`). Each of the 210 products per token takes about 250 microseconds, and rayon pays two thread wake-ups per product (hand-off, then the caller blocks on a latch).
+
+**Change.** `ntg::storage::SpinPool`: persistent workers that spin, then sleep; the calling thread runs a share of the job and spins (not blocks) on completion. `PackedTernaryMatrix::gemm_i8_spin` cuts the output rows into about four chunks per thread that threads claim from a shared counter, so a descheduled thread delays one chunk, not a quarter of the matrix. Results are bit-identical to the serial path (new tests for 2, 3 and 4 threads, every kernel, batch 1 to 5; pool tests for wake-after-sleep, concurrent callers and panics). The C ABI now uses it (`ntg_ternary_set_threads`).
+
+**Matmul-only result** (`cargo bench --bench bitnet_decode`; ms per token for the 210 linears, median of 9 interleaved rounds, minimum in brackets; rayon is the previous pool):
+
+| threads | rayon | spin pool | spin speed-up vs 1 thread |
+|--:|--:|--:|--:|
+| 1 | 33.0 (32.1) | 33.0 (32.1) | 1.00x |
+| 2 | 34.1 (27.2) | 20.6 (17.1) | 1.60x |
+| 3 | 28.1 (26.5) | 15.3 (12.6) | 2.15x |
+| 4 | 31.7 (28.4) | 12.6 (11.5) | 2.61x |
+
+Two earlier runs with a larger idle spin budget gave 4-thread medians of 14.7 and 14.8 ms (speed-up 2.63x and 3.14x); raw output in `docs/results/bitnet_2b_4t/decode_spinpool_run{3,4,5}.md`. Rayon stayed at 1.0-1.2x in all three. At four threads the pool streams weights at 29-46 GB/s, about the f32 row-dot's 35 GB/s, so scaling is now limited by memory bandwidth rather than hand-off cost. The one-thread time itself moved between 30 and 77 ms across runs on this VM, so use the interleaved table, not absolute milliseconds.
+
+**End to end is a different story** (`scripts/bitnet_eval.py`, Hugging Face `generate`, 64 tokens, tok/s, one run per cell, new `--kernel-threads` flag):
+
+| torch threads / kernel threads | rayon pool (before) | spin pool |
+|---|--:|--:|
+| 1 / 1 | 5.17 | 5.1 |
+| 4 / 4 | 5.96 | 4.8 (4.0-4.2 with a longer idle spin) |
+| 2 / 2 | - | 7.3-7.8 |
+| 1 / 4 | - | 6.7-7.1 |
+
+* Torch's own threads and a spinning pool compete for the same four cores, so the old default (both at 4) got **worse**: 4.8 against 5.96. Splitting the cores (2 + 2, or 1 + 4) gives 7.3-7.8 tok/s, +25-30% over the old best. I shortened the default idle spin (about 30 microseconds, then sleep) for this reason; `NTG_SPIN_ITERS` and `NTG_YIELD_ITERS` override it. The harness default is still `--kernel-threads = --threads`, so pass a split explicitly.
+* The linears are now about 20 ms of a roughly 130-140 ms token; the rest is attention, the 128256x2560 output matrix (66 ms in bf16 at one thread in torch) and Python. Faster matmuls cannot show up much end to end until those are replaced.
+* `bitnet.cpp` still decodes the whole model faster than this harness at the same thread count (12.1-12.6 tok/s at two threads, 20.9-21.7 at four against 7.3-7.8 here). The matmul scaling gap is closed; the whole-model gap is not.
+* One machine, shared VM, single end-to-end runs; not tatortot.

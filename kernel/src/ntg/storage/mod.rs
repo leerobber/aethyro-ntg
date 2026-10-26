@@ -20,6 +20,7 @@
 pub mod bit_sliced_ternary;
 pub mod packed_ternary;
 pub mod sparse_bit_sliced_ternary;
+pub mod spin_pool;
 pub mod ternary_i8_gemm;
 pub mod tobl_kernel;
 
@@ -28,6 +29,7 @@ pub use packed_ternary::PackedTernary;
 pub use sparse_bit_sliced_ternary::{
     BitSlicedBlock, SparseBitSlicedTernary, COMPACT_THRESHOLD,
 };
+pub use spin_pool::SpinPool;
 pub use ternary_i8_gemm::{Int8Activations, PackedTernaryMatrix, TernaryI8Kernel};
 pub use tobl_kernel::{tobl_dot_product, ToblKernelPath};
 

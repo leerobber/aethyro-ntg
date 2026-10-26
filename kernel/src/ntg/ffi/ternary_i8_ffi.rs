@@ -9,13 +9,14 @@
 //! All functions return a negative value (or null) on invalid input and never unwind
 //! across the boundary.
 
-use crate::ntg::storage::{Int8Activations, PackedTernaryMatrix, TernaryI8Kernel};
+use crate::ntg::storage::spin_pool::{DEFAULT_SPIN_ITERS, DEFAULT_YIELD_ITERS};
+use crate::ntg::storage::{Int8Activations, PackedTernaryMatrix, SpinPool, TernaryI8Kernel};
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 
-static POOL: Mutex<Option<Arc<rayon::ThreadPool>>> = Mutex::new(None);
+static POOL: Mutex<Option<Arc<SpinPool>>> = Mutex::new(None);
 
-fn pool() -> Option<Arc<rayon::ThreadPool>> {
+fn pool() -> Option<Arc<SpinPool>> {
     POOL.lock().ok().and_then(|g| g.clone())
 }
 
@@ -26,7 +27,8 @@ pub extern "C" fn ntg_ternary_set_threads(threads: usize) -> i32 {
     let new_pool = if threads <= 1 {
         None
     } else {
-        match rayon::ThreadPoolBuilder::new().num_threads(threads).build() {
+        let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+        match SpinPool::with_budget(threads, env("NTG_SPIN_ITERS", DEFAULT_SPIN_ITERS), env("NTG_YIELD_ITERS", DEFAULT_YIELD_ITERS)) {
             Ok(p) => Some(Arc::new(p)),
             Err(_) => return -1,
         }
@@ -115,7 +117,7 @@ pub unsafe extern "C" fn ntg_ternary_forward_f32(
     let kernel = TernaryI8Kernel::best_available();
     let mut acc = vec![0i32; batch * m.rows()];
     let ran = match pool() {
-        Some(p) => m.gemm_i8_parallel(&acts, &mut acc, kernel, &p),
+        Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, &p),
         None => m.gemm_i8(&acts, &mut acc, kernel),
     };
     if ran.is_err() {
