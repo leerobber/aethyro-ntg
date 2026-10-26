@@ -163,7 +163,9 @@ def main():
     ap.add_argument("--model-dir", required=True)
     ap.add_argument("--windows", type=int, default=16)
     ap.add_argument("--seqlen", type=int, default=512)
-    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--threads", type=int, default=4, help="torch intra-op threads")
+    ap.add_argument("--kernel-threads", type=int, default=None,
+                    help="threads for the ternary kernel pool (default: --threads). Torch's own threads and a\n                    spinning kernel pool compete for cores; try --threads 1 --kernel-threads N")
     ap.add_argument("--gen-tokens", type=int, default=48)
     ap.add_argument("--check", action="store_true", help="one short window, no generation")
     ap.add_argument("--arc", type=int, default=0, help="also run N zero-shot ARC-Easy questions")
@@ -178,9 +180,10 @@ def main():
 
     torch.set_num_threads(args.threads)
     lib = load_lib()
-    assert lib.ntg_ternary_set_threads(args.threads) == 0
+    kthreads = args.kernel_threads or args.threads
+    assert lib.ntg_ternary_set_threads(kthreads) == 0
     kernel_names = {0: "scalar", 1: "avx2", 2: "avx512-vnni"}
-    print(f"kernel: {kernel_names[lib.ntg_ternary_best_kernel()]}; threads: {args.threads}", flush=True)
+    print(f"kernel: {kernel_names[lib.ntg_ternary_best_kernel()]}; threads: torch {args.threads}, kernel {kthreads}", flush=True)
 
     tok = AutoTokenizer.from_pretrained(args.model_dir)
     t0 = time.perf_counter()
@@ -209,7 +212,7 @@ def main():
 
     prompt = "The capital of France is"
     results = {"model": "microsoft/bitnet-b1.58-2B-4T", "windows": len(windows), "seqlen": args.seqlen,
-               "threads": args.threads, "dtype": args.dtype,
+               "threads": args.threads, "kernel_threads": kthreads, "dtype": args.dtype,
                "kernel": kernel_names[lib.ntg_ternary_best_kernel()]}
 
     results["official"], results["kernel_path"] = {}, {}

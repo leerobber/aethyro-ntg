@@ -111,7 +111,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** <!--tests-->664<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
+**Test count:** <!--tests-->670<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
 `docs/BASELINE_2026-10-26.md`; CI fails if this number drifts).
 
 ---
@@ -125,7 +125,7 @@ scripts/build-all.sh
 # Whole-stack smoke (dashboard + kernel_host + keymaster)
 scripts/smoke-whole.sh
 
-# Full Rust test suite (<!--tests-->664<!--/tests--> tests, ~1-2 min)
+# Full Rust test suite (<!--tests-->670<!--/tests--> tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)

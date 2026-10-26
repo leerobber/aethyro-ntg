@@ -12,7 +12,7 @@ graph topology with an audit ledger).
 | Metric | Value | How verified |
 |--------|-------|---------------|
 | Build | Clean, 0 errors; clippy `-D warnings` clean on all targets | `cargo build --release && cargo clippy --all-targets -- -D warnings` |
-| Tests | <!--tests-->664<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
+| Tests | <!--tests-->670<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
 | Lines of Rust (kernel) | 34,965 src + 1,615 tests + 194 benches | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe | 19 `unsafe` blocks + 5 `unsafe fn` in `kernel/src` | `grep -rnE "unsafe\s*\{" kernel/src` (FFI boundary + SIMD intrinsics) |
 | Whole stack | dashboard + kernel_host + keymaster smoke passes | `scripts/smoke-whole.sh`; also the `whole-stack` CI job |
@@ -120,7 +120,7 @@ scripts/smoke-whole.sh        # start dashboard + kernel_host + keymaster, hit t
 ```bash
 cd kernel
 cargo build --release
-cargo test --release                    # <!--tests-->664<!--/tests--> tests
+cargo test --release                    # <!--tests-->670<!--/tests--> tests
 cargo clippy --all-targets -- -D warnings
 ```
 

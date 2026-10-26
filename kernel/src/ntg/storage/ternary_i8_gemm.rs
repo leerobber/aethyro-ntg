@@ -34,7 +34,9 @@
 //! bit-identical results; the SIMD ones are chosen at run time.
 
 use crate::ntg::error::NtgError;
+use super::spin_pool::SpinPool;
 use rayon::prelude::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Elements per packed group (64 bytes x 4 codes per byte).
 pub const GROUP: usize = 256;
@@ -220,6 +222,16 @@ pub struct PackedTernaryMatrix {
     scale: f32,
 }
 
+/// Raw output pointer shared by pool threads that write disjoint ranges.
+struct SharedOut(*mut i32);
+// SAFETY: threads only write disjoint ranges through it; see `gemm_i8_spin`.
+unsafe impl Sync for SharedOut {}
+impl SharedOut {
+    fn get(&self) -> *mut i32 {
+        self.0
+    }
+}
+
 impl PackedTernaryMatrix {
     /// Pack `weights` (`rows x cols`, row-major, each in `{-1, 0, 1}`).
     pub fn from_i8(weights: &[i8], rows: usize, cols: usize) -> Result<Self, NtgError> {
@@ -353,6 +365,63 @@ impl PackedTernaryMatrix {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Same result as [`Self::gemm_i8`], on a [`SpinPool`].
+    ///
+    /// Output rows are cut into about four chunks per thread that threads claim from a
+    /// shared counter, so a thread that is descheduled (common on shared VMs) delays only
+    /// its current chunk rather than a quarter of the product. The calling thread works too.
+    pub fn gemm_i8_spin(
+        &self,
+        x: &Int8Activations,
+        out: &mut [i32],
+        kernel: TernaryI8Kernel,
+        pool: &SpinPool,
+    ) -> Result<(), NtgError> {
+        self.validate(x, out.len(), kernel)?;
+        let threads = pool.threads();
+        if threads <= 1 || self.rows < threads * 16 {
+            self.gemm_rows(x, out, kernel, 0, self.rows);
+            return Ok(());
+        }
+        let chunk = self.rows.div_ceil(threads * 4).next_multiple_of(8).max(16);
+        let chunks = self.rows.div_ceil(chunk);
+        let next = AtomicUsize::new(0);
+        let dst = SharedOut(out.as_mut_ptr());
+        let (rows, batch) = (self.rows, x.batch);
+        pool.run(|_| {
+            let mut local: Vec<i32> = Vec::new();
+            loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                if i >= chunks {
+                    break;
+                }
+                let n0 = i * chunk;
+                let n1 = (n0 + chunk).min(rows);
+                let width = n1 - n0;
+                if batch == 1 {
+                    // SAFETY: each chunk index is claimed once, so these ranges of `out`
+                    // are disjoint, and `out` outlives `pool.run`.
+                    let o = unsafe { std::slice::from_raw_parts_mut(dst.get().add(n0), width) };
+                    self.gemm_rows(x, o, kernel, n0, n1);
+                } else {
+                    local.resize(batch * width, 0);
+                    self.gemm_rows(x, &mut local, kernel, n0, n1);
+                    for b in 0..batch {
+                        // SAFETY: row `b`, columns `n0..n1` belong to this chunk alone.
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                local.as_ptr().add(b * width),
+                                dst.get().add(b * rows + n0),
+                                width,
+                            );
+                        }
+                    }
+                }
+            }
+        });
         Ok(())
     }
 
@@ -705,6 +774,26 @@ mod tests {
         let best = TernaryI8Kernel::best_available();
         assert!(best.is_available());
         assert!(TernaryI8Kernel::all_available().contains(&best));
+    }
+
+    #[test]
+    fn spin_pool_matches_naive_for_every_kernel_and_thread_count() {
+        let mut rng = Rng(0xC0FFEE);
+        for threads in [2, 3, 4] {
+            let pool = SpinPool::new(threads).unwrap();
+            for &(rows, cols, batch) in &[(200, 300, 1), (203, 513, 3), (256, 700, 5), (97, 256, 2), (640, 128, 1)] {
+                let w: Vec<i8> = (0..rows * cols).map(|_| rng.ternary()).collect();
+                let x: Vec<i8> = (0..batch * cols).map(|_| rng.i8_any()).collect();
+                let want = naive(&w, &x, rows, cols, batch);
+                let m = PackedTernaryMatrix::from_i8(&w, rows, cols).unwrap();
+                let acts = Int8Activations::from_i8(&x, batch, cols).unwrap();
+                for kernel in TernaryI8Kernel::all_available() {
+                    let mut got = vec![0i32; batch * rows];
+                    m.gemm_i8_spin(&acts, &mut got, kernel, &pool).unwrap();
+                    assert_eq!(got, want, "{} {rows}x{cols} batch {batch} threads {threads}", kernel.name());
+                }
+            }
+        }
     }
 
     #[test]

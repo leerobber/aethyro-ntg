@@ -12,7 +12,9 @@
 //! distinct transformer layers are allocated and cycled; per-token time is scaled to 30
 //! layers. Compared: f32 row-dot (the best f32 here), bf16 row-dot (`vdpbf16ps`, the
 //! practical baseline for a model shipped in bf16), dense int8 VNNI (control), and the
-//! ternary kernel, single-threaded and on a 4-thread rayon pool.
+//! ternary kernel, single-threaded, on a 4-thread rayon pool, and on a 4-thread spinning pool
+//! (the caller works too; see `ntg::storage::spin_pool`). A final table gives ternary-only
+//! scaling at 1 to 4 threads for both pools.
 //!
 //! Not included: attention, norms, embeddings, lm_head (a 128256x2560 bf16 matrix read per
 //! token, which is not ternary), activation quantisation, Python overhead.
@@ -20,7 +22,7 @@
 //! Run:   cargo bench --bench bitnet_decode
 //! Quick: cargo bench --bench bitnet_decode -- --check   (tiny odd shapes, equality only)
 
-use ntg_kernel::ntg::storage::{Int8Activations, PackedTernaryMatrix, TernaryI8Kernel};
+use ntg_kernel::ntg::storage::{Int8Activations, PackedTernaryMatrix, SpinPool, TernaryI8Kernel};
 use rayon::prelude::*;
 use std::hint::black_box;
 use std::time::Instant;
@@ -193,6 +195,7 @@ fn main() {
 
     let pool1 = None;
     let pool4 = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
+    let spin4 = SpinPool::new(4).unwrap();
     let have_vnni = TernaryI8Kernel::Avx512Vnni.is_available();
     #[cfg(target_arch = "x86_64")]
     let have_f32 = f32dot::available();
@@ -237,6 +240,9 @@ fn main() {
             ternary_run(l, &acts, &mut t1, pool1);
             l.packed.gemm_i8_parallel(&acts, &mut t4, TernaryI8Kernel::best_available(), &pool4).unwrap();
             assert_eq!(t1, t4, "parallel ternary differs ({}x{} B={batch})", l.rows, l.cols);
+            let mut ts = vec![0i32; batch * l.rows];
+            l.packed.gemm_i8_spin(&acts, &mut ts, TernaryI8Kernel::best_available(), &spin4).unwrap();
+            assert_eq!(t1, ts, "spin-pool ternary differs ({}x{} B={batch})", l.rows, l.cols);
             if have_f32 {
                 let mut f = vec![0f32; batch * l.rows];
                 f32_run(l, &xf, batch, &mut f, pool1);
@@ -342,9 +348,80 @@ fn main() {
                 p / 4.0,
                 [f32_ms.map(|f| f / tern_ms), bf16_ms.map(|b| b / tern_ms), dense_ms.map(|d| d / tern_ms)],
             );
-            let _ = threads;
+            if threads > 1 {
+                let spin_ms = time_pass(&model, reps, |l| {
+                    let (a, _, _) = &inputs[idx(l)];
+                    l.packed
+                        .gemm_i8_spin(black_box(a), &mut out_i[..batch * l.rows], TernaryI8Kernel::best_available(), &spin4)
+                        .unwrap();
+                    black_box(&out_i);
+                }) * scale;
+                row(
+                    "ternary 2-bit, spin pool",
+                    spin_ms,
+                    p / 4.0,
+                    [f32_ms.map(|f| f / spin_ms), bf16_ms.map(|b| b / spin_ms), dense_ms.map(|d| d / spin_ms)],
+                );
+            }
         }
         println!();
+        if batch == 1 {
+            // Interleaved rounds so slow drifts of this shared VM hit every configuration alike.
+            println!("Ternary-only thread scaling, decode (ms per token for the 210 linear layers, 9 interleaved rounds):");
+            println!();
+            println!("| threads | rayon median (min) | spin median (min) | spin speed-up vs 1 thread (median) |");
+            println!("|--:|--:|--:|--:|");
+            let mut out_i = vec![0i32; 6912];
+            let counts = [2usize, 3, 4];
+            let rps: Vec<_> = counts.iter().map(|&t| rayon::ThreadPoolBuilder::new().num_threads(t).build().unwrap()).collect();
+            let sps: Vec<_> = counts.iter().map(|&t| SpinPool::new(t).unwrap()).collect();
+            let kern = TernaryI8Kernel::best_available();
+            let mut one = Vec::new();
+            let mut ray = vec![Vec::new(); 3];
+            let mut spn = vec![Vec::new(); 3];
+            for round in 0..10 {
+                let pass = |f: &mut dyn FnMut(&Lin)| {
+                    let t = Instant::now();
+                    model.iter().for_each(&mut *f);
+                    t.elapsed().as_secs_f64() * 1e3 * scale
+                };
+                let a1 = pass(&mut |l| {
+                    ternary_run(l, black_box(&inputs[idx(l)].0), &mut out_i[..l.rows], None);
+                    black_box(&out_i);
+                });
+                let mut r = [0.0; 3];
+                let mut sp = [0.0; 3];
+                for k in 0..3 {
+                    r[k] = pass(&mut |l| {
+                        ternary_run(l, black_box(&inputs[idx(l)].0), &mut out_i[..l.rows], Some(&rps[k]));
+                        black_box(&out_i);
+                    });
+                    sp[k] = pass(&mut |l| {
+                        l.packed.gemm_i8_spin(black_box(&inputs[idx(l)].0), &mut out_i[..l.rows], kern, &sps[k]).unwrap();
+                        black_box(&out_i);
+                    });
+                }
+                if round == 0 {
+                    continue; // warm-up round
+                }
+                one.push(a1);
+                for k in 0..3 {
+                    ray[k].push(r[k]);
+                    spn[k].push(sp[k]);
+                }
+            }
+            let min = |v: &Vec<f64>| v.iter().cloned().fold(f64::INFINITY, f64::min);
+            let m1 = median(one.clone());
+            println!("| 1 | {m1:.1} ({:.1}) | {m1:.1} ({:.1}) | 1.00x |", min(&one), min(&one));
+            for k in 0..3 {
+                let (mr, ms) = (median(ray[k].clone()), median(spn[k].clone()));
+                println!(
+                    "| {} | {mr:.1} ({:.1}) | {ms:.1} ({:.1}) | {:.2}x |",
+                    counts[k], min(&ray[k]), min(&spn[k]), m1 / ms
+                );
+            }
+            println!();
+        }
     }
     if check_only {
         println!("bitnet_decode --check: OK");
