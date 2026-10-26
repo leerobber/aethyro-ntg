@@ -1,11 +1,11 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "dockerfile",
-    "dockerfile": "./hostframe-backend/Dockerfile"
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "hostframe-backend/Dockerfile"
   },
   "deploy": {
-    "startCommand": "./kernel_host",
-    "port": 8080
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30
   }
 }

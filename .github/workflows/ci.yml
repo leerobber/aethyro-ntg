@@ -71,3 +71,27 @@ jobs:
       - name: cargo clippy
         working-directory: backend/keymaster
         run: cargo clippy -- -D warnings
+
+  whole-stack:
+    name: Whole-stack smoke (dashboard + kernel_host + keymaster)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            kernel
+            dashboard
+            backend/keymaster
+            hostframe-backend
+
+      - name: build all crates
+        run: scripts/build-all.sh --no-test
+
+      - name: smoke (Ollama optional, skipped when absent)
+        env:
+          SKIP_BUILD: "1"
+        run: scripts/smoke-whole.sh
