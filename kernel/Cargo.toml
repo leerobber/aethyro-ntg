@@ -146,3 +146,7 @@ matrixmultiply = "0.3"
 [[bench]]
 name = "ternary_vs_f32"
 harness = false
+
+[[bench]]
+name = "ternary_i8_vs_f32"
+harness = false
