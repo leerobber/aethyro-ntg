@@ -817,3 +817,69 @@ The Rust test runs the QAT model through every available kernel and requires ide
 - The dense-int8 control and the ternary kernel share one loop structure and neither is cache-blocked for large batches.
 
 **Verdict:** the kernel gate **passes in the ternary x int8 regime** against f32, with the caveats above. It is not a claim about a production model or a production baseline; the next evidence needed is a trained model at meaningful scale and a comparison against fp16/int8 weights on the target machine.
+
+
+## 2026-10-26 (later still): a real pretrained model, BitNet b1.58 2B-4T
+
+**Why this model.** The previous entry's open question was whether ternary survives on a real model. Naive post-training ternarisation of an ordinary f32 LLM is known to wreck quality (the digits PTQ result above hinted at that), so testing one would measure the wrong thing. `microsoft/bitnet-b1.58-2B-4T` is the official model trained natively with the exact numerics this kernel implements: absmean ternary weights, per-token int8 activations, 2.08 B ternary weights across 210 matrices, 4 T training tokens. Raw outputs: `docs/results/bitnet_2b_4t/`.
+
+**What was swapped.** Everything is the official `transformers` code (embeddings, RMSNorm, RoPE, attention, squared ReLU, lm_head) except the 210 BitLinear matmuls, which `scripts/bitnet_eval.py` replaces with calls into `libntg_kernel` through a C ABI (`ntg_ternary_*`): activation quantisation exactly as PyTorch does it (`round` half-to-even, scale `127/max`), exact integer GEMM on 2-bit packed weights, dequantisation. The weights are the checkpoint's own ternary weights, unpacked and re-packed; the harness asserts they are exactly -1/0/1.
+
+### Accuracy
+
+| | official path (transformers, bf16) | ternary kernel path (bf16) |
+|---|--:|--:|
+| wikitext-2 perplexity, 16 x 512 tokens (8,176 scored) | 22.065 | 22.032 (-0.15%) |
+| ARC-Easy zero-shot, first 300 test questions: acc | 76.33% | 75.33% |
+| ARC-Easy: acc_norm | 76.00% | 74.33% |
+| top-1 next-token agreement | 96.65% of 8,176 tokens | |
+| both paths pick the same ARC answer | 97.3% of 300 | |
+
+The ARC difference is 3 questions net (at most 8 of 300 questions differ), a paired exact test gives p between 0.25 and 0.45 for any split consistent with that, so the two are not distinguishable. The vendor reports ARC-Easy 74.79 for this model under its own protocol; the 76.3% here uses a plain "Question/Answer" zero-shot format on 300 questions (sampling error about 2.5 points), so only the paired comparison above is meaningful.
+
+**A discrepancy that turned out to be the other path's.** Token-level agreement of 96.65% and a mean |delta log-prob| of 0.059 looked too large for a kernel that is supposed to be exact. In float32, where the official path has no bf16 noise, they were still 97.5% and 0.047. Checking five real layers (captured activations from layers 0, 14 and 29) against an independent numpy int64 implementation of the specification:
+
+| | relative error vs exact reference |
+|---|--:|
+| this kernel | 4e-8 on every layer (float32 rounding) |
+| official PyTorch path, fp32 | 1.4e-7 to 3.3e-4 depending on the layer |
+
+So the kernel reproduces the specification; the official path deviates from it by up to 3e-4 per layer (I did not isolate the cause; a plausible one is `torch.compile` fusing the activation quantiser so that rounding flips at near-tie boundaries), and discrete int8 rounding amplifies that across 30 layers. Distance of each deployment from the exact-specification model (the kernel in float32), same 2,044 tokens:
+
+| deployment | mean \|delta log-prob\| | top-1 agreement | perplexity |
+|---|--:|--:|--:|
+| exact specification (kernel, fp32) | - | - | 19.800 |
+| official, fp32 | 0.0468 | 97.5% | 19.806 |
+| official, bf16 (the HF deployment) | 0.0560 | 96.8% | 19.778 |
+| **kernel, bf16** | **0.0545** | **97.4%** | 19.791 |
+
+The kernel is as close to the exact model as the official implementation is (slightly closer in bf16). A noise floor of about 0.05 nats per token is simply how sensitive this model is to rounding, which means perplexity and task accuracy, not token-level agreement, are the right equivalence tests.
+
+### Speed
+
+**Per-token cost of the 210 linear layers at the model's real shapes** (`cargo bench --bench bitnet_decode`; random ternary weights, which does not change dense-kernel speed; 6 distinct layers cycled and scaled to 30 so weights stream from memory; the two runs with the bf16 baseline are shown as a range):
+
+| batch 1 | threads | ms/token | vs f32 row-dot | vs bf16 row-dot | vs int8 dense |
+|---|--:|--:|--:|--:|--:|
+| f32 row-dot | 1 | 756-758 | - | - | - |
+| bf16 row-dot | 1 | 500-503 | 1.5x | - | - |
+| int8 dense VNNI | 1 | 195-197 | 3.8-3.9x | 2.5-2.6x | - |
+| **ternary 2-bit** | 1 | **59-65** | **11.6-12.8x** | **7.7-8.5x** | **3.0-3.3x** |
+| f32 row-dot | 4 | 264-272 | - | - | - |
+| bf16 row-dot | 4 | 169-173 | 1.6x | - | - |
+| int8 dense VNNI | 4 | 74 | 3.6-3.7x | 2.3x | - |
+| **ternary 2-bit** | 4 | **40-41** | **6.7x** | **4.3x** | **1.8-1.9x** |
+
+Batch 8, one thread: ternary 161-205 ms/token, 11-14x faster than f32, 7.1-8.3x faster than bf16, 2.8-3.4x faster than int8 dense. Per-token weight traffic: f32 8.34 GB, int8 2.08 GB, ternary 521 MB.
+
+**End to end through the Python harness** (greedy decode of 48 tokens, KV cache, 4 threads, one run): official path 3.12 tok/s, kernel path 5.51 tok/s, 1.77x. The linears are only a part of that: lm_head (a 128256 x 2560 bf16 matrix read every token, not ternary) and attention, norms and Python overhead make up the rest and were not profiled separately. The linear weights shrink from 8.34 GB (f32) / 4.17 GB (bf16) to 0.52 GB, but the untouched bf16 embeddings and lm_head (0.66 GB) are now larger than the whole ternary body.
+
+### What did not go well
+- **Prefill is slower.** Scoring 512-token windows took 133 s on the kernel path vs 40 s for the official path (3.3x slower); the ARC run took 1,104 s vs 416 s (2.7x slower). This CPU has AMX (`amx_bf16`, `amx_int8`), which torch's bf16 matmul can use (I did not confirm it does); the VNNI kernel has no cache blocking beyond four batch columns and the activation quantiser is a scalar loop. The vendor's own README says the transformers path will not show efficiency gains and points to `bitnet.cpp`.
+- **Multi-threading scales poorly for the ternary kernel**: 59-65 ms at one thread to 40-41 ms at four (1.5-1.6x), against 2.8-2.9x for f32, 2.9-3.0x for bf16 and 2.6-2.7x for int8. Each ternary matmul is only about 250 microseconds, so waking the rayon pool on a virtual machine costs a large fraction of it. The four-thread ternary numbers therefore understate the kernel; a spinning pool or running independent matmuls (q/k/v, gate/up) concurrently would be the fix.
+- **Not at bitnet.cpp level, and not compared.** The vendor reports 29 ms/token for the whole model with `bitnet.cpp` on unspecified hardware. Here the linears alone take 40-65 ms on a shared 4-vCPU VM. Different machines, so this is not a ratio, but I cannot claim parity with the reference runtime and did not run it.
+- **Run-to-run noise on this VM is large** (ternary 1-thread: 54, 86, 65 and 59 ms across four runs; f32 was stable), so the ratios above carry roughly +/-25%.
+- The accuracy sample is modest: 8,176 perplexity tokens and 300 ARC-Easy questions. No other benchmark was run.
+
+### Verdict
+On a real pretrained, natively ternary model the kernel **preserves accuracy** (perplexity within 0.15%, ARC-Easy statistically unchanged, closeness to the exact model equal to the official implementation's) while cutting the linear-layer weights 16x versus f32 and 8x versus bf16, and running the decode-time matmuls **7.7-8.5x faster than a bf16 kernel and 3.0-3.3x faster than dense int8 on one core (4.3x and 1.8-1.9x on four)**. End-to-end it is only 1.8x faster in this harness, prefill is slower than torch's AMX path, and it has not been compared with `bitnet.cpp`. The remaining engineering is clear: a prefill kernel (blocking, AMX or wider tiles), a spinning thread pool, a vectorised activation quantiser, and a quantised lm_head.

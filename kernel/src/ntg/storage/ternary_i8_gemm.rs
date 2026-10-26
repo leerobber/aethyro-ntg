@@ -34,6 +34,7 @@
 //! bit-identical results; the SIMD ones are chosen at run time.
 
 use crate::ntg::error::NtgError;
+use rayon::prelude::*;
 
 /// Elements per packed group (64 bytes x 4 codes per byte).
 pub const GROUP: usize = 256;
@@ -155,6 +156,35 @@ impl Int8Activations {
         Ok(Self { batch, cols, k_padded, data, sums, scales })
     }
 
+    /// BitNet b1.58's activation quantiser, bit for bit as PyTorch computes it:
+    /// `s = 127 / max(max|x|, 1e-5)`, `q = clamp(round_half_even(x * s), -128, 127)`,
+    /// dequantised as `q / s`. Differs from [`Self::quantize_f32`] only in float rounding
+    /// order and tie handling, which matters when matching a PyTorch reference.
+    pub fn quantize_f32_bitnet(x: &[f32], batch: usize, cols: usize) -> Result<Self, NtgError> {
+        if x.len() != batch * cols {
+            return Err(NtgError::ShapeMismatch { expected: batch * cols, got: x.len() });
+        }
+        let k_padded = padded(cols);
+        let mut data = vec![0i8; batch * k_padded];
+        let mut sums = vec![0i32; batch];
+        let mut scales = vec![1.0f32; batch];
+        for b in 0..batch {
+            let row = &x[b * cols..(b + 1) * cols];
+            let max = row.iter().fold(0.0f32, |m, &v| m.max(v.abs())).max(1e-5);
+            let s = 127.0f32 / max;
+            scales[b] = 1.0 / s;
+            let dst = &mut data[b * k_padded..b * k_padded + cols];
+            let mut sum = 0i32;
+            for (d, &v) in dst.iter_mut().zip(row) {
+                let q = (v * s).round_ties_even().clamp(-128.0, 127.0) as i8;
+                *d = q;
+                sum += q as i32;
+            }
+            sums[b] = sum;
+        }
+        Ok(Self { batch, cols, k_padded, data, sums, scales })
+    }
+
     pub fn batch(&self) -> usize {
         self.batch
     }
@@ -247,18 +277,12 @@ impl PackedTernaryMatrix {
         ((byte >> (2 * (in_group / 64))) & 0b11) as i8 - 1
     }
 
-    /// Exact integer product into `out` (`batch x rows`, row-major).
-    pub fn gemm_i8(
-        &self,
-        x: &Int8Activations,
-        out: &mut [i32],
-        kernel: TernaryI8Kernel,
-    ) -> Result<(), NtgError> {
+    fn validate(&self, x: &Int8Activations, out_len: usize, kernel: TernaryI8Kernel) -> Result<(), NtgError> {
         if x.cols != self.cols {
             return Err(NtgError::ShapeMismatch { expected: self.cols, got: x.cols });
         }
-        if out.len() != x.batch * self.rows {
-            return Err(NtgError::ShapeMismatch { expected: x.batch * self.rows, got: out.len() });
+        if out_len != x.batch * self.rows {
+            return Err(NtgError::ShapeMismatch { expected: x.batch * self.rows, got: out_len });
         }
         if !kernel.is_available() {
             return Err(NtgError::InvalidInput(format!(
@@ -267,21 +291,90 @@ impl PackedTernaryMatrix {
             )));
         }
         debug_assert_eq!(x.k_padded, self.k_padded);
+        Ok(())
+    }
+
+    /// Exact integer product into `out` (`batch x rows`, row-major).
+    pub fn gemm_i8(
+        &self,
+        x: &Int8Activations,
+        out: &mut [i32],
+        kernel: TernaryI8Kernel,
+    ) -> Result<(), NtgError> {
+        self.validate(x, out.len(), kernel)?;
+        self.gemm_rows(x, out, kernel, 0, self.rows);
+        Ok(())
+    }
+
+    /// Same result as [`Self::gemm_i8`], with output rows split across `pool`.
+    ///
+    /// Falls back to the serial path for small matrices or a single-thread pool.
+    pub fn gemm_i8_parallel(
+        &self,
+        x: &Int8Activations,
+        out: &mut [i32],
+        kernel: TernaryI8Kernel,
+        pool: &rayon::ThreadPool,
+    ) -> Result<(), NtgError> {
+        self.validate(x, out.len(), kernel)?;
+        let threads = pool.current_num_threads();
+        if threads <= 1 || self.rows < threads * 16 {
+            self.gemm_rows(x, out, kernel, 0, self.rows);
+            return Ok(());
+        }
+        let chunk = self.rows.div_ceil(threads).next_multiple_of(8);
+        if x.batch == 1 {
+            // One output row per column of `out`, so chunks of `out` are disjoint row ranges.
+            pool.install(|| {
+                out.par_chunks_mut(chunk).enumerate().for_each(|(i, o)| {
+                    let n0 = i * chunk;
+                    self.gemm_rows(x, o, kernel, n0, n0 + o.len());
+                });
+            });
+        } else {
+            let chunks = self.rows.div_ceil(chunk);
+            let parts: Vec<(usize, Vec<i32>)> = pool.install(|| {
+                (0..chunks)
+                    .into_par_iter()
+                    .map(|i| {
+                        let n0 = i * chunk;
+                        let n1 = (n0 + chunk).min(self.rows);
+                        let mut local = vec![0i32; x.batch * (n1 - n0)];
+                        self.gemm_rows(x, &mut local, kernel, n0, n1);
+                        (n0, local)
+                    })
+                    .collect()
+            });
+            for (n0, local) in parts {
+                let width = local.len() / x.batch;
+                for b in 0..x.batch {
+                    out[b * self.rows + n0..b * self.rows + n0 + width]
+                        .copy_from_slice(&local[b * width..(b + 1) * width]);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Rows `n0..n1` into `out` laid out as `batch x (n1 - n0)`.
+    fn gemm_rows(&self, x: &Int8Activations, out: &mut [i32], kernel: TernaryI8Kernel, n0: usize, n1: usize) {
+        assert!(n0 <= n1 && n1 <= self.rows, "row range out of bounds");
+        assert_eq!(out.len(), x.batch * (n1 - n0), "output slice has the wrong length");
         match kernel {
-            TernaryI8Kernel::Scalar => self.gemm_scalar(x, out),
+            TernaryI8Kernel::Scalar => self.gemm_scalar(x, out, n0, n1),
             #[cfg(target_arch = "x86_64")]
             TernaryI8Kernel::Avx2 => {
                 let mut b0 = 0;
                 while b0 < x.batch {
                     let nb = (x.batch - b0).min(4);
-                    // SAFETY: availability was checked above; slice bounds are
-                    // validated by the shape checks and by `x86::*` index math.
+                    // SAFETY: callers validated availability and shapes; the asserts above
+                    // bound the row range and output length used by `x86::*`.
                     unsafe {
                         match nb {
-                            4 => x86::avx2_group::<4>(self, x, out, b0),
-                            3 => x86::avx2_group::<3>(self, x, out, b0),
-                            2 => x86::avx2_group::<2>(self, x, out, b0),
-                            _ => x86::avx2_group::<1>(self, x, out, b0),
+                            4 => x86::avx2_group::<4>(self, x, out, b0, n0, n1),
+                            3 => x86::avx2_group::<3>(self, x, out, b0, n0, n1),
+                            2 => x86::avx2_group::<2>(self, x, out, b0, n0, n1),
+                            _ => x86::avx2_group::<1>(self, x, out, b0, n0, n1),
                         }
                     }
                     b0 += nb;
@@ -295,10 +388,10 @@ impl PackedTernaryMatrix {
                     // SAFETY: as above.
                     unsafe {
                         match nb {
-                            4 => x86::vnni_group::<4>(self, x, out, b0),
-                            3 => x86::vnni_group::<3>(self, x, out, b0),
-                            2 => x86::vnni_group::<2>(self, x, out, b0),
-                            _ => x86::vnni_group::<1>(self, x, out, b0),
+                            4 => x86::vnni_group::<4>(self, x, out, b0, n0, n1),
+                            3 => x86::vnni_group::<3>(self, x, out, b0, n0, n1),
+                            2 => x86::vnni_group::<2>(self, x, out, b0, n0, n1),
+                            _ => x86::vnni_group::<1>(self, x, out, b0, n0, n1),
                         }
                     }
                     b0 += nb;
@@ -307,7 +400,6 @@ impl PackedTernaryMatrix {
             #[cfg(not(target_arch = "x86_64"))]
             _ => unreachable!("is_available() is false on this architecture"),
         }
-        Ok(())
     }
 
     /// Dequantised layer output: `acc * x_scale[b] * weight_scale` (`batch x rows`).
@@ -330,9 +422,10 @@ impl PackedTernaryMatrix {
         Ok(())
     }
 
-    fn gemm_scalar(&self, x: &Int8Activations, out: &mut [i32]) {
+    fn gemm_scalar(&self, x: &Int8Activations, out: &mut [i32], n0: usize, n1: usize) {
+        let width = n1 - n0;
         let mut codes = vec![0u8; self.k_padded];
-        for n in 0..self.rows {
+        for n in n0..n1 {
             let row = &self.data[n * self.bytes_per_row..(n + 1) * self.bytes_per_row];
             for g in 0..row.len() / GROUP_BYTES {
                 let chunk = &row[g * GROUP_BYTES..(g + 1) * GROUP_BYTES];
@@ -345,7 +438,7 @@ impl PackedTernaryMatrix {
             for b in 0..x.batch {
                 let xs = &x.data[b * self.k_padded..(b + 1) * self.k_padded];
                 let dot: i32 = codes.iter().zip(xs).map(|(&c, &v)| c as i32 * v as i32).sum();
-                out[b * self.rows + n] = dot - x.sums[b];
+                out[b * width + (n - n0)] = dot - x.sums[b];
             }
         }
     }
@@ -360,16 +453,20 @@ mod x86 {
     ///
     /// # Safety
     /// The CPU must support AVX-512 F/BW/VNNI. `out`, `x` and `w` must have the
-    /// shapes validated by [`PackedTernaryMatrix::gemm_i8`], and `b0 + NB <= batch`.
+    /// shapes validated by [`PackedTernaryMatrix::gemm_i8`], `b0 + NB <= batch`,
+    /// `n0 <= n1 <= rows`, and `out.len() == batch * (n1 - n0)`.
     #[target_feature(enable = "avx512f,avx512bw,avx512vnni")]
     pub unsafe fn vnni_group<const NB: usize>(
         w: &PackedTernaryMatrix,
         x: &Int8Activations,
         out: &mut [i32],
         b0: usize,
+        n0: usize,
+        n1: usize,
     ) {
         let m3 = _mm512_set1_epi8(3);
-        for n in 0..w.rows {
+        let width = n1 - n0;
+        for n in n0..n1 {
             let wrow = w.data.as_ptr().add(n * w.bytes_per_row);
             // Four independent accumulators per batch row hide dpbusd latency.
             let mut acc = [[_mm512_setzero_si512(); 4]; NB];
@@ -392,7 +489,7 @@ mod x86 {
             }
             for (bi, a) in acc.iter().enumerate() {
                 let s = _mm512_add_epi32(_mm512_add_epi32(a[0], a[1]), _mm512_add_epi32(a[2], a[3]));
-                out[(b0 + bi) * w.rows + n] = _mm512_reduce_add_epi32(s) - x.sums[b0 + bi];
+                out[(b0 + bi) * width + (n - n0)] = _mm512_reduce_add_epi32(s) - x.sums[b0 + bi];
             }
         }
     }
@@ -417,10 +514,13 @@ mod x86 {
         x: &Int8Activations,
         out: &mut [i32],
         b0: usize,
+        n0: usize,
+        n1: usize,
     ) {
         let m3 = _mm256_set1_epi8(3);
         let ones = _mm256_set1_epi16(1);
-        for n in 0..w.rows {
+        let width = n1 - n0;
+        for n in n0..n1 {
             let wrow = w.data.as_ptr().add(n * w.bytes_per_row);
             let mut acc = [_mm256_setzero_si256(); NB];
             let mut c = 0;
@@ -446,7 +546,7 @@ mod x86 {
                 c += 32;
             }
             for (bi, a) in acc.iter().enumerate() {
-                out[(b0 + bi) * w.rows + n] = hsum_epi32(*a) - x.sums[b0 + bi];
+                out[(b0 + bi) * width + (n - n0)] = hsum_epi32(*a) - x.sums[b0 + bi];
             }
         }
     }
@@ -605,5 +705,44 @@ mod tests {
         let best = TernaryI8Kernel::best_available();
         assert!(best.is_available());
         assert!(TernaryI8Kernel::all_available().contains(&best));
+    }
+
+    #[test]
+    fn parallel_matches_serial_for_every_kernel() {
+        let mut rng = Rng(0x5EED);
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(3).build().unwrap();
+        for &(rows, cols, batch) in &[(200, 300, 1), (203, 513, 3), (256, 700, 5), (97, 256, 2)] {
+            let w: Vec<i8> = (0..rows * cols).map(|_| rng.ternary()).collect();
+            let x: Vec<i8> = (0..batch * cols).map(|_| rng.i8_any()).collect();
+            let want = naive(&w, &x, rows, cols, batch);
+            let m = PackedTernaryMatrix::from_i8(&w, rows, cols).unwrap();
+            let acts = Int8Activations::from_i8(&x, batch, cols).unwrap();
+            for kernel in TernaryI8Kernel::all_available() {
+                let mut got = vec![0i32; batch * rows];
+                m.gemm_i8_parallel(&acts, &mut got, kernel, &pool).unwrap();
+                assert_eq!(got, want, "{} {rows}x{cols} batch {batch}", kernel.name());
+            }
+        }
+    }
+
+    #[test]
+    fn bitnet_quantizer_breaks_ties_to_even_like_pytorch() {
+        // max = 127 so the scale is exactly 1.0 and x maps to itself before rounding.
+        let a = Int8Activations::quantize_f32_bitnet(&[127.0, 62.5, -62.5, 63.5], 1, 4).unwrap();
+        assert_eq!(&a.data[..4], &[127, 62, -62, 64]);
+        assert_eq!(a.scales()[0], 1.0);
+        assert_eq!(a.row_sums()[0], 127 + 62 - 62 + 64);
+        // Half-away rounding (the other quantiser) differs on the same input.
+        let b = Int8Activations::quantize_f32(&[127.0, 62.5, -62.5, 63.5], 1, 4).unwrap();
+        assert_eq!(&b.data[..4], &[127, 63, -63, 64]);
+    }
+
+    #[test]
+    fn bitnet_quantizer_clamps_tiny_rows_and_range() {
+        let z = Int8Activations::quantize_f32_bitnet(&[0.0; 4], 1, 4).unwrap();
+        assert!(z.data.iter().all(|&v| v == 0));
+        assert!((z.scales()[0] - 1e-5 / 127.0).abs() < 1e-12);
+        let a = Int8Activations::quantize_f32_bitnet(&[-3.0, 3.0, 1.5, 0.0], 1, 4).unwrap();
+        assert_eq!(&a.data[..4], &[-127, 127, 64, 0]);
     }
 }

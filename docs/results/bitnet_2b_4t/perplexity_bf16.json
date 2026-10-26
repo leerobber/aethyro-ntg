@@ -1,0 +1,27 @@
+{
+  "model": "microsoft/bitnet-b1.58-2B-4T",
+  "windows": 16,
+  "seqlen": 512,
+  "threads": 4,
+  "dtype": "bfloat16",
+  "kernel": "avx512-vnni",
+  "official": {
+    "ppl": 22.064854187720055,
+    "eval_s": 39.73590458199942,
+    "gen_text": " Paris. Paris is a city that is known for its rich history, culture, and architecture. It is also a major center for art, fashion, and cuisine. The city is home to many famous landmarks such as the Eiffel Tower",
+    "gen_tok_s": 3.119683586544555
+  },
+  "swapped_linears": 210,
+  "linear_weight_bytes_f32": 8336179200,
+  "linear_weight_bytes_packed": 521011200,
+  "kernel_path": {
+    "ppl": 22.031568749062615,
+    "eval_s": 133.0510290510001,
+    "gen_text": " Paris. Paris is a city in the \u00cele-de-France region of France. It is located in the north-central part of the country. Paris is known for its rich history, famous landmarks, and cultural attractions. The city is also",
+    "gen_tok_s": 5.508109949798326
+  },
+  "top1_agreement": 0.9664872884750366,
+  "mean_abs_logprob_diff": 0.05939255282282829,
+  "max_abs_logprob_diff": 0.9126629829406738,
+  "generation_identical": false
+}
