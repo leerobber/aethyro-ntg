@@ -334,7 +334,8 @@ impl PackedTernaryMatrix {
         let mut codes = vec![0u8; self.k_padded];
         for n in 0..self.rows {
             let row = &self.data[n * self.bytes_per_row..(n + 1) * self.bytes_per_row];
-            for (g, chunk) in row.chunks_exact(GROUP_BYTES).enumerate() {
+            for g in 0..row.len() / GROUP_BYTES {
+                let chunk = &row[g * GROUP_BYTES..(g + 1) * GROUP_BYTES];
                 for (j, &byte) in chunk.iter().enumerate() {
                     for i in 0..4 {
                         codes[g * GROUP + 64 * i + j] = (byte >> (2 * i)) & 0b11;
