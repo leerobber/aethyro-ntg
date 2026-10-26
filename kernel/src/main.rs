@@ -5,6 +5,9 @@
 //!   {"intent": "score",    "payload": {"text": "some content"}}
 //!   {"intent": "_status"}          → memory + ledger summary
 //!   {"intent": "_verify_ledger"}   → tamper-evidence check
+//!   {"intent": "_quad_brain"}      → Quad-Brain (α/β/γ/δ) state; it observes every routed call
+//!   {"intent": "_hierarchy", "payload": {"nano": 10000}}
+//!                                  → build + tick an agent hierarchy (nano capped at 500000)
 //!   {"intent": "_quit"}            → clean exit
 //!
 //! Writes one JSON object per line to stdout.
@@ -20,7 +23,9 @@
 
 use ntg_kernel::ntg::calib::{calibrate, fixture_documents, samples_from_documents, CalibModel};
 use ntg_kernel::ntg::ledger::{FitnessMeasure, MutationOutcome, TamperEvidentLedger};
+use ntg_kernel::genomic::vitascale::agent_hierarchy::AgentHierarchy;
 use ntg_kernel::ntg::ledger::replay::ExecutionTrace;
+use ntg_kernel::ntg::mutation::{AgentId, AgentLevel, BehavioralSignature, QuadBrainAgent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
@@ -94,6 +99,9 @@ struct NanoKeymaster {
     /// Credential vault: URL never echoed in any response or log line.
     external_url: Option<String>,
     call_counter: u64,
+    /// Observes every routed call (policy-brain confidence, backend choice) and
+    /// runs a full δ→α→β→γ cycle per call.
+    quad: QuadBrainAgent,
 }
 
 impl NanoKeymaster {
@@ -104,7 +112,115 @@ impl NanoKeymaster {
             external_url,
             call_counter: 0,
             model,
+            quad: QuadBrainAgent::new(AgentId::new(1), AgentLevel::Super),
         }
+    }
+
+    /// Feed the Quad-Brain one observation of this call's real routing behaviour.
+    fn observe_quad(&mut self, mem_key: &str, backend: &Backend, confidence: f64, call_id: u64) {
+        let (calls, local): (u64, u64) = self
+            .memory
+            .values()
+            .fold((0, 0), |(c, l), s| (c + s.calls, l + s.local_count));
+        let strategy = format!("{}:{}", mem_key, backend.label());
+        let bucket = (confidence * 8.0) as u64;
+        let sig = BehavioralSignature {
+            cycle: call_id,
+            efficiency: confidence as f32,
+            mutation_acceptance_rate: if calls == 0 { 0.0 } else { local as f32 / calls as f32 },
+            behavior_hash: fnv1a(&strategy) ^ bucket.wrapping_mul(0x9E37_79B9_7F4A_7C15),
+            active_strategies: vec![strategy],
+        };
+        self.quad.advance_cycle(sig);
+    }
+
+    /// Current Quad-Brain state, all values read from the brains themselves.
+    fn quad_report(&self) -> Value {
+        let q = &self.quad;
+        let r = q.report();
+        let (stress, growth, repair, coordination) = q.brain_delta.get_hormone_levels();
+        let strategies: Vec<Value> = q
+            .channel
+            .beta_to_gamma
+            .strategy_scores
+            .iter()
+            .map(|(n, sharpe)| json!({"strategy": n, "sharpe": sharpe}))
+            .collect();
+        json!({
+            "cycles": r.cycle,
+            "observes": "one cycle per routed call (confidence = efficiency, backend choice = strategy)",
+            "synchronized": r.synchronized,
+            "conflicts": q.channel.conflict_count,
+            "alpha": {
+                "drifts_detected": r.alpha_drifts,
+                "repairs_successful": r.alpha_repairs,
+                "rollbacks": q.brain_alpha.rollbacks_triggered,
+                "baseline_efficiency": q.brain_alpha.drift_detector.baseline_efficiency,
+                "drift_score": r.drift_score,
+                "consensus_threshold": r.consensus_threshold,
+            },
+            "beta": {
+                "patterns_learned": q.brain_beta.pattern_discoveries,
+                "strategies": strategies,
+            },
+            "gamma": {
+                "policy_directives_issued": r.quad_metrics.policy_directives_issued,
+                "policies_active": r.gamma_policies_active,
+                "alignment": r.gamma_alignment,
+            },
+            "delta": {
+                "regime": r.delta_regime,
+                "hormones": {"stress": stress, "growth": growth, "repair": repair, "coordination": coordination},
+                "forecasts": r.quad_metrics.forecasts_generated,
+                "forecast_quality": r.forecast_quality,
+            },
+        })
+    }
+
+    /// Build and tick an agent hierarchy of the requested size, then drop it.
+    /// Layout: 1 Super, 10 Sub, 100 Micro (10 per Sub), `nano` Nano spread over the Micros.
+    fn hierarchy_report(nano: u64) -> Value {
+        const MAX_NANO: u64 = 500_000;
+        let nano = nano.clamp(1, MAX_NANO);
+        let t0 = Instant::now();
+        let mut h = AgentHierarchy::new();
+        h.spawn_super();
+        let built: Result<(), String> = (|| {
+            h.spawn_sub(10)?;
+            for sub in 0..10u32 {
+                h.spawn_micro(10, sub)?;
+            }
+            let per_micro = (nano / 100) as u32;
+            let remainder = (nano % 100) as u32;
+            for micro in 0..100u32 {
+                let count = per_micro + if micro == 0 { remainder } else { 0 };
+                if count > 0 {
+                    h.spawn_nano(count, micro)?;
+                }
+            }
+            Ok(())
+        })();
+        if let Err(e) = built {
+            return json!({"error": e});
+        }
+        let spawn_ms = t0.elapsed().as_secs_f64() * 1e3;
+        let t1 = Instant::now();
+        h.broadcast_tick(1);
+        let tick_ms = t1.elapsed().as_secs_f64() * 1e3;
+        let summary = h.summary();
+        json!({
+            "requested_nano": nano,
+            "total_agents": h.total_agents(),
+            "tiers": {
+                "super": summary.get("Super").copied().unwrap_or(0),
+                "sub": summary.get("Sub").copied().unwrap_or(0),
+                "micro": summary.get("Micro").copied().unwrap_or(0),
+                "nano": summary.get("Nano").copied().unwrap_or(0),
+            },
+            "spawn_ms": spawn_ms,
+            "broadcast_tick_ms": tick_ms,
+            "note": "built, ticked and dropped per request; not retained",
+        })
     }
 
     fn external_configured(&self) -> bool {
@@ -173,6 +289,9 @@ impl NanoKeymaster {
             Backend::LocalFallback => stats.fallback_count += 1,
             Backend::External => {}
         }
+
+        // 5b. Quad-Brain observes this call (same key-capping as the memory layer).
+        self.observe_quad(mem_key, &backend, confidence, call_id);
 
         // 6. Evolution hint: after every 10 calls, emit routing policy observations.
         if call_id.is_multiple_of(10) {
@@ -277,6 +396,7 @@ impl NanoKeymaster {
             "model_threshold": self.model.threshold,
             "external_backend_configured": self.external_configured(),
             "intent_memory": intent_memory,
+            "quad_brain_cycles": self.quad.cycle_count,
         })
     }
 
@@ -425,6 +545,15 @@ fn main() {
                 break;
             }
             "_status" => km.status(),
+            "_quad_brain" => km.quad_report(),
+            "_hierarchy" => {
+                let nano = req
+                    .get("payload")
+                    .and_then(|p| p.get("nano"))
+                    .and_then(|n| n.as_u64())
+                    .unwrap_or(10_000);
+                NanoKeymaster::hierarchy_report(nano)
+            }
             "_verify_ledger" => match km.ledger.verify_full_ledger() {
                 Ok(()) => json!({"ledger_ok": true, "entries": km.ledger.len()}),
                 Err(e) => json!({"ledger_ok": false, "error": e.to_string()}),

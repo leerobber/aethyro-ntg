@@ -53,6 +53,10 @@ jobs:
         working-directory: kernel
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: ternary vs f32 benchmark (correctness check only, no timings)
+        working-directory: kernel
+        run: cargo bench --bench ternary_vs_f32 -- --check
+
   keymaster-backend:
     name: Keymaster backend (Rust)
     runs-on: ubuntu-latest

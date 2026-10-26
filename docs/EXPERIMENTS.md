@@ -718,3 +718,49 @@ neonate→infant with --to-infant
 ```
 
 **Verdict:** Stage 1 sets north star + supervised growth. Still lean.
+
+
+## 2026-10-26: Ternary vs f32 head-to-head, redone fairly
+
+**Goal:** Answer the Phase 6 kernel-gate question with an honest opponent. The earlier "143.6x" (July, `phase6_benchmark`, never merged to `main`) compared the bit-sliced kernel with a **triple-loop scalar f32** GEMM and gave the two sides different values (continuous f32 vs quantised).
+
+**Method** (`kernel/benches/ternary_vs_f32.rs`, `cargo bench --bench ternary_vs_f32`):
+- Part A, throughput: C = A*B with A and B exactly ternary. Every method computes the identical integer result, asserted element by element, so speed is compared at equal output. Opponents: the old naive f32 loop, a cache-friendly f32 loop, and `matrixmultiply::sgemm` (SIMD, blocked, FMA; what `ndarray` uses). Ternary = `BitSlicedTernary::dot_product_parallel` per output. All single-threaded. "+pack" includes packing B on every call (activations arrive dense; weights can be pre-packed).
+- Part B, fidelity: Gaussian weights quantised with the kernel's own `encode`; output compared with the f32 result.
+- Machine: shared 4-vCPU Xeon container with AVX2/AVX-512 and VPOPCNTDQ. One run of 7 per cell (median); timings varied noticeably between runs (sgemm at N=1024 measured 15.3 ms and 23.7 ms in two runs), so treat ratios as +/-30%.
+
+**Part A, default build** (no `target-cpu`; `popcnt_enabled=false`, so `count_ones` is a software popcount):
+
+| N | f32 naive ms | f32 loop ms | f32 sgemm ms | ternary ms | ternary+pack ms | vs naive | vs loop | vs sgemm | vs sgemm (+pack) |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 128 | 2.19 | 0.39 | 0.05 | 0.36 | 0.49 | 6.1x | 1.1x | 0.15x | 0.11x |
+| 256 | 17.42 | 2.02 | 0.31 | 1.46 | 2.71 | 12.0x | 1.4x | 0.22x | 0.12x |
+| 512 | 127.30 | 12.34 | 1.79 | 7.68 | 10.61 | 16.6x | 1.6x | 0.23x | 0.17x |
+| 1024 | 8789.69 | 200.25 | 15.32 | 54.47 | 62.00 | 161.4x | 3.7x | 0.28x | 0.25x |
+
+**Part A, `RUSTFLAGS="-C target-cpu=native"`** (hardware popcount, AVX2 auto-vectorisation):
+
+| N | f32 naive ms | f32 loop ms | f32 sgemm ms | ternary ms | ternary+pack ms | vs naive | vs loop | vs sgemm | vs sgemm (+pack) |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 128 | 2.56 | 0.23 | 0.05 | 0.11 | 0.26 | 22.3x | 2.0x | 0.41x | 0.18x |
+| 256 | 18.40 | 2.36 | 0.43 | 0.63 | 1.25 | 29.2x | 3.8x | 0.69x | 0.35x |
+| 512 | 132.40 | 16.56 | 2.95 | 4.92 | 6.56 | 26.9x | 3.4x | 0.60x | 0.45x |
+| 1024 | 8494.76 | 191.41 | 23.74 | 22.60 | 42.86 | 375.8x | 8.5x | 1.05x | 0.55x |
+
+Speedup columns are f32 time / ternary time (below 1.0x means ternary is slower). Memory for the two operands at N=1024: 8,388,608 bytes f32 vs 524,288 bytes ternary (16x).
+
+**Part B, fidelity** (Gaussian W 256x1024, x 1024, mean of 20 draws):
+
+| computation | cosine vs f32 | relative RMSE |
+|---|--:|--:|
+| ternary W, f32 x (BitNet-style) | 0.8869 | 0.4616 |
+| ternary W, ternary x (what this kernel computes) | 0.7915 | 0.6119 |
+
+**What this shows**
+- The old 143.6x is reproduced only against the naive loop (161x to 376x at N=1024, mostly cache-hostile access). Against a properly optimised f32 GEMM the ternary kernel is **slower in this repo as built**: 0.15x to 0.28x by default, 0.41x to 1.05x with `target-cpu=native`, and 0.11x to 0.55x once the per-call packing of activations is counted. It reaches parity with sgemm at best, at N=1024 in a native build, kernel only.
+- The real, repeatable advantages are **memory (16x smaller operands)** and **exact integer arithmetic** (all methods agreed bit for bit).
+- Post-training ternary quantisation of random Gaussian weights keeps cosine about 0.89 with f32 activations and about 0.79 when activations are ternarised too. That is a pessimistic case (no quantisation-aware training), but it means accuracy cost is not free.
+
+**Not measured:** multi-threading, GPU, trained-model task accuracy (no such comparison exists in this repo), and the aethyro.com comparison.
+
+**Verdict:** the kernel gate does **not** pass on throughput. Do not quote 143.6x as an NTG speedup. Closing the gap needs a ternary-weight x int8-activation kernel with a real SIMD popcount or lookup path (T-MAC / bitnet.cpp style) and a trained model to measure accuracy on; optimising before that measurement exists is premature.

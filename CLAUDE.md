@@ -66,7 +66,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 - Behavioral drift detection: 10-cycle rolling window, 40% threshold
 - Rollback checkpoint: triggers at 2× max_mutations consecutive rejections
 
-### Quad-Brain Architecture (Phases 6.14–6.18) — COMPLETE
+### Quad-Brain Architecture (Phases 6.14–6.18) — on `main` since 2026-10-26
 
 | Brain | Role |
 |-------|------|
@@ -78,6 +78,13 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 **Execution cycle:** `δ (perceive) → α (sync) → β (learn) → γ (govern) → loop`
 
 **Scale:** 10,000–500,000 agent hierarchies (4-tier: Super/Sub/Micro/Nano).
+
+**Status, stated plainly (2026-10-26):**
+- Before this date the brain modules existed only on the unmerged branch `claude/session-0163srlcjeckjksujsrtfgfsn-y9hf3y`, not on `main`, although this file called them COMPLETE. They were ported to `kernel/src/ntg/mutation/`.
+- Even there, `QuadBrainAgent` only owned α and β; γ and δ signals were hard-coded constants. It now owns real `BrainGamma` and `BrainDelta`, runs δ→α→β→γ, and γ's policy changes α's consensus threshold on the next cycle (tests: `quad_brain_closed_loop_drift_tightens_consensus`).
+- `kernel_host` feeds the Quad-Brain one observation per routed call (policy confidence as efficiency, backend choice as strategy); read it with `{"intent":"_quad_brain"}` / `GET /api/quad_brain`.
+- Limits: single-agent view (cluster/swarm aggregates equal the local observation); γ's perception-focus signal to δ is published but δ does not act on it; no mutation routing happens in `kernel_host`, so β reports routing efficiency 0.0 ("none observed").
+- The 10K–500K "agent hierarchy" is a data structure: `{"intent":"_hierarchy","payload":{"nano":N}}` builds 1 Super / 10 Sub / 100 Micro / N Nano records and ticks them (measured: 500,111 agents spawned in about 150 ms, tick about 6 ms, in-process, single thread). No agent runs any behaviour; it demonstrates bookkeeping scale only.
 
 ---
 
@@ -91,7 +98,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 3 | COMPLETE | Self-modification safety rails + audit ledger |
 | 4 | COMPLETE | Calibration (phase4_calib binary, model roundtrip) |
 | 5 | COMPLETE | Storage integration |
-| 6.0 | COMPLETE | Ternary GEMM vs f32 head-to-head benchmark (143.6× speedup) |
+| 6.0 | RE-MEASURED 2026-10-26 | Ternary vs f32 head-to-head. The July "143.6×" was against a triple-loop scalar f32 baseline; against SIMD f32 sgemm the kernel is slower (0.15–1.05×), with 16× smaller operands. See `docs/EXPERIMENTS.md` |
 | 6.1 | COMPLETE | NanoKeymaster routing agent |
 | 6.2 | COMPLETE | External HTTP backend (ureq POST) |
 | 6.11 | COMPLETE | Ternary Memory Graph / HyperVector (8192-dim HDC) |
@@ -104,7 +111,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** <!--tests-->540<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
+**Test count:** <!--tests-->649<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
 `docs/BASELINE_2026-10-26.md`; CI fails if this number drifts).
 
 ---
@@ -118,7 +125,7 @@ scripts/build-all.sh
 # Whole-stack smoke (dashboard + kernel_host + keymaster)
 scripts/smoke-whole.sh
 
-# Full Rust test suite (<!--tests-->540<!--/tests--> tests, ~1-2 min)
+# Full Rust test suite (<!--tests-->649<!--/tests--> tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)

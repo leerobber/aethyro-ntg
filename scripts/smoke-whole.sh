@@ -77,6 +77,28 @@ out="$(post /api/score '{"text":"fn main() { println!(\"hi\"); }"}')" && [ -n "$
 out="$(curl -fsS "$BASE/api/verify_ledger")" && [ -n "$out" ] \
   && pass "/api/verify_ledger -> $(echo "$out" | head -c 80)" || fail "/api/verify_ledger"
 
+# Drive routed traffic so the Quad-Brain has something real to observe.
+for i in $(seq 1 30); do
+  post /api/classify "{\"text\":\"sample number $i: fn f() { let x = $i; }\"}" >/dev/null || break
+done
+out="$(curl -fsS "$BASE/api/quad_brain")" || out=""
+if echo "$out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert d["cycles"] >= 30, d["cycles"]
+assert d["synchronized"] is True
+assert d["beta"]["strategies"], "beta learned no strategies"
+assert d["delta"]["forecasts"] == d["cycles"]
+assert 0.0 <= d["delta"]["forecast_quality"] <= 1.0
+' 2>/dev/null; then
+  pass "/api/quad_brain -> $(echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("cycles=%d regime=%s strategies=%d" % (d["cycles"], d["delta"]["regime"], len(d["beta"]["strategies"])))')"
+else
+  fail "/api/quad_brain ($out)"
+fi
+out="$(post /api/hierarchy '{"nano":10000}')" \
+  && echo "$out" | grep -q '"total_agents":10111' && echo "$out" | grep -q '"nano":10000' \
+  && pass "/api/hierarchy 10000 nano -> $(echo "$out" | head -c 90)" || fail "/api/hierarchy ($out)"
+
 if curl -fsS -o /dev/null --max-time 2 "${OLLAMA_URL:-http://127.0.0.1:11434}/api/tags" 2>/dev/null; then
   post /api/chat '{"message":"What is NTG?"}' >/dev/null && pass "/api/chat" || fail "/api/chat"
 else
