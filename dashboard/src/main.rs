@@ -240,7 +240,17 @@ async fn chat(State(state): State<AppState>, Json(body): Json<ChatBody>) -> impl
 }
 
 /// Best-effort raw HTTP GET against a local backend, used to report its liveness.
+///
+/// The whole probe (connect + read) is capped: on Windows a refused localhost
+/// connect can take seconds to fail, which would otherwise stall `/api/health`
+/// past any reasonable client timeout whenever a backend is down.
 async fn probe_http(addr: &str, path: &str) -> bool {
+    tokio::time::timeout(std::time::Duration::from_millis(700), probe_http_inner(addr, path))
+        .await
+        .unwrap_or(false)
+}
+
+async fn probe_http_inner(addr: &str, path: &str) -> bool {
     let Ok(mut stream) = TcpStream::connect(addr).await else {
         return false;
     };
@@ -266,7 +276,6 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
             None => false,
         }
     };
-    let keymaster_backend_up = probe_http("127.0.0.1:8080", "/health").await;
     let (rag_ready, rag_chunks) = {
         let idx = state.rag.read().await;
         (idx.is_ready(), idx.chunks.len())
@@ -277,7 +286,10 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         .trim_start_matches("https://")
         .trim_end_matches('/')
         .to_string();
-    let ollama_up = probe_http(&ollama_addr, "/api/tags").await;
+    let (keymaster_backend_up, ollama_up) = tokio::join!(
+        probe_http("127.0.0.1:8080", "/health"),
+        probe_http(&ollama_addr, "/api/tags"),
+    );
     Json(json!({
         "kernel_host": if kernel_alive { "up" } else { "down" },
         "keymaster_backend": if keymaster_backend_up { "up" } else { "down" },
