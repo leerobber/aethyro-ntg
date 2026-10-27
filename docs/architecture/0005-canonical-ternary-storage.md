@@ -36,3 +36,15 @@ canonical roles clearly.
 - ROADMAP Phase 1 “Canonical-storage ADR” checkbox is closed by this ADR.
 - Future unification (single type) is Phase 5+ only if measured win;
   not required for Phase 1 COMPLETE.
+
+## Addendum, 2026-10-27 (Foundation Lock A5.4)
+
+`docs/STATUS.md` listed "canonical storage ADR" as open. This ADR already decides it; nothing
+further was needed, and the decision stands:
+
+* Both `PackedTernary` types remain, under the roles above. In-tree users:
+  `ntg::packed::PackedTernary` is re-exported from `lib.rs` and used by `ntg/genome/mod.rs`;
+  `ntg::storage::PackedTernary` backs the TOBL / FFI path. No encoding is converted implicitly.
+* Newer storage is separate and not part of this question: `PackedTernaryMatrix` (2-bit weight
+  matrix for the ternary x int8 GEMM, own group layout) and `Int8Matrix` (output projection).
+* Unifying the two `PackedTernary` types stays deferred until a measured win, as stated above.

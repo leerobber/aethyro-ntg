@@ -914,3 +914,48 @@ Two earlier runs with a larger idle spin budget gave 4-thread medians of 14.7 an
 * The linears are now about 20 ms of a roughly 130-140 ms token; the rest is attention, the 128256x2560 output matrix (66 ms in bf16 at one thread in torch) and Python. Faster matmuls cannot show up much end to end until those are replaced.
 * `bitnet.cpp` still decodes the whole model faster than this harness at the same thread count (12.1-12.6 tok/s at two threads, 20.9-21.7 at four against 7.3-7.8 here). The matmul scaling gap is closed; the whole-model gap is not.
 * One machine, shared VM, single end-to-end runs; not tatortot.
+
+## 2026-10-27: the output matrix to int8
+
+**Where the time goes.** A decode token in the Hugging Face harness with the ternary kernel
+(torch 2 threads / kernel 2 threads) measured 132-145 ms wall: about 60 ms in the ternary
+kernel's C ABI calls, about 11 ms in their Python wrappers, 35-37 ms in the output projection
+(`lm_head`, a 128256 x 2560 bf16 matrix, 0.66 GB read per token), and the rest attention, norms
+and Python. With torch 1 / kernel 4 the output projection took 62 ms because torch had one thread.
+
+**Change.** `ntg::storage::Int8Matrix` (PR #32): per-row symmetric int8 weights, int8
+activations, exact `i32` accumulation (VNNI / AVX2 / scalar), spinning-pool parallel. Opt-in via
+`scripts/bitnet_eval.py --int8-lm-head`. Unlike the ternary kernel this is lossy.
+
+**Speed** (shared 4-vCPU VM; wall ms per token, output-projection ms in brackets):
+
+| torch / kernel threads | bf16 head | int8 head |
+|---|--:|--:|
+| 2 / 2 | 145 (36), 135 (37) | 107 (17), 111 (17) |
+| 1 / 4 | 135 (62) | 88 (9); repeats under other idle-spin budgets 72, 77, 67 (8-9) |
+
+Greedy generation in the full harness (2 / 2): 8.0 tok/s against 7.3-7.8 before.
+
+**Accuracy** (wikitext-2, 8,176 tokens; ARC-Easy, 300 questions; 2 / 2 threads):
+
+| | perplexity | top-1 agreement with official | mean abs logprob diff | ARC-Easy acc / acc_norm |
+|---|--:|--:|--:|--:|
+| official bf16 | 22.066 | - | - | 76.00 / 76.00 |
+| ternary kernel, bf16 head | 22.032 | 96.65% | 0.059 | 75.33 / 74.33 (earlier run, 4 threads) |
+| ternary kernel + int8 head | 22.045 | 95.57% | 0.074 | 76.33 / 75.33 |
+
+The int8 output matrix costs about one point of top-1 agreement and 0.015 of mean logprob
+difference; perplexity and ARC-Easy are unchanged within noise (the two ARC runs pick the same
+answer on 97.7% of questions, 7 of 300 differ). Raw:
+`docs/results/bitnet_2b_4t/perplexity_bf16_int8_lm_head.json`, `arc_easy_300_int8_lm_head.json`.
+
+**What did not go well.**
+* The same configuration measured 88, 72, 77 and 67 ms per token across runs: treat the speed
+  rows as roughly +/-20%.
+* The ternary kernel's C ABI calls still cost 33-57 ms per token against 12-20 ms for the same
+  matmuls in `bitnet_decode`. It is not worker wake-up (a 64x longer idle spin changed it by
+  about 6 ms, within noise); the per-call activation quantiser, allocations and dequantisation
+  are the suspects and are unprofiled. This is now the largest single item in a decode token.
+* `bitnet.cpp` still decodes the whole model faster at equal thread counts
+  (`docs/results/bitnet_cpp/`).
+* Prefill is unchanged. One machine; not tatortot.
