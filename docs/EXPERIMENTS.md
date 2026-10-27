@@ -952,10 +952,39 @@ answer on 97.7% of questions, 7 of 300 differ). Raw:
 **What did not go well.**
 * The same configuration measured 88, 72, 77 and 67 ms per token across runs: treat the speed
   rows as roughly +/-20%.
-* The ternary kernel's C ABI calls still cost 33-57 ms per token against 12-20 ms for the same
-  matmuls in `bitnet_decode`. It is not worker wake-up (a 64x longer idle spin changed it by
-  about 6 ms, within noise); the per-call activation quantiser, allocations and dequantisation
-  are the suspects and are unprofiled. This is now the largest single item in a decode token.
+* The ternary kernel's C ABI calls still cost 33-57 ms per token in the model against 12-20 ms for the
+  same matmuls in `bitnet_decode`. **The explanation first written here was wrong**; see the follow-up
+  below.
 * `bitnet.cpp` still decodes the whole model faster at equal thread counts
   (`docs/results/bitnet_cpp/`).
 * Prefill is unchanged. One machine; not tatortot.
+
+### Follow-up (same day): where the C ABI gap comes from
+
+`scripts/bench_ffi_overhead.py` times one token's 210 matmuls through the C ABI with no torch in the
+loop (ms per token; the matmul-only `bitnet_decode` figures are 12.6-14.8 at 4 threads, 20.6 at 2):
+
+| kernel threads | default idle spin (1024) | spin 16384 | spin 262144 + 1024 yields |
+|--:|--:|--:|--:|
+| 1 | 64 | - | - |
+| 2 | 61-62 | 51.5 | 46.0 |
+| 4 | 45.5-50.8 | 31.1 | 30.7 |
+
+* **Workers falling asleep between calls is the largest piece.** Each C ABI call does serial work
+  (the activation quantiser) before it dispatches; with the default idle budget the workers sleep
+  during it and every dispatch pays a wake-up. A longer spin takes four threads from about 46-51 to
+  about 31 ms. The earlier test that "a 64x longer spin changed it by about 6 ms" was run inside
+  the Hugging Face loop, where torch's own work between linears is far longer than any spin budget,
+  so it could not show this. That sentence in the entry above is withdrawn.
+* **The quantiser is about 4 ms per token.** With a tiny output matrix a call costs 13.9 us for
+  2,560 inputs and 43.4 us for 6,912, about 5-6 ns per element (`f32::round_ties_even` on the
+  baseline x86-64 target compiles to a libm call). That is roughly 3.8 ms per token across 210 calls.
+* **Not explained:** about 10-15 ms of the 4-thread gap remains after a long spin and the quantiser;
+  dequantisation, allocation and the Python wrapper (7-11 ms in the model) are the candidates and
+  are not separately measured.
+* One-thread time swung with the VM again (64 ms here against 30-86 ms for the matmul-only
+  benchmark across runs), so absolute milliseconds are roughly +/-30%.
+* Obvious fixes, not built: wake the workers at the start of each call so the wake-up overlaps the
+  quantiser; a vectorised quantiser (AVX-512 round-to-even); a per-token "stay awake" mode (trades
+  CPU stolen from torch).
+
