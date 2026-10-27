@@ -92,7 +92,24 @@ pub unsafe extern "C" fn ntg_ternary_matrix_new(
 /// `m` must be null or a live handle from [`ntg_ternary_matrix_new`].
 #[no_mangle]
 pub unsafe extern "C" fn ntg_ternary_matrix_bytes(m: *const c_void) -> usize {
-    (m as *const PackedTernaryMatrix).as_ref().map_or(0, |m| m.packed_bytes())
+    (m as *const PackedTernaryMatrix).as_ref().map_or(0, |m| m.packed_bytes() + m.prefill_bytes())
+}
+
+/// Build the large-batch (prefill) copy of a matrix's weights: another `rows * cols / 4` bytes,
+/// used for batches of 4 or more on AVX-512 VNNI CPUs, unused elsewhere. Idempotent. Returns 0, or
+/// -1 for a null handle. Must not run concurrently with a forward call on the same handle.
+///
+/// # Safety
+/// `m` must be a live handle from [`ntg_ternary_matrix_new`], not in use by another thread.
+#[no_mangle]
+pub unsafe extern "C" fn ntg_ternary_matrix_prepare_prefill(m: *mut c_void) -> i32 {
+    match (m as *mut PackedTernaryMatrix).as_mut() {
+        Some(m) => {
+            m.prepare_prefill();
+            0
+        }
+        None => -1,
+    }
 }
 
 /// Free a handle. Null is ignored.
@@ -130,20 +147,53 @@ pub unsafe extern "C" fn ntg_ternary_forward_f32(
     if let Some(p) = &pool {
         p.prewake();
     }
-    let Ok(acts) = Int8Activations::quantize_f32_bitnet(x, batch, m.cols()) else { return -3 };
+    let quantised = match &pool {
+        Some(p) => Int8Activations::quantize_f32_bitnet_pool(x, batch, m.cols(), p),
+        None => Int8Activations::quantize_f32_bitnet(x, batch, m.cols()),
+    };
+    let Ok(acts) = quantised else { return -3 };
+    // Large batches with a panel copy: dequantise inside the kernel, no i32 buffer.
+    if m.forward_prefill_f32(&acts, out, pool.as_deref()) {
+        return 0;
+    }
     let kernel = TernaryI8Kernel::best_available();
     let mut acc = vec![0i32; batch * m.rows()];
-    let ran = match pool {
-        Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, &p),
+    let ran = match &pool {
+        Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, p),
         None => m.gemm_i8(&acts, &mut acc, kernel),
     };
     if ran.is_err() {
         return -4;
     }
-    for b in 0..batch {
+    let rows = m.rows();
+    let dequantise = |b: usize, dst: &mut [f32]| {
         let s = acts.scales()[b] * m.scale();
-        for n in 0..m.rows() {
-            out[b * m.rows() + n] = acc[b * m.rows() + n] as f32 * s;
+        for (d, &a) in dst.iter_mut().zip(&acc[b * rows..(b + 1) * rows]) {
+            *d = a as f32 * s;
+        }
+    };
+    match &pool {
+        Some(p) if batch >= 2 * p.threads() => {
+            // Batch rows are independent: split them across the pool.
+            struct Dst(*mut f32);
+            // SAFETY: each batch row is written by exactly one thread (claimed from a counter).
+            unsafe impl Sync for Dst {}
+            let dst = Dst(out.as_mut_ptr());
+            let dst = &dst;
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            p.run(|_| loop {
+                let b = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if b >= batch {
+                    break;
+                }
+                // SAFETY: row `b` of `out` (`rows` values) is claimed once; `out` outlives `run`.
+                dequantise(b, unsafe { std::slice::from_raw_parts_mut(dst.0.add(b * rows), rows) });
+            });
+        }
+        _ => {
+            for b in 0..batch {
+                dequantise(b, &mut out[b * rows..(b + 1) * rows]);
+            }
         }
     }
     0
@@ -256,6 +306,26 @@ mod tests {
             }
         }
         ntg_ternary_set_threads(1);
+    }
+
+    #[test]
+    fn prefill_copy_gives_identical_batches() {
+        let (rows, cols, batch) = (70usize, 300usize, 9usize);
+        let w: Vec<i8> = (0..rows * cols).map(|i| ((i * 5 + i / 7) % 3) as i8 - 1).collect();
+        let x: Vec<f32> = (0..batch * cols).map(|i| ((i * 11) % 89) as f32 / 9.0 - 4.5).collect();
+        let (mut a, mut b) = (vec![0f32; batch * rows], vec![0f32; batch * rows]);
+        unsafe {
+            let h = ntg_ternary_matrix_new(w.as_ptr(), rows, cols, 0.5);
+            let before = ntg_ternary_matrix_bytes(h);
+            assert_eq!(ntg_ternary_forward_f32(h, x.as_ptr(), batch, a.as_mut_ptr()), 0);
+            assert_eq!(ntg_ternary_matrix_prepare_prefill(h), 0);
+            assert_eq!(ntg_ternary_matrix_prepare_prefill(h), 0);
+            assert!(ntg_ternary_matrix_bytes(h) > before || !TernaryI8Kernel::Avx512Vnni.is_available());
+            assert_eq!(ntg_ternary_forward_f32(h, x.as_ptr(), batch, b.as_mut_ptr()), 0);
+            ntg_ternary_matrix_free(h);
+            assert_eq!(ntg_ternary_matrix_prepare_prefill(std::ptr::null_mut()), -1);
+        }
+        assert_eq!(a, b);
     }
 
     #[test]

@@ -154,3 +154,7 @@ harness = false
 [[bench]]
 name = "bitnet_decode"
 harness = false
+
+[[bench]]
+name = "bitnet_prefill"
+harness = false

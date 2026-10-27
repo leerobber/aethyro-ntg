@@ -24,9 +24,14 @@ import argparse
 import ctypes
 import json
 import math
-import pathlib
 import os
+import pathlib
 import time
+
+# Torch's OpenMP threads busy-wait after each op by default, taking CPU from the kernel's own pool
+# while it runs (measured: prefill 4.05 s -> 3.25 s, decode at 4 + 4 threads 192 ms -> 84 ms per
+# token). Must be set before torch loads; set OMP_WAIT_POLICY yourself to override.
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
 
 import numpy as np
 import torch
@@ -49,6 +54,9 @@ def load_lib():
     lib.ntg_ternary_set_threads.restype = ctypes.c_int
     lib.ntg_ternary_set_threads.argtypes = [ctypes.c_size_t]
     lib.ntg_ternary_best_kernel.restype = ctypes.c_int
+    if hasattr(lib, "ntg_ternary_matrix_prepare_prefill"):  # absent in older libraries
+        lib.ntg_ternary_matrix_prepare_prefill.restype = ctypes.c_int
+        lib.ntg_ternary_matrix_prepare_prefill.argtypes = [ctypes.c_void_p]
     if hasattr(lib, "ntg_ternary_hold"):  # absent in libraries built before the hold API
         lib.ntg_ternary_hold.restype = ctypes.c_int
         lib.ntg_ternary_hold.argtypes = [ctypes.c_int]
@@ -143,6 +151,17 @@ def hold_pool_during_forward(model, lib):
     model.register_forward_hook(hold(0))
 
 
+def prepare_prefill(model):
+    """Build the large-batch weight copy in every swapped linear (+0.52 GB; AVX-512 VNNI only)."""
+    n = 0
+    for m in model.modules():
+        if isinstance(m, KernelLinear):
+            assert m.lib.ntg_ternary_matrix_prepare_prefill(m.handle) == 0
+            m.packed_bytes = m.lib.ntg_ternary_matrix_bytes(m.handle)
+            n += 1
+    return n
+
+
 def swap_linears(model, lib):
     swaps = [(n, m) for n, m in model.named_modules() if isinstance(m, AutoBitLinear)]
     f32_bytes = packed = 0
@@ -222,6 +241,8 @@ def main():
                     help="threads for the ternary kernel pool (default: --threads). Torch's own threads and a\n                    spinning kernel pool compete for cores; try --threads 1 --kernel-threads N")
     ap.add_argument("--gen-tokens", type=int, default=48)
     ap.add_argument("--check", action="store_true", help="one short window, no generation")
+    ap.add_argument("--prefill-kernel", action="store_true",
+                    help="build the large-batch weight copy (+0.52 GB) so prompts and scoring windows use the panel kernel")
     ap.add_argument("--hold-pool", action="store_true",
                     help="keep the kernel threads spinning through each forward pass (use when torch threads + kernel threads - 1 <= cores)")
     ap.add_argument("--int8-lm-head", action="store_true",
@@ -301,6 +322,8 @@ def main():
 
     # ---- kernel path
     n_swapped, f32_bytes, packed = swap_linears(model, lib)
+    if args.prefill_kernel:
+        print(f"prefill kernel: panel copy built for {prepare_prefill(model)} linears", flush=True)
     if args.hold_pool:
         hold_pool_during_forward(model, lib)
     results["swapped_linears"] = n_swapped
