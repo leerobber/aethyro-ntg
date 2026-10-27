@@ -44,6 +44,20 @@ pub struct IngestResponse {
     records_ingested: usize,
 }
 
+/// Landing document for `/`, so a browser hitting the bare URL sees what the service is and
+/// which routes it has instead of an empty 404.
+async fn index() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "service": "aethyro-hostframe",
+        "version": env!("CARGO_PKG_VERSION"),
+        "endpoints": {
+            "GET /health": "liveness",
+            "POST /ingest": "telemetry batch ingest ({reports, sent_at_ms})",
+            "GET /metrics": "in-memory ingest counters",
+        },
+    }))
+}
+
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".to_string(),
@@ -101,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
+        .route("/", axum::routing::get(index))
         .route("/health", axum::routing::get(health))
         .route("/ingest", post(ingest_telemetry))
         .route("/metrics", axum::routing::get(metrics))
