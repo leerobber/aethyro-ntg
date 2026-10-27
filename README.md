@@ -12,7 +12,7 @@ graph topology with an audit ledger).
 | Metric | Value | How verified |
 |--------|-------|---------------|
 | Build | Clean, 0 errors; clippy `-D warnings` clean on all targets | `cargo build --release && cargo clippy --all-targets -- -D warnings` |
-| Tests | <!--tests-->678<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
+| Tests | <!--tests-->683<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
 | Lines of Rust (kernel) | 34,965 src + 1,615 tests + 194 benches | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe | 19 `unsafe` blocks + 5 `unsafe fn` in `kernel/src` | `grep -rnE "unsafe\s*\{" kernel/src` (FFI boundary + SIMD intrinsics) |
 | Whole stack | dashboard + kernel_host + keymaster smoke passes | `scripts/smoke-whole.sh`; also the `whole-stack` CI job |
@@ -45,8 +45,8 @@ measured and are reproducible by running the code in this repo — see
   24x faster than the best f32 on one core, at a 2 to 7 point accuracy cost on a
   small trained network. On the real pretrained BitNet b1.58 2B-4T it keeps
   accuracy (perplexity within 0.15%, ARC-Easy unchanged within noise) and runs
-  the decode matmuls 7.7x to 8.5x faster than bf16 on one core; prefill is
-  slower than torch. Against `bitnet.cpp` on the same VM the whole-model decode is 1.3x (one thread) to 3.5x (four) slower here, with kernel-level parity unknown (`docs/results/bitnet_cpp/`). One shared
+  the decode matmuls 7.7x to 8.5x faster than bf16 on one core; prefill was 2.7x to 3.3x slower than torch on an AMX host and, with the new panel kernel, is
+  6x faster than torch bf16 on a non-AMX host (not retested with AMX). Against `bitnet.cpp` on the same VM the whole-model decode is 1.3x (one thread) to 3.5x (four) slower here, with kernel-level parity unknown (`docs/results/bitnet_cpp/`). One shared
   VM, caveats in `docs/EXPERIMENTS.md` (2026-10-26). The earlier "143.6x" was
   against a naive scalar loop.
 - A self-modifying graph topology with 5 safety rails (off by default,
@@ -120,7 +120,7 @@ scripts/smoke-whole.sh        # start dashboard + kernel_host + keymaster, hit t
 ```bash
 cd kernel
 cargo build --release
-cargo test --release                    # <!--tests-->678<!--/tests--> tests
+cargo test --release                    # <!--tests-->683<!--/tests--> tests
 cargo clippy --all-targets -- -D warnings
 ```
 

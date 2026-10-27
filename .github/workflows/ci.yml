@@ -65,6 +65,10 @@ jobs:
         working-directory: kernel
         run: cargo bench --bench bitnet_decode -- --check
 
+      - name: BitNet prefill benchmark (exact-equality check only, no timings)
+        working-directory: kernel
+        run: cargo bench --bench bitnet_prefill -- --check
+
   keymaster-backend:
     name: Keymaster backend (Rust)
     runs-on: ubuntu-latest

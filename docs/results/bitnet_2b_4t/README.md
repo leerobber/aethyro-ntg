@@ -25,3 +25,7 @@ The bf16 output projection can be quantised to int8 per row (`--int8-lm-head`): 
 
 The gap between the matmul-only benchmark and the same matmuls through the C ABI is closed to 2-5 ms per token (from 22-29 ms at four threads): time-based worker spin, early wake-up, a faster activation quantiser, and an optional `--hold-pool`. See `docs/EXPERIMENTS.md` (2026-10-27, later). Measured on a different host (no AMX) than the results above.
 
+## Update: prefill kernel
+
+The 512-token prefill went from 121 to 163 tokens/s with the panel kernel (torch bf16 on the same non-AMX host: 26), and torch's busy-waiting OpenMP threads turned out to be costing the kernel a quarter of its time (now off by default in the harness). Raw output: `prefill_bench_run1.md`. See `docs/EXPERIMENTS.md` (2026-10-27, last entry). The AMX host was not retested.
+

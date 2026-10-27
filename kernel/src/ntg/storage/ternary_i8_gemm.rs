@@ -40,7 +40,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Elements per packed group (64 bytes x 4 codes per byte).
 pub const GROUP: usize = 256;
-const GROUP_BYTES: usize = GROUP / 4;
+pub(super) const GROUP_BYTES: usize = GROUP / 4;
 
 /// Which implementation computes the product.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,6 +224,42 @@ impl Int8Activations {
         Ok(Self { batch, cols, k_padded, data, sums, scales })
     }
 
+    /// [`Self::quantize_f32_bitnet`] with the batch rows split across `pool`. Bit-identical result.
+    pub fn quantize_f32_bitnet_pool(x: &[f32], batch: usize, cols: usize, pool: &SpinPool) -> Result<Self, NtgError> {
+        if x.len() != batch * cols {
+            return Err(NtgError::ShapeMismatch { expected: batch * cols, got: x.len() });
+        }
+        if pool.threads() <= 1 || batch < 2 * pool.threads() {
+            return Self::quantize_f32_bitnet(x, batch, cols);
+        }
+        let k_padded = padded(cols);
+        let mut data = vec![0i8; batch * k_padded];
+        let mut sums = vec![0i32; batch];
+        let mut scales = vec![1.0f32; batch];
+        let (dp, sp, cp) = (SharedPtr(data.as_mut_ptr()), SharedPtr(sums.as_mut_ptr()), SharedPtr(scales.as_mut_ptr()));
+        let chunk = batch.div_ceil(pool.threads() * 4).max(1);
+        let chunks = batch.div_ceil(chunk);
+        let next = AtomicUsize::new(0);
+        pool.run(|_| loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= chunks {
+                break;
+            }
+            for b in i * chunk..((i + 1) * chunk).min(batch) {
+                let row = &x[b * cols..(b + 1) * cols];
+                // SAFETY: each batch row is claimed once; rows of `data` (and entries of `sums` and
+                // `scales`) are disjoint, and all three outlive `pool.run`.
+                unsafe {
+                    let dst = std::slice::from_raw_parts_mut(dp.get().add(b * k_padded), cols);
+                    let (scale, sum) = bitnet_quantize_row(row, dst);
+                    *cp.get().add(b) = scale;
+                    *sp.get().add(b) = sum;
+                }
+            }
+        });
+        Ok(Self { batch, cols, k_padded, data, sums, scales })
+    }
+
     pub fn batch(&self) -> usize {
         self.batch
     }
@@ -251,12 +287,24 @@ impl Int8Activations {
 /// A ternary weight matrix (`rows x cols`) packed 2 bits per weight.
 #[derive(Clone, Debug)]
 pub struct PackedTernaryMatrix {
-    rows: usize,
-    cols: usize,
-    k_padded: usize,
-    bytes_per_row: usize,
-    data: Vec<u8>,
+    pub(super) rows: usize,
+    pub(super) cols: usize,
+    pub(super) k_padded: usize,
+    pub(super) bytes_per_row: usize,
+    pub(super) data: Vec<u8>,
     scale: f32,
+    /// Panel copy for the large-batch path; see `ternary_i8_prefill`.
+    pub(super) panels: Option<Vec<u8>>,
+}
+
+/// Raw pointer shared by pool threads that write disjoint elements.
+struct SharedPtr<T>(*mut T);
+// SAFETY: users write disjoint elements only; see each use.
+unsafe impl<T> Sync for SharedPtr<T> {}
+impl<T> SharedPtr<T> {
+    fn get(&self) -> *mut T {
+        self.0
+    }
 }
 
 /// Raw output pointer shared by pool threads that write disjoint ranges.
@@ -294,7 +342,7 @@ impl PackedTernaryMatrix {
                 out[byte] = (out[byte] & !(0b11 << shift)) | (code << shift);
             }
         }
-        Ok(Self { rows, cols, k_padded, bytes_per_row, data, scale: 1.0 })
+        Ok(Self { rows, cols, k_padded, bytes_per_row, data, scale: 1.0, panels: None })
     }
 
     /// Attach the weight dequantisation scale (for example BitNet's mean |w|).
@@ -351,6 +399,10 @@ impl PackedTernaryMatrix {
         kernel: TernaryI8Kernel,
     ) -> Result<(), NtgError> {
         self.validate(x, out.len(), kernel)?;
+        if self.prefill_applies(x.batch, kernel) {
+            self.gemm_prefill(x, out, None);
+            return Ok(());
+        }
         self.gemm_rows(x, out, kernel, 0, self.rows);
         Ok(())
     }
@@ -418,6 +470,10 @@ impl PackedTernaryMatrix {
         pool: &SpinPool,
     ) -> Result<(), NtgError> {
         self.validate(x, out.len(), kernel)?;
+        if self.prefill_applies(x.batch, kernel) {
+            self.gemm_prefill(x, out, Some(pool));
+            return Ok(());
+        }
         let threads = pool.threads();
         if threads <= 1 || self.rows < threads * 16 {
             self.gemm_rows(x, out, kernel, 0, self.rows);
@@ -859,6 +915,22 @@ mod tests {
             let mut base = vec![0i8; row.len()];
             let (scale_b, sum_b) = bitnet_quantize_row_impl(&row, &mut base);
             assert_eq!((base.as_slice(), scale_b.to_bits(), sum_b), (want.0.as_slice(), want.1.to_bits(), want.2), "baseline row {row:?}");
+        }
+    }
+
+    #[test]
+    fn pooled_quantiser_is_bit_identical_to_the_serial_one() {
+        let mut rng = Rng(0xABCD);
+        for threads in [2, 4] {
+            let pool = SpinPool::new(threads).unwrap();
+            for &(batch, cols) in &[(1usize, 33usize), (7, 300), (64, 2560), (130, 513)] {
+                let x: Vec<f32> = (0..batch * cols).map(|_| (rng.i8_any() as f32 / 13.0) * 1.7).collect();
+                let a = Int8Activations::quantize_f32_bitnet(&x, batch, cols).unwrap();
+                let b = Int8Activations::quantize_f32_bitnet_pool(&x, batch, cols, &pool).unwrap();
+                assert_eq!(a.padded(), b.padded(), "data {batch}x{cols} threads {threads}");
+                assert_eq!(a.row_sums(), b.row_sums());
+                assert_eq!(a.scales().iter().map(|s| s.to_bits()).collect::<Vec<_>>(), b.scales().iter().map(|s| s.to_bits()).collect::<Vec<_>>());
+            }
         }
     }
 

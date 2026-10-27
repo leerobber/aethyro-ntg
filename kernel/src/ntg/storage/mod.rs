@@ -23,6 +23,7 @@ pub mod packed_ternary;
 pub mod sparse_bit_sliced_ternary;
 pub mod spin_pool;
 pub mod ternary_i8_gemm;
+pub mod ternary_i8_prefill;
 pub mod tobl_kernel;
 
 pub use bit_sliced_ternary::BitSlicedTernary;

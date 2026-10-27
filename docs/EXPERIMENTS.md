@@ -1044,3 +1044,63 @@ cores busy while torch runs its own ops, so it is opt-in. The `bitnet.cpp` compa
 repeated on this host. Quantisation, dequantisation and allocation still run on one thread per call
 (a few ms per token).
 
+## 2026-10-27 (last): the prefill kernel
+
+**Problem.** For a batch of more than a few tokens the decode kernel unpacks each weight row again for
+every group of four batch rows and reduces horizontally per output; the whole-model prefill
+(512-token window) was 2.7-3.3x slower than torch bf16 on the AMX host. Measured on this host (Xeon
+@ 2.80 GHz, no AMX, 4 vCPU) the decode kernel reached only 33% of a core's VNNI ceiling at batch 32-512.
+
+**Change (`ntg::storage::ternary_i8_prefill`).** An opt-in second copy of the weights in 16-row
+*panels* (`prepare_prefill`, +0.52 GB for BitNet 2B, AVX-512 VNNI only) and a register-tiled
+micro-kernel: one accumulator vector per batch row (up to 24), `vpdpbusd` against a broadcast of
+the batch row's four activations, no horizontal reduction, the unpack shared by the whole tile. Used
+automatically for batches of 4 or more once the panels exist; results are exact `i32`, identical to
+the row-layout kernels (tests over awkward shapes, thread counts, the most negative activation, and
+identical model output). The C ABI also quantises and dequantises large batches on the pool, and
+dequantises inside the kernel (no `i32` buffer).
+
+**Matmul-only** (`cargo bench --bench bitnet_prefill`; one layer's seven products; one run; ceiling
+242 GMAC/s per core, measured with a register-only VNNI loop):
+
+| batch | row layout 1 thread | panel 1 thread | row layout 4 threads | panel 4 threads |
+|--:|--:|--:|--:|--:|
+| 8 | 83 GMAC/s (34%) | 137 (57%) | 292 (30%) | 483 (50%) |
+| 32 | 82 (34%) | 164 (68%) | 312 (32%) | 585 (60%) |
+| 128 | 78 (32%) | 164 (68%) | 258 (27%) | 591 (61%) |
+| 512 | 80 (33%) | 156 (64%) | 311 (32%) | 539 (56%) |
+
+About 2x at one thread and 1.7-2.3x at four. The dense int8 control with the same four-row blocking
+reached 12-21% of the ceiling, so the gain is the layout and tiling, not int8 alone.
+
+**Whole model** (Hugging Face loop, one 512-token window, last-position logits only, 4 torch + 4
+kernel threads, median of three):
+
+| | tokens/s |
+|---|--:|
+| official torch bf16 | 26.3 |
+| kernel, row layout | 121.4 |
+| kernel, panel layout | 163.4 |
+
+Logits are identical between the two kernel layouts (max difference 0.0).
+
+**A side finding that mattered more than expected.** Torch's OpenMP threads busy-wait after each op
+and take CPU from the kernel's own pool. With `OMP_WAIT_POLICY=PASSIVE` the C ABI part of the same
+prefill drops from 3.04 s to 2.19 s (wall 4.05 s to 3.25 s), the 4 + 4 decode token drops from 192 ms
+to 84 ms, and with `--hold-pool` to 74 ms (it was 240 ms with hold before, so hold is no longer
+harmful at 4 + 4 once torch waits passively). The official path is not slowed (26.9 against 26.3
+tokens/s). The harness now sets `OMP_WAIT_POLICY=PASSIVE` by default. At 2 + 2 passive waiting is
+slightly worse for decode (106-111 ms against 101-103), within noise of a single run.
+
+**What did not go well / open.**
+* 56-68% of the ceiling, not 90%: the micro-kernel is not tuned beyond the first design (no
+  prefetching, one tile shape). The ceiling loop itself may not be reachable with memory operands.
+* Whole-model prefill gains less than the matmuls (+35% for 2x): the rest is quantisation,
+  re-layout of the activations, attention and Python (about 1 s of 3.1 s here).
+* The panel copy costs another 0.52 GB, only on AVX-512 VNNI hosts; AVX2 hosts keep the row layout.
+  Decode could run on the panel layout and drop the old copy; not attempted.
+* Measured on a host without AMX, where torch bf16 is slow; the earlier 3x deficit was on an AMX
+  host and has not been retested there. The `bitnet.cpp` comparison needs a rebuild on this host.
+* Single runs for the kernel table; the output matrix for scoring windows (all positions) still
+  uses the older int8 kernel.
+
