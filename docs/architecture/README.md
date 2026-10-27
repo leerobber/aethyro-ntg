@@ -16,6 +16,7 @@ it in [STATUS.md](../STATUS.md).
 | [0008](0008-phase-f-vision-and-cross-phase-recommendations.md) | Phase F direction: cross-phase recommendations, real-time self-awareness instrumentation, self-healing, synthetic-biology/robotics vision | **Proposed** (ideas only, except the Phase E recombination/haplotype-block work it documents, which is implemented — see `PHASE_E_EXTENDED_VALIDATION_COMPLETE.md`) |
 | [0009](0009-sovereign-brain-and-multi-axis-fitness.md) | SovereignBrain multi-organ stack + multi-axis fitness (task/structure/biology/safety) | **Accepted + implemented** (harden pass: organ trait, shared loop, durable snapshot, JSONL) |
 | [0010](0010-vitascale-hostframe.md) | **VITASCALE Hostframe**: Neurocytes, Pulsewire, Sensefield, Oculus, Phageguard, Chassis (iron life-support) | **Draft (approved for PR-1)** — biology-shaped host on silicon chassis |
+| [0014](0014-maintenance-agent-pilot.md) | Maintenance-agent pilot: design, spend caps, kill criteria | **Proposed** (nothing built; thresholds are proposed defaults) |
 
 ## How to add a new ADR
 
