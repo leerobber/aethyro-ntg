@@ -1,6 +1,8 @@
 //! NanoKeymaster Cloud Run backend — sovereign routing arbiter.
 //!
-//! Accepts POST /route from kernel_host (ureq) and returns a routing decision.
+//! Accepts POST /route with a RouteRequest and returns a routing decision. Standalone policy
+//! service: kernel_host does NOT call it (kernel_host POSTs {"intent","payload"} to
+//! KEYMASTER_BACKEND_URL, a different contract; see docs/architecture/0012-keymaster-contract.md).
 //! Stateless: routing policy is embedded in the request context; decisions are
 //! logged server-side for audit but no persistent state is held.
 //!

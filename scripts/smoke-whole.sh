@@ -41,7 +41,9 @@ fi
 
 # The kernel is a workspace member, so its binary lands in the repo-root target/.
 export KERNEL_HOST_BIN="${KERNEL_HOST_BIN:-$ROOT/target/release/kernel_host}"
-export KEYMASTER_BACKEND_URL="${KEYMASTER_BACKEND_URL:-http://127.0.0.1:$KM_PORT}"
+# KEYMASTER_BACKEND_URL is deliberately NOT pointed at keymaster-backend: that service speaks a
+# different protocol (docs/architecture/0012-keymaster-contract.md). The dashboard-spawned
+# kernel_host runs local-only; the external-backend contract is checked below with a mock.
 
 PORT="$KM_PORT" "$ROOT/backend/keymaster/target/release/keymaster-backend" >"$LOGDIR/keymaster.log" 2>&1 &
 PIDS+=($!)
@@ -98,6 +100,39 @@ fi
 out="$(post /api/hierarchy '{"nano":10000}')" \
   && echo "$out" | grep -q '"total_agents":10111' && echo "$out" | grep -q '"nano":10000' \
   && pass "/api/hierarchy 10000 nano -> $(echo "$out" | head -c 90)" || fail "/api/hierarchy ($out)"
+
+# ---- external-backend contract (ADR 0012): kernel_host <-> any {intent,payload} backend
+cat >"$LOGDIR/mock_backend.py" <<'PY'
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
+        out = json.dumps({"mock": True, "echo": body}).encode()
+        self.send_response(200); self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(out))); self.end_headers(); self.wfile.write(out)
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(srv.server_address[1]))
+srv.serve_forever()
+PY
+python3 "$LOGDIR/mock_backend.py" "$LOGDIR/mock.port" &
+PIDS+=($!)
+for _ in $(seq 1 20); do [ -s "$LOGDIR/mock.port" ] && break; sleep 0.25; done
+MOCK_PORT="$(cat "$LOGDIR/mock.port" 2>/dev/null)"
+REQS='{"intent":"summarize","payload":{"text":"hi"}}
+{"intent":"_status"}
+{"intent":"_quit"}'
+check_json() { python3 -c "import json,sys; d=[json.loads(l) for l in sys.stdin.read().splitlines() if l.strip()]; $1" 2>/dev/null; }
+if [ -n "$MOCK_PORT" ]; then
+  out="$(printf '%s\n' "$REQS" | KEYMASTER_BACKEND_URL="http://127.0.0.1:$MOCK_PORT" timeout 60 "$KERNEL_HOST_BIN" 2>/dev/null)"
+  echo "$out" | check_json 'r=d[0]; assert r["backend"]=="external" and r["result"]["mock"] is True and r["result"]["echo"]=={"intent":"summarize","payload":{"text":"hi"}}' \
+    && pass "kernel_host external contract: {intent,payload} out, JSON back as result" || fail "kernel_host external contract ($out)"
+else
+  fail "kernel_host external contract (mock backend did not start)"
+fi
+out="$(printf '%s\n' "$REQS" | KEYMASTER_BACKEND_URL="http://127.0.0.1:1" timeout 60 "$KERNEL_HOST_BIN" 2>/dev/null)"
+echo "$out" | check_json 'r=d[0]; assert r["backend"]=="external" and r["result"]["external"] is True and "error" in r["result"]; assert len(d)==3 and d[2]["status"]=="goodbye"' \
+  && pass "kernel_host external failure: error payload, process keeps serving" || fail "kernel_host external failure ($out)"
 
 if curl -fsS -o /dev/null --max-time 2 "${OLLAMA_URL:-http://127.0.0.1:11434}/api/tags" 2>/dev/null; then
   post /api/chat '{"message":"What is NTG?"}' >/dev/null && pass "/api/chat" || fail "/api/chat"

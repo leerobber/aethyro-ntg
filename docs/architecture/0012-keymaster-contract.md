@@ -1,6 +1,6 @@
 # 0012: Keymaster contract (`KEYMASTER_BACKEND_URL`)
 
-**Status:** Proposed (2026-10-27). Needs an owner decision; see "Decision needed".
+**Status:** Accepted, option A (2026-10-27). See "Decision".
 **Phase:** Foundation Lock A5.1 ([plan](../FOUNDATION_LOCK_PLAN.md)).
 
 ## Context
@@ -43,24 +43,44 @@ routing decision, not an answer. The comment in `backend/keymaster/src/types.rs`
 "must stay wire-compatible with the ureq POST in kernel_host" was false; this change corrects it.
 
 Two related facts:
-* `scripts/smoke-whole.sh` sets `KEYMASTER_BACKEND_URL` to the keymaster service but only sends
-  intents answered locally, so the smoke never exercises (or detects) the broken path.
+* Before this decision, `scripts/smoke-whole.sh` set `KEYMASTER_BACKEND_URL` to the keymaster service
+  but only sent intents answered locally, so the smoke never exercised (or detected) the broken path.
 * The dashboard's keymaster health dot probes a hard-coded `127.0.0.1:8080/health`, not
   `KEYMASTER_BACKEND_URL`. It can show "up" while every external call fails.
 
-## Decision needed
+## Decision (2026-10-27): option A
 
-**A. (Recommended for now; no code.)** `KEYMASTER_BACKEND_URL` means "any HTTP backend that
-accepts `{intent, payload}` and returns JSON", for example an LLM gateway. `keymaster-backend`
-is a separate policy service that `kernel_host` does not call. Fix the docs and the smoke
-script's misleading variable, and keep the current fail-closed behaviour for unknown intents.
+The owner chose option A. `KEYMASTER_BACKEND_URL` is the URL of **any HTTP service that accepts
+`POST {"intent": ..., "payload": ...}` and returns JSON**, for example an LLM gateway.
+`backend/keymaster` is a **separate policy service that `kernel_host` does not call**; it stays in
+the repo, built and tested, but nothing routes through it today. Making `kernel_host` call
+`POST /route` (former option B) is capability work, not scheduled.
 
-**B. (Capability work, after the Lock.)** Make `kernel_host` call `POST /route` with a
-`RouteRequest` built from its own score and timing, and act on the returned target. This makes
-the sovereign-routing story real, but it is new behaviour and needs tests and a decision on what
-happens when the policy service is down.
+### Contract
 
-Either way, one smaller decision belongs to the owner: should a `classify`/`score` request that
-falls below the confidence threshold and fails externally return the error payload (today) or fall
-back to the local low-confidence answer? The recommendation is to fall back to local for those
-three intents and keep the error for unknown intents.
+| | |
+|---|---|
+| Request | `POST <KEYMASTER_BACKEND_URL>` (the URL is used as given, no path added), `Content-Type: application/json`, body `{"intent": <string>, "payload": <json>}` |
+| Sent when | `classify`/`score`/`predict` below the confidence threshold, or any other intent, and a URL is set |
+| Timeout | 10 seconds |
+| Response | any JSON; returned to the caller as `result`, with `"backend": "external"` |
+| Failure (refused, timeout, non-2xx, non-JSON) | `result` is `{"error": "external backend error: ...", "external": true}`, `confidence` 0.0; **no retry, no local answer**; the process keeps serving |
+| Unset | no external calls; those requests are answered by `local_fallback` |
+
+The failure behaviour is **fail-closed for the request and left as it was**: a request the local
+brain cannot answer confidently returns an error payload when the backend is unreachable, for
+every intent including `classify`/`score`/`predict`. The earlier suggestion to fall back to the
+local answer for those three intents is a behaviour change and was not part of this decision; it
+remains open.
+
+### What changed with this decision
+
+* `scripts/smoke-whole.sh` no longer points `KEYMASTER_BACKEND_URL` at the keymaster service. It now
+  starts a small mock backend and checks the contract end to end: the request body arrives as
+  `{intent, payload}`, the response comes back as `result` with `backend: "external"`, and an
+  unreachable backend yields the error payload while `kernel_host` keeps answering.
+* Comments in `kernel/src/main.rs`, `backend/keymaster/src/main.rs` and `types.rs`, and the
+  NanoKeymaster section of `CLAUDE.md`, say the above.
+* The dashboard's keymaster health dot is unchanged and still probes `127.0.0.1:8080/health`, which
+  is the policy service, not the external backend. A "down" dot therefore says nothing about
+  `KEYMASTER_BACKEND_URL`.
