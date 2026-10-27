@@ -16,7 +16,7 @@ graph topology with an audit ledger).
 | Lines of Rust (kernel) | 34,965 src + 1,615 tests + 194 benches | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe | 19 `unsafe` blocks + 5 `unsafe fn` in `kernel/src` | `grep -rnE "unsafe\s*\{" kernel/src` (FFI boundary + SIMD intrinsics) |
 | Whole stack | dashboard + kernel_host + keymaster smoke passes | `scripts/smoke-whole.sh`; also the `whole-stack` CI job |
-| Phase Status | Phase F (L0) IN PROGRESS: scaffold complete, no verified live deployment | Phase vocabulary is defined in [CLAUDE.md](CLAUDE.md); full measurements in [docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md) |
+| Phase Status | Phase F (L0) IN PROGRESS: scaffold complete; hostframe-backend verified live on Render 2026-10-27 ([docs/DEPLOY.md](docs/DEPLOY.md)) | Phase vocabulary is defined in [CLAUDE.md](CLAUDE.md); full measurements in [docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md) |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -124,7 +124,7 @@ cargo test --release                    # <!--tests-->674<!--/tests--> tests
 cargo clippy --all-targets -- -D warnings
 ```
 
-### Deploy Hostframe backend (optional; no verified live deployment yet)
+### Deploy Hostframe backend (optional; one verified live deployment, see docs/DEPLOY.md)
 
 Shortest path to a verified deployment: [docs/DEPLOY.md](docs/DEPLOY.md) (`scripts/verify-deploy.sh <url>` checks it from outside). Heavier GCP route below.
 
