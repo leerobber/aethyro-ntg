@@ -6,9 +6,11 @@
 //! the product itself. This pool keeps its workers spinning between jobs, lets the calling
 //! thread run a share of the work, and has the caller spin (not block) on completion.
 //!
-//! Workers spin for a short budget, then yield, then sleep on a condition variable, so an
-//! idle pool does not burn a core indefinitely. The first job after a long gap pays a normal
-//! wake-up.
+//! Workers spin for a time budget (default 200 microseconds), then sleep on a condition
+//! variable, so an idle pool does not burn a core indefinitely. The first job after a longer gap
+//! pays a normal wake-up; [`SpinPool::prewake`] lets the caller overlap that with its own
+//! preparation, and [`SpinPool::set_hold`] keeps the workers awake across a whole stretch of
+//! back-to-back jobs (for example one model forward pass) whatever the gaps between them.
 //!
 //! [`SpinPool::run`] is blocking and serialised: concurrent callers take turns, and calling
 //! `run` from inside a job on the same pool deadlocks.
@@ -17,11 +19,11 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
-/// Busy-wait iterations (`spin_loop` hints) before a worker starts yielding.
-pub const DEFAULT_SPIN_ITERS: u32 = 1_024;
-/// `yield_now` calls before a worker sleeps on the condition variable.
-pub const DEFAULT_YIELD_ITERS: u32 = 0;
+/// How long an idle worker spins before it sleeps, in microseconds. A count of `spin_loop`
+/// hints was tried first and was far too short on a VM (1,024 hints is a few microseconds).
+pub const DEFAULT_SPIN_MICROS: u64 = 200;
 
 /// Type-erased pointer to the job closure on the caller's stack.
 #[derive(Clone, Copy)]
@@ -39,8 +41,9 @@ struct Shared {
     job: AtomicPtr<Job>,
     shutdown: AtomicBool,
     panicked: AtomicBool,
-    spin_iters: u32,
-    yield_iters: u32,
+    spin: Duration,
+    /// While set, workers never sleep (see [`SpinPool::set_hold`]).
+    hold: AtomicBool,
     sleepers: AtomicUsize,
     sleep_lock: Mutex<()>,
     wake: Condvar,
@@ -66,14 +69,13 @@ impl SpinPool {
     /// A pool that runs jobs on `threads` threads in total: the caller plus `threads - 1`
     /// workers. `threads == 0` is treated as 1.
     pub fn new(threads: usize) -> std::io::Result<Self> {
-        Self::with_budget(threads, DEFAULT_SPIN_ITERS, DEFAULT_YIELD_ITERS)
+        Self::with_spin(threads, DEFAULT_SPIN_MICROS)
     }
 
-    /// Like [`Self::new`], with explicit idle budgets: how many busy-wait iterations and then
-    /// `yield_now` calls a worker makes before it sleeps. `(0, 0)` sleeps immediately (each
-    /// job then pays a wake-up); larger budgets keep workers hot but take CPU from other
-    /// threads in the process while they wait.
-    pub fn with_budget(threads: usize, spin_iters: u32, yield_iters: u32) -> std::io::Result<Self> {
+    /// Like [`Self::new`], with an explicit idle-spin budget in microseconds. `0` sleeps
+    /// immediately (each job then pays a wake-up); larger budgets keep workers hot but take
+    /// CPU from other threads in the process while they wait.
+    pub fn with_spin(threads: usize, spin_micros: u64) -> std::io::Result<Self> {
         let threads = threads.max(1);
         let shared = Arc::new(Shared {
             generation: AtomicUsize::new(0),
@@ -81,8 +83,8 @@ impl SpinPool {
             job: AtomicPtr::new(std::ptr::null_mut()),
             shutdown: AtomicBool::new(false),
             panicked: AtomicBool::new(false),
-            spin_iters,
-            yield_iters,
+            spin: Duration::from_micros(spin_micros),
+            hold: AtomicBool::new(false),
             sleepers: AtomicUsize::new(0),
             sleep_lock: Mutex::new(()),
             wake: Condvar::new(),
@@ -107,6 +109,29 @@ impl SpinPool {
     /// Total threads that take part in a job (workers plus the caller).
     pub fn threads(&self) -> usize {
         self.threads
+    }
+
+    /// Wake any sleeping workers now, ahead of a job that is a little way off, so their wake-up
+    /// overlaps the caller's own preparation (for example quantising the activations) instead of
+    /// adding to the dispatch. Workers that are already awake are untouched. A spurious call costs
+    /// at most one idle-spin budget of CPU on each worker.
+    pub fn prewake(&self) {
+        let sh = &*self.shared;
+        if sh.sleepers.load(Ordering::SeqCst) > 0 {
+            let _g = sh.sleep_lock.lock().unwrap_or_else(|e| e.into_inner());
+            sh.wake.notify_all();
+        }
+    }
+
+    /// While `on`, workers never go to sleep: they keep spinning (yielding the CPU now and then)
+    /// until the hold is released, then fall back to the time budget. Use it around a stretch of
+    /// back-to-back jobs whose gaps are longer than the spin budget, such as one model forward
+    /// pass. It costs a core per worker for as long as it is held, so release it afterwards.
+    pub fn set_hold(&self, on: bool) {
+        self.shared.hold.store(on, Ordering::SeqCst);
+        if on {
+            self.prewake();
+        }
     }
 
     /// Run `f(t)` once for every `t` in `0..self.threads()`, concurrently, and return when
@@ -136,7 +161,7 @@ impl SpinPool {
         // Wait for the workers before `job` and `f` go out of scope.
         let mut spins = 0u32;
         while sh.pending.load(Ordering::Acquire) != 0 {
-            if spins < DEFAULT_SPIN_ITERS * 64 {
+            if spins < 65_536 {
                 std::hint::spin_loop();
                 spins += 1;
             } else {
@@ -155,30 +180,36 @@ impl SpinPool {
 fn worker_loop(sh: &Shared, t: usize) {
     let mut seen = 0usize;
     loop {
-        // Wait for a new generation: spin, then yield, then sleep.
-        let mut spins = 0u32;
-        let mut yields = 0u32;
+        // Wait for a new generation: spin for the time budget (indefinitely while held), then sleep.
+        let mut deadline = Instant::now() + sh.spin;
+        let mut polls = 0u32;
         loop {
             if sh.generation.load(Ordering::Acquire) != seen {
                 break;
             }
-            if spins < sh.spin_iters {
-                std::hint::spin_loop();
-                spins += 1;
-            } else if yields < sh.yield_iters {
-                std::thread::yield_now();
-                yields += 1;
-            } else {
+            std::hint::spin_loop();
+            polls = polls.wrapping_add(1);
+            if !polls.is_multiple_of(64) {
+                continue;
+            }
+            if sh.hold.load(Ordering::Relaxed) {
+                // Held awake: be polite to other threads on this CPU, never sleep.
+                if polls.is_multiple_of(4096) {
+                    std::thread::yield_now();
+                }
+                deadline = Instant::now() + sh.spin;
+                continue;
+            }
+            if Instant::now() >= deadline {
                 let g = sh.sleep_lock.lock().unwrap_or_else(|e| e.into_inner());
                 sh.sleepers.fetch_add(1, Ordering::SeqCst);
-                if sh.generation.load(Ordering::SeqCst) == seen {
+                if sh.generation.load(Ordering::SeqCst) == seen && !sh.hold.load(Ordering::SeqCst) {
                     drop(sh.wake.wait(g).unwrap_or_else(|e| e.into_inner()));
                 } else {
                     drop(g);
                 }
                 sh.sleepers.fetch_sub(1, Ordering::SeqCst);
-                spins = 0;
-                yields = 0;
+                deadline = Instant::now() + sh.spin;
             }
         }
         seen = sh.generation.load(Ordering::Acquire);
@@ -257,6 +288,51 @@ mod tests {
             n.fetch_add(1, Ordering::Relaxed);
         });
         assert_eq!(n.load(Ordering::Relaxed), 6);
+    }
+
+    #[test]
+    fn prewake_wakes_sleepers_and_jobs_still_run() {
+        let pool = SpinPool::new(3).unwrap();
+        pool.run(|_| {});
+        std::thread::sleep(std::time::Duration::from_millis(300)); // let the workers sleep
+        pool.prewake();
+        pool.prewake(); // harmless when repeated or when nothing sleeps
+        let n = AtomicUsize::new(0);
+        pool.run(|_| {
+            n.fetch_add(1, Ordering::Relaxed);
+        });
+        assert_eq!(n.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn hold_keeps_jobs_running_and_release_lets_workers_sleep_again() {
+        let pool = SpinPool::new(3).unwrap();
+        pool.set_hold(true);
+        let n = AtomicUsize::new(0);
+        for _ in 0..50 {
+            pool.run(|_| {
+                n.fetch_add(1, Ordering::Relaxed);
+            });
+            std::thread::sleep(std::time::Duration::from_micros(500)); // longer than the spin budget
+        }
+        pool.set_hold(false);
+        std::thread::sleep(std::time::Duration::from_millis(300)); // now they may sleep
+        pool.run(|_| {
+            n.fetch_add(1, Ordering::Relaxed);
+        });
+        assert_eq!(n.load(Ordering::Relaxed), 51 * 3);
+    }
+
+    #[test]
+    fn zero_spin_budget_still_runs_jobs() {
+        let pool = SpinPool::with_spin(4, 0).unwrap();
+        let n = AtomicUsize::new(0);
+        for _ in 0..100 {
+            pool.run(|_| {
+                n.fetch_add(1, Ordering::Relaxed);
+            });
+        }
+        assert_eq!(n.load(Ordering::Relaxed), 400);
     }
 
     #[test]

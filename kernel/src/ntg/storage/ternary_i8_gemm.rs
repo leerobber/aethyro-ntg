@@ -99,6 +99,50 @@ impl TernaryI8Kernel {
     }
 }
 
+/// `1.5 * 2^23`: adding then subtracting it rounds an `f32` with `|y| < 2^22` to the nearest
+/// integer, ties to even, in the default rounding mode, without a libm call (`round_ties_even`
+/// is one on baseline x86-64 and blocks vectorisation).
+const ROUND_MAGIC: f32 = 12_582_912.0;
+
+/// BitNet quantiser for one row. Returns `(1 / s, sum of q)` with `s = 127 / max(max|x|, 1e-5)`
+/// and `q = clamp(round_half_even(x * s), -128, 127)`. NaN inputs are ignored by the max and
+/// quantise to 0; `|x * s| <= 127` (up to rounding) whenever the max is finite, so the
+/// magic-number rounding is exact.
+#[inline(always)]
+fn bitnet_quantize_row_impl(row: &[f32], dst: &mut [i8]) -> (f32, i32) {
+    // Max of |x| as integer bit patterns (monotonic for non-negative floats); NaNs map to 0.
+    let mut max_bits = 0u32;
+    for &v in row {
+        let b = v.to_bits() & 0x7fff_ffff;
+        max_bits = max_bits.max(if b > 0x7f80_0000 { 0 } else { b });
+    }
+    let max = f32::from_bits(max_bits).max(1e-5);
+    let s = 127.0f32 / max;
+    let mut sum = 0i32;
+    for (d, &v) in dst.iter_mut().zip(row) {
+        let r = ((v * s) + ROUND_MAGIC) - ROUND_MAGIC;
+        let q = r.clamp(-128.0, 127.0) as i32;
+        *d = q as i8;
+        sum += q;
+    }
+    (1.0 / s, sum)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn bitnet_quantize_row_avx2(row: &[f32], dst: &mut [i8]) -> (f32, i32) {
+    bitnet_quantize_row_impl(row, dst)
+}
+
+fn bitnet_quantize_row(row: &[f32], dst: &mut [i8]) -> (f32, i32) {
+    #[cfg(target_arch = "x86_64")]
+    if is_x86_feature_detected!("avx2") {
+        // SAFETY: AVX2 support was just checked.
+        return unsafe { bitnet_quantize_row_avx2(row, dst) };
+    }
+    bitnet_quantize_row_impl(row, dst)
+}
+
 fn padded(cols: usize) -> usize {
     cols.div_ceil(GROUP) * GROUP
 }
@@ -172,16 +216,9 @@ impl Int8Activations {
         let mut scales = vec![1.0f32; batch];
         for b in 0..batch {
             let row = &x[b * cols..(b + 1) * cols];
-            let max = row.iter().fold(0.0f32, |m, &v| m.max(v.abs())).max(1e-5);
-            let s = 127.0f32 / max;
-            scales[b] = 1.0 / s;
             let dst = &mut data[b * k_padded..b * k_padded + cols];
-            let mut sum = 0i32;
-            for (d, &v) in dst.iter_mut().zip(row) {
-                let q = (v * s).round_ties_even().clamp(-128.0, 127.0) as i8;
-                *d = q;
-                sum += q as i32;
-            }
+            let (scale, sum) = bitnet_quantize_row(row, dst);
+            scales[b] = scale;
             sums[b] = sum;
         }
         Ok(Self { batch, cols, k_padded, data, sums, scales })
@@ -774,6 +811,55 @@ mod tests {
         let best = TernaryI8Kernel::best_available();
         assert!(best.is_available());
         assert!(TernaryI8Kernel::all_available().contains(&best));
+    }
+
+    /// The quantiser as it was before it was rewritten for speed.
+    fn bitnet_quantize_reference(row: &[f32]) -> (Vec<i8>, f32, i32) {
+        let max = row.iter().fold(0.0f32, |m, &v| m.max(v.abs())).max(1e-5);
+        let s = 127.0f32 / max;
+        let mut sum = 0i32;
+        let q: Vec<i8> = row
+            .iter()
+            .map(|&v| {
+                let q = (v * s).round_ties_even().clamp(-128.0, 127.0) as i8;
+                sum += q as i32;
+                q
+            })
+            .collect();
+        (q, 1.0 / s, sum)
+    }
+
+    #[test]
+    fn fast_bitnet_quantiser_equals_the_reference_on_awkward_inputs() {
+        let mut rng = Rng(0xBEEF);
+        let mut rows: Vec<Vec<f32>> = vec![
+            vec![127.0, 62.5, -62.5, 63.5, 0.5, -0.5, 1.5, -1.5, 2.5],
+            vec![0.0; 17],
+            vec![1e-9, -1e-9, 3e-6, -9e-6],
+            vec![f32::NAN, 1.0, -2.0, f32::NAN],
+            vec![f32::INFINITY, 1.0, -3.0],
+            vec![f32::NEG_INFINITY, 1.0],
+            vec![f32::NAN; 5],
+            vec![3.4e38, -3.4e38, 1.0],
+            vec![0.3; 1],
+        ];
+        for len in [1usize, 7, 8, 63, 64, 255, 256, 257, 2560, 6912] {
+            // Gaussian-ish values, plus values engineered to land on .5 ties after scaling.
+            let r: Vec<f32> = (0..len).map(|_| (rng.i8_any() as f32 / 17.0) * ((rng.i8_any() as f32).abs() + 1.0)).collect();
+            rows.push(r);
+            let m = 40.0f32;
+            let tie: Vec<f32> = (0..len).map(|i| if i == 0 { m } else { ((rng.i8_any() as i32 % 127) as f32 + 0.5) * (m / 127.0) }).collect();
+            rows.push(tie);
+        }
+        for row in rows {
+            let want = bitnet_quantize_reference(&row);
+            let mut got = vec![0i8; row.len()];
+            let (scale, sum) = bitnet_quantize_row(&row, &mut got);
+            assert_eq!((got.as_slice(), scale.to_bits(), sum), (want.0.as_slice(), want.1.to_bits(), want.2), "row {row:?}");
+            let mut base = vec![0i8; row.len()];
+            let (scale_b, sum_b) = bitnet_quantize_row_impl(&row, &mut base);
+            assert_eq!((base.as_slice(), scale_b.to_bits(), sum_b), (want.0.as_slice(), want.1.to_bits(), want.2), "baseline row {row:?}");
+        }
     }
 
     #[test]
