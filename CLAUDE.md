@@ -47,7 +47,7 @@ Self-modification locked until Adulthood + explicit opt-in.
 The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 - Routes via ternary policy brain (local / local-fallback / external)
 - Logs every routing decision to tamper-evident ledger
-- External backend: HTTP POST via ureq (`KEYMASTER_BACKEND_URL` env var)
+- External backend: HTTP POST via ureq (`KEYMASTER_BACKEND_URL` env var) to any service that accepts `{"intent","payload"}` and returns JSON; fail-closed (an error payload, no local fallback). `backend/keymaster` is a separate policy service that `kernel_host` does not call (ADR 0012, decided 2026-10-27)
 
 ### SovereignBrain (ADR 0009)
 1. Working Set (bounded active addresses)
