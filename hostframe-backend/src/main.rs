@@ -45,7 +45,7 @@ pub struct IngestResponse {
 }
 
 /// Landing document for `/`, so a browser hitting the bare URL sees what the service is and
-/// which routes it has instead of an empty 404.
+/// which routes it has instead of an empty 404. Intentionally unauthenticated and free of state.
 async fn index() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "service": "aethyro-hostframe",
