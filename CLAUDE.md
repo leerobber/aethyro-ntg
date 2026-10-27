@@ -47,7 +47,7 @@ Self-modification locked until Adulthood + explicit opt-in.
 The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 - Routes via ternary policy brain (local / local-fallback / external)
 - Logs every routing decision to tamper-evident ledger
-- External backend: HTTP POST via ureq (`KEYMASTER_BACKEND_URL` env var)
+- External backend: HTTP POST via ureq (`KEYMASTER_BACKEND_URL` env var) to any service that accepts `{"intent","payload"}` and returns JSON; fail-closed (an error payload, no local fallback). `backend/keymaster` is a separate policy service that `kernel_host` does not call (ADR 0012, decided 2026-10-27)
 
 ### SovereignBrain (ADR 0009)
 1. Working Set (bounded active addresses)
@@ -98,7 +98,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 3 | COMPLETE | Self-modification safety rails + audit ledger |
 | 4 | COMPLETE | Calibration (phase4_calib binary, model roundtrip) |
 | 5 | COMPLETE | Storage integration |
-| 6.0 | RE-MEASURED 2026-10-26 | Ternary vs f32 head-to-head. The July "143.6×" was against a triple-loop scalar f32 baseline; against SIMD f32 sgemm the kernel is slower (0.15–1.05×), with 16× smaller operands. See `docs/EXPERIMENTS.md` |
+| 6.0 | RE-MEASURED 2026-10-26 | Ternary vs f32 head-to-head. The July "143.6×" was against a triple-loop scalar f32 baseline. Against SIMD f32 the ternary×ternary popcount kernel is slower (0.15–1.05×); the new ternary-weight × int8-activation kernel (`ntg::storage::ternary_i8_gemm`) is 3–24× faster than the best f32 on one core, with a 2–7 point accuracy cost on a small trained model. On the real pretrained BitNet b1.58 2B-4T, accuracy is preserved (perplexity within 0.15%, ARC-Easy unchanged within noise) and the decode matmuls run 7.7–8.5× faster than bf16 on one core; prefill is slower than torch's, and `bitnet.cpp` decodes the whole model 1.3×–3.5× faster than it on the same VM (kernel-level parity unknown, `docs/results/bitnet_cpp/`). Caveats in `docs/EXPERIMENTS.md` |
 | 6.1 | COMPLETE | NanoKeymaster routing agent |
 | 6.2 | COMPLETE | External HTTP backend (ureq POST) |
 | 6.11 | COMPLETE | Ternary Memory Graph / HyperVector (8192-dim HDC) |
@@ -111,7 +111,7 @@ The agent IS the API key. Sovereign routing agent (`kernel_host` binary):
 | 6.18 | COMPLETE | Brain δ — Perception & Forecasting |
 | **F (L0)** | **IN PROGRESS** | Self-awareness instrumentation — VITASCALE L0 scaffold complete |
 
-**Test count:** <!--tests-->649<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
+**Test count:** <!--tests-->674<!--/tests--> tests, all passing, 0 ignored (measured 2026-10-26, see
 `docs/BASELINE_2026-10-26.md`; CI fails if this number drifts).
 
 ---
@@ -125,7 +125,7 @@ scripts/build-all.sh
 # Whole-stack smoke (dashboard + kernel_host + keymaster)
 scripts/smoke-whole.sh
 
-# Full Rust test suite (<!--tests-->649<!--/tests--> tests, ~1-2 min)
+# Full Rust test suite (<!--tests-->674<!--/tests--> tests, ~1-2 min)
 cd kernel && cargo test --release
 
 # Lint (must be clean)

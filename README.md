@@ -12,11 +12,11 @@ graph topology with an audit ledger).
 | Metric | Value | How verified |
 |--------|-------|---------------|
 | Build | Clean, 0 errors; clippy `-D warnings` clean on all targets | `cargo build --release && cargo clippy --all-targets -- -D warnings` |
-| Tests | <!--tests-->649<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
+| Tests | <!--tests-->674<!--/tests--> passing, 0 failing, 0 ignored | `cargo test --release`, summed from the test log; CI fails if this number drifts (`scripts/check-doc-counts.sh`) |
 | Lines of Rust (kernel) | 34,965 src + 1,615 tests + 194 benches | `find kernel/src kernel/tests kernel/benches -name "*.rs" \| xargs wc -l` |
 | Unsafe | 19 `unsafe` blocks + 5 `unsafe fn` in `kernel/src` | `grep -rnE "unsafe\s*\{" kernel/src` (FFI boundary + SIMD intrinsics) |
 | Whole stack | dashboard + kernel_host + keymaster smoke passes | `scripts/smoke-whole.sh`; also the `whole-stack` CI job |
-| Phase Status | Phase F (L0) IN PROGRESS: scaffold complete, no verified live deployment | Phase vocabulary is defined in [CLAUDE.md](CLAUDE.md); full measurements in [docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md) |
+| Phase Status | Phase F (L0) IN PROGRESS: scaffold complete; hostframe-backend verified live on Render 2026-10-27 ([docs/DEPLOY.md](docs/DEPLOY.md)) | Phase vocabulary is defined in [CLAUDE.md](CLAUDE.md); full measurements in [docs/BASELINE_2026-10-26.md](docs/BASELINE_2026-10-26.md) |
 
 No performance benchmark numbers are stated here unless they were actually
 measured and are reproducible by running the code in this repo — see
@@ -39,10 +39,16 @@ measured and are reproducible by running the code in this repo — see
 
 **NTG kernel** (`kernel/src/ntg/`, ~12K lines):
 - Ternary weight representation and scalar/SIMD matmul
-- Measured against a SIMD f32 GEMM on equal (exact ternary) inputs, the
-  kernel is **not faster** in this build (0.15x to 1.05x); the advantages are
-  16x smaller operands and exact integer results. See `docs/EXPERIMENTS.md`
-  (2026-10-26). The earlier "143.6x" was against a naive scalar loop.
+- Ternary x ternary (popcount) is **not faster** than a SIMD f32 GEMM
+  (0.15x to 1.05x). Ternary weights with int8 activations
+  (`ntg::storage::ternary_i8_gemm`, 2-bit packed, AVX-512 VNNI / AVX2) are 3x to
+  24x faster than the best f32 on one core, at a 2 to 7 point accuracy cost on a
+  small trained network. On the real pretrained BitNet b1.58 2B-4T it keeps
+  accuracy (perplexity within 0.15%, ARC-Easy unchanged within noise) and runs
+  the decode matmuls 7.7x to 8.5x faster than bf16 on one core; prefill is
+  slower than torch. Against `bitnet.cpp` on the same VM the whole-model decode is 1.3x (one thread) to 3.5x (four) slower here, with kernel-level parity unknown (`docs/results/bitnet_cpp/`). One shared
+  VM, caveats in `docs/EXPERIMENTS.md` (2026-10-26). The earlier "143.6x" was
+  against a naive scalar loop.
 - A self-modifying graph topology with 5 safety rails (off by default,
   bounded compute budget, automatic rollback, deterministic replay,
   full audit logging) — see `kernel/src/ntg/mutation/` and `kernel/src/ntg/ledger/`
@@ -114,11 +120,11 @@ scripts/smoke-whole.sh        # start dashboard + kernel_host + keymaster, hit t
 ```bash
 cd kernel
 cargo build --release
-cargo test --release                    # <!--tests-->649<!--/tests--> tests
+cargo test --release                    # <!--tests-->674<!--/tests--> tests
 cargo clippy --all-targets -- -D warnings
 ```
 
-### Deploy Hostframe backend (optional; no verified live deployment yet)
+### Deploy Hostframe backend (optional; one verified live deployment, see docs/DEPLOY.md)
 
 Shortest path to a verified deployment: [docs/DEPLOY.md](docs/DEPLOY.md) (`scripts/verify-deploy.sh <url>` checks it from outside). Heavier GCP route below.
 

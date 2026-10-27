@@ -57,6 +57,14 @@ jobs:
         working-directory: kernel
         run: cargo bench --bench ternary_vs_f32 -- --check
 
+      - name: ternary x int8 GEMM benchmark (exact-equality check only, no timings)
+        working-directory: kernel
+        run: cargo bench --bench ternary_i8_vs_f32 -- --check
+
+      - name: BitNet decode-shape benchmark (exact-equality check only, no timings)
+        working-directory: kernel
+        run: cargo bench --bench bitnet_decode -- --check
+
   keymaster-backend:
     name: Keymaster backend (Rust)
     runs-on: ubuntu-latest

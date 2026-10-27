@@ -3,6 +3,7 @@
 //! - [`PackedTernary`] — 2-bit sequential packing (Phase 1.2 / TOBL FFI path)
 //! - [`BitSlicedTernary`] — dual-stream pos/neg for popcount TOBL dots
 //! - [`SparseBitSlicedTernary`] — flat COO sparse blocks + ledgered compact
+//! - [`PackedTernaryMatrix`] — 2-bit weight matrix for the ternary x int8 GEMM
 //!
 //! **Naming note:** there are two types historically called `PackedTernary`:
 //! 1. `crate::ntg::packed::PackedTernary` — early Phase 1.2, 4 values/byte `Vec<u8>`
@@ -17,8 +18,11 @@
 //! for Phase 3+ Reflexive Fitness integration.
 
 pub mod bit_sliced_ternary;
+pub mod int8_gemm;
 pub mod packed_ternary;
 pub mod sparse_bit_sliced_ternary;
+pub mod spin_pool;
+pub mod ternary_i8_gemm;
 pub mod tobl_kernel;
 
 pub use bit_sliced_ternary::BitSlicedTernary;
@@ -26,6 +30,9 @@ pub use packed_ternary::PackedTernary;
 pub use sparse_bit_sliced_ternary::{
     BitSlicedBlock, SparseBitSlicedTernary, COMPACT_THRESHOLD,
 };
+pub use int8_gemm::Int8Matrix;
+pub use spin_pool::SpinPool;
+pub use ternary_i8_gemm::{Int8Activations, PackedTernaryMatrix, TernaryI8Kernel};
 pub use tobl_kernel::{tobl_dot_product, ToblKernelPath};
 
 #[cfg(test)]

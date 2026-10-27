@@ -22,6 +22,8 @@ artifacts/models/*
 
 # Raw/processed genomic datasets (3.8G+) — too large for git, kept local-only
 data/
+# Small committed test fixture (trained ternary MLP; see scripts/train_ternary_digits.py)
+!kernel/tests/data/
 
 # Local cargo build log dumps
 kernel/build.log
@@ -39,3 +41,6 @@ deploy/terraform/.terraform/
 deploy/terraform/.terraform.lock.hcl
 deploy/terraform/*.tfstate
 deploy/terraform/*.tfstate.backup
+
+# Python bytecode
+__pycache__/

@@ -14,7 +14,10 @@
 //!
 //! Environment variables:
 //!   KEYMASTER_MODEL=<path>        load a frozen CalibModel (.calib) instead of training from fixtures
-//!   KEYMASTER_BACKEND_URL=<url>   external fallback backend (POST intent+payload as JSON; 10 s timeout)
+//!   KEYMASTER_BACKEND_URL=<url>   external backend for intents the local brain does not answer: any HTTP
+//!                                 service accepting POST {"intent","payload"} and returning JSON, called at
+//!                                 exactly this URL, 10 s timeout. Errors come back as a result payload, with no
+//!                                 local fallback. NOT backend/keymaster (docs/architecture/0012-keymaster-contract.md)
 //!
 //! Run:
 //!   cargo run --release --bin kernel_host

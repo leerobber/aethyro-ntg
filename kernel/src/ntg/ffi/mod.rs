@@ -10,6 +10,7 @@ pub mod stats;
 pub mod bindings;
 pub mod tobl_ffi;
 pub mod genomic_ffi;
+pub mod ternary_i8_ffi;
 
 pub use stats::OpStats;
 

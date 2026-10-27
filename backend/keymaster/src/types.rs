@@ -1,6 +1,7 @@
 //! Wire types for the NanoKeymaster routing protocol.
 //!
-//! These must stay wire-compatible with the ureq POST in kernel_host.
+//! These are the wire types of this standalone policy service only. kernel_host does not send
+//! them: it POSTs {"intent","payload"} to KEYMASTER_BACKEND_URL (docs/architecture/0012-keymaster-contract.md).
 //! Schema version is carried in every request so the backend can reject
 //! stale clients cleanly.
 

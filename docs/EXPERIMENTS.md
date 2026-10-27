@@ -764,3 +764,198 @@ Speedup columns are f32 time / ternary time (below 1.0x means ternary is slower)
 **Not measured:** multi-threading, GPU, trained-model task accuracy (no such comparison exists in this repo), and the aethyro.com comparison.
 
 **Verdict:** the kernel gate does **not** pass on throughput. Do not quote 143.6x as an NTG speedup. Closing the gap needs a ternary-weight x int8-activation kernel with a real SIMD popcount or lookup path (T-MAC / bitnet.cpp style) and a trained model to measure accuracy on; optimising before that measurement exists is premature.
+
+
+## 2026-10-26 (later): ternary-weight x int8-activation kernel
+
+**Goal:** Act on the previous entry's verdict. The ternary x ternary popcount kernel lost to SIMD f32, so build the kernel that is meant to win (2-bit weights, int8 activations, in-register unpack, VNNI) and measure it the same fair way, plus accuracy on a real trained model.
+
+**Kernel** (`ntg::storage::ternary_i8_gemm`): weights stored 2 bits each as codes `w+1`; a 64-byte load is split with shift/mask into four vectors that line up with four contiguous 64-element int8 loads (no shuffles); `vpdpbusd` (AVX-512 VNNI) or `vpmaddubsw` (AVX2) multiplies code x activation, and `sum_k x_k` (shared by every output row) is subtracted to remove the +1 offset. Results are exact `i32`; scalar, AVX2 and VNNI paths are bit-identical and chosen at run time. Tests cover pack/unpack across shapes, all kernels against naive integer math (including `-128`/`127` extremes that bound the AVX2 `i16` intermediate), and error handling.
+
+**Method** (`kernel/benches/ternary_i8_vs_f32.rs`, `cargo bench --bench ternary_i8_vs_f32`):
+- Equal output: every method is asserted to produce the identical integers before timing (exact in f32 since all partial sums are integers below 2^24).
+- Opponents: `matrixmultiply::sgemm` **and** a direct AVX-512 FMA row-dot kernel; the table uses the better one per cell. The first version used sgemm alone and showed 44-58x at batch 1, which was an artefact: sgemm repacks the whole weight matrix on every call. The row-dot baseline removed that artefact and cut the batch-1 number roughly in half.
+- Control: a dense int8 VNNI kernel (1 byte/weight, same loop, nothing to unpack), to separate "int8 is fast" from "2-bit packing pays".
+- Weights do not fit in cache: each shape cycles through 16 or 64 distinct layers, so a pass streams the whole model as real inference does.
+- Single thread for every method. Shared 4-vCPU Xeon (AVX-512 VNNI), run twice.
+
+**Result, K=N=4096, 16 layers** (weights: f32 1074 MB, int8 268 MB, ternary 67 MB), second run, µs per layer:
+
+| batch | f32 sgemm | f32 row-dot | int8 dense | ternary | ternary + quantise | vs best f32 | vs best f32 (+quantise) | vs int8 dense |
+|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| 1 | 19308 | 6723 | 1537 | 325 | 329 | 20.7x | 20.5x | 4.7x |
+| 4 | 17284 | 9987 | 2528 | 1083 | 1041 | 9.2x | 9.6x | 2.3x |
+| 16 | 15728 | 36052 | 6827 | 3456 | 3452 | 4.6x | 4.6x | 2.0x |
+| 64 | 31389 | 99514 | 16089 | 8802 | 9356 | 3.6x | 3.4x | 1.8x |
+
+K=N=1024, 64 layers (268 MB f32 / 17 MB ternary): 18-25x at batch 1, 14-19x at batch 4, 5.5-5.6x at batch 16, 2.5-3.0x at batch 64.
+
+**Range over the two runs** (vs best f32, K=N=4096): batch 1 20.7-24.0x, batch 4 8.5-9.2x, batch 16 4.6-6.4x, batch 64 3.1-3.6x. Run-to-run spread is roughly +/-20%.
+
+**Accuracy on a trained model** (`scripts/train_ternary_digits.py`, `kernel/tests/ternary_trained_mlp.rs`): scikit-learn digits, MLP 64-128-10, 449 held-out samples, trained three ways:
+
+| model | accuracy |
+|---|--:|
+| f32 | 97.78% |
+| ternary weights + int8 activations, quantisation-aware trained | 95.78% (-2.0 points) |
+| same architecture, f32-trained then ternarised, no retraining | 90.44% (-7.3 points) |
+
+The Rust test runs the QAT model through every available kernel and requires identical predictions on all 449 samples, identical layer-1 `i32` accumulators and logits within 1e-4 of the Python integer pipeline.
+
+**What this shows**
+- With int8 activations and an in-register unpack, the ternary kernel is **3x to 24x faster than the best f32 implementation** on one core, the gap shrinking as batch grows (compute-bound) and largest at batch 1 (memory-bound). It also beats a dense int8 kernel by 1.2-6x, so the 2-bit packing pays for itself rather than costing decode time.
+- Accuracy cost is real and depends on training: about 2 points with QAT on this task, about 7 points without it.
+- Activation quantisation adds 0 to 50% on top of the matmul (largest at big batch, where `quantize_f32` is a scalar loop that has not been optimised).
+
+**Caveats that matter**
+- The host has a very large shared L3 (about 260 MB), so the 67 MB ternary model stays cache-resident while the 1 GB f32 model streams from DRAM. On a machine where both stream from DRAM, the batch-1 ratio approaches the bandwidth ratio (16x vs f32) and is bounded by kernel compute; I did not measure that.
+- f32 is a weak production baseline. Real deployments use fp16/bf16, int8 or 4-bit weights. Against fp16 the bandwidth-bound advantage is about half of the f32 figure; against dense int8 it is the 1.2-6x measured here; 4-bit was not measured.
+- Single thread only. Multi-threaded f32 reaches memory bandwidth sooner, which narrows memory-bound gaps; compute-bound ratios should hold.
+- The accuracy evidence is a 64-128-10 digits network. It says nothing about LLM-scale accuracy, which is the open question for ternary weights.
+- Tiny layers waste packed space: rows are padded to 256 elements, so a 64-wide layer packs to 4x, not 16x.
+- Requires AVX-512 VNNI (Intel Ice Lake and later, AMD Zen 4 and later) for the fast path; AVX2 is the fallback. I did not run this on tatortot.
+- The dense-int8 control and the ternary kernel share one loop structure and neither is cache-blocked for large batches.
+
+**Verdict:** the kernel gate **passes in the ternary x int8 regime** against f32, with the caveats above. It is not a claim about a production model or a production baseline; the next evidence needed is a trained model at meaningful scale and a comparison against fp16/int8 weights on the target machine.
+
+
+## 2026-10-26 (later still): a real pretrained model, BitNet b1.58 2B-4T
+
+**Why this model.** The previous entry's open question was whether ternary survives on a real model. Naive post-training ternarisation of an ordinary f32 LLM is known to wreck quality (the digits PTQ result above hinted at that), so testing one would measure the wrong thing. `microsoft/bitnet-b1.58-2B-4T` is the official model trained natively with the exact numerics this kernel implements: absmean ternary weights, per-token int8 activations, 2.08 B ternary weights across 210 matrices, 4 T training tokens. Raw outputs: `docs/results/bitnet_2b_4t/`.
+
+**What was swapped.** Everything is the official `transformers` code (embeddings, RMSNorm, RoPE, attention, squared ReLU, lm_head) except the 210 BitLinear matmuls, which `scripts/bitnet_eval.py` replaces with calls into `libntg_kernel` through a C ABI (`ntg_ternary_*`): activation quantisation exactly as PyTorch does it (`round` half-to-even, scale `127/max`), exact integer GEMM on 2-bit packed weights, dequantisation. The weights are the checkpoint's own ternary weights, unpacked and re-packed; the harness asserts they are exactly -1/0/1.
+
+### Accuracy
+
+| | official path (transformers, bf16) | ternary kernel path (bf16) |
+|---|--:|--:|
+| wikitext-2 perplexity, 16 x 512 tokens (8,176 scored) | 22.065 | 22.032 (-0.15%) |
+| ARC-Easy zero-shot, first 300 test questions: acc | 76.33% | 75.33% |
+| ARC-Easy: acc_norm | 76.00% | 74.33% |
+| top-1 next-token agreement | 96.65% of 8,176 tokens | |
+| both paths pick the same ARC answer | 97.3% of 300 | |
+
+The ARC difference is 3 questions net (at most 8 of 300 questions differ), a paired exact test gives p between 0.25 and 0.45 for any split consistent with that, so the two are not distinguishable. The vendor reports ARC-Easy 74.79 for this model under its own protocol; the 76.3% here uses a plain "Question/Answer" zero-shot format on 300 questions (sampling error about 2.5 points), so only the paired comparison above is meaningful.
+
+**A discrepancy that turned out to be the other path's.** Token-level agreement of 96.65% and a mean |delta log-prob| of 0.059 looked too large for a kernel that is supposed to be exact. In float32, where the official path has no bf16 noise, they were still 97.5% and 0.047. Checking five real layers (captured activations from layers 0, 14 and 29) against an independent numpy int64 implementation of the specification:
+
+| | relative error vs exact reference |
+|---|--:|
+| this kernel | 4e-8 on every layer (float32 rounding) |
+| official PyTorch path, fp32 | 1.4e-7 to 3.3e-4 depending on the layer |
+
+So the kernel reproduces the specification; the official path deviates from it by up to 3e-4 per layer (I did not isolate the cause; a plausible one is `torch.compile` fusing the activation quantiser so that rounding flips at near-tie boundaries), and discrete int8 rounding amplifies that across 30 layers. Distance of each deployment from the exact-specification model (the kernel in float32), same 2,044 tokens:
+
+| deployment | mean \|delta log-prob\| | top-1 agreement | perplexity |
+|---|--:|--:|--:|
+| exact specification (kernel, fp32) | - | - | 19.800 |
+| official, fp32 | 0.0468 | 97.5% | 19.806 |
+| official, bf16 (the HF deployment) | 0.0560 | 96.8% | 19.778 |
+| **kernel, bf16** | **0.0545** | **97.4%** | 19.791 |
+
+The kernel is as close to the exact model as the official implementation is (slightly closer in bf16). A noise floor of about 0.05 nats per token is simply how sensitive this model is to rounding, which means perplexity and task accuracy, not token-level agreement, are the right equivalence tests.
+
+### Speed
+
+**Per-token cost of the 210 linear layers at the model's real shapes** (`cargo bench --bench bitnet_decode`; random ternary weights, which does not change dense-kernel speed; 6 distinct layers cycled and scaled to 30 so weights stream from memory; the two runs with the bf16 baseline are shown as a range):
+
+| batch 1 | threads | ms/token | vs f32 row-dot | vs bf16 row-dot | vs int8 dense |
+|---|--:|--:|--:|--:|--:|
+| f32 row-dot | 1 | 756-758 | - | - | - |
+| bf16 row-dot | 1 | 500-503 | 1.5x | - | - |
+| int8 dense VNNI | 1 | 195-197 | 3.8-3.9x | 2.5-2.6x | - |
+| **ternary 2-bit** | 1 | **59-65** | **11.6-12.8x** | **7.7-8.5x** | **3.0-3.3x** |
+| f32 row-dot | 4 | 264-272 | - | - | - |
+| bf16 row-dot | 4 | 169-173 | 1.6x | - | - |
+| int8 dense VNNI | 4 | 74 | 3.6-3.7x | 2.3x | - |
+| **ternary 2-bit** | 4 | **40-41** | **6.7x** | **4.3x** | **1.8-1.9x** |
+
+Batch 8, one thread: ternary 161-205 ms/token, 11-14x faster than f32, 7.1-8.3x faster than bf16, 2.8-3.4x faster than int8 dense. Per-token weight traffic: f32 8.34 GB, int8 2.08 GB, ternary 521 MB.
+
+**End to end through the Python harness** (greedy decode of 48 tokens, KV cache, 4 threads, one run): official path 3.12 tok/s, kernel path 5.51 tok/s, 1.77x. The linears are only a part of that: lm_head (a 128256 x 2560 bf16 matrix read every token, not ternary) and attention, norms and Python overhead make up the rest and were not profiled separately. The linear weights shrink from 8.34 GB (f32) / 4.17 GB (bf16) to 0.52 GB, but the untouched bf16 embeddings and lm_head (0.66 GB) are now larger than the whole ternary body.
+
+### What did not go well
+- **Prefill is slower.** Scoring 512-token windows took 133 s on the kernel path vs 40 s for the official path (3.3x slower); the ARC run took 1,104 s vs 416 s (2.7x slower). This CPU has AMX (`amx_bf16`, `amx_int8`), which torch's bf16 matmul can use (I did not confirm it does); the VNNI kernel has no cache blocking beyond four batch columns and the activation quantiser is a scalar loop. The vendor's own README says the transformers path will not show efficiency gains and points to `bitnet.cpp`.
+- **Multi-threading scaled poorly with rayon** (59-65 ms at one thread to 40-41 at four, 1.5-1.6x). Fixed in the follow-up entry below (spin pool, 2.6-3.1x).
+- **bitnet.cpp is faster end to end, and kernel-level parity is unknown.** Run on the same VM (`docs/results/bitnet_cpp/`): bitnet.cpp decodes 6.7 tok/s at one thread and 21 at four (3.2x scaling) against 5.2 and 6.0 for this kernel inside Hugging Face `generate`, and its prefill is about 3x faster than ours. That compares whole systems, not kernels: my path carries Python overhead and bitnet.cpp could not be profiled per operator, so I cannot say whose matmul is faster. The vendor's 29 ms/token on other hardware is not comparable.
+- **Run-to-run noise on this VM is large** (ternary 1-thread: 54, 86, 65 and 59 ms across four runs; f32 was stable), so the ratios above carry roughly +/-25%.
+- The accuracy sample is modest: 8,176 perplexity tokens and 300 ARC-Easy questions. No other benchmark was run.
+
+### Verdict
+On a real pretrained, natively ternary model the kernel **preserves accuracy** (perplexity within 0.15%, ARC-Easy statistically unchanged, closeness to the exact model equal to the official implementation's) while cutting the linear-layer weights 16x versus f32 and 8x versus bf16, and running the decode-time matmuls **7.7-8.5x faster than a bf16 kernel and 3.0-3.3x faster than dense int8 on one core (4.3x and 1.8-1.9x on four)**. End-to-end it is only 1.8x faster in this harness, prefill is slower than torch's AMX path, and it has not been compared with `bitnet.cpp`. The remaining engineering is clear: a prefill kernel (blocking, AMX or wider tiles), a spinning thread pool, a vectorised activation quantiser, and a quantised lm_head.
+
+## 2026-10-26 (last): thread scaling, a spinning pool
+
+**Problem.** The ternary kernel scaled 1.5x from one to four threads while `bitnet.cpp` scaled 3.2x on the same VM (`docs/results/bitnet_cpp/`). Each of the 210 products per token takes about 250 microseconds, and rayon pays two thread wake-ups per product (hand-off, then the caller blocks on a latch).
+
+**Change.** `ntg::storage::SpinPool`: persistent workers that spin, then sleep; the calling thread runs a share of the job and spins (not blocks) on completion. `PackedTernaryMatrix::gemm_i8_spin` cuts the output rows into about four chunks per thread that threads claim from a shared counter, so a descheduled thread delays one chunk, not a quarter of the matrix. Results are bit-identical to the serial path (new tests for 2, 3 and 4 threads, every kernel, batch 1 to 5; pool tests for wake-after-sleep, concurrent callers and panics). The C ABI now uses it (`ntg_ternary_set_threads`).
+
+**Matmul-only result** (`cargo bench --bench bitnet_decode`; ms per token for the 210 linears, median of 9 interleaved rounds, minimum in brackets; rayon is the previous pool):
+
+| threads | rayon | spin pool | spin speed-up vs 1 thread |
+|--:|--:|--:|--:|
+| 1 | 33.0 (32.1) | 33.0 (32.1) | 1.00x |
+| 2 | 34.1 (27.2) | 20.6 (17.1) | 1.60x |
+| 3 | 28.1 (26.5) | 15.3 (12.6) | 2.15x |
+| 4 | 31.7 (28.4) | 12.6 (11.5) | 2.61x |
+
+Two earlier runs with a larger idle spin budget gave 4-thread medians of 14.7 and 14.8 ms (speed-up 2.63x and 3.14x); raw output in `docs/results/bitnet_2b_4t/decode_spinpool_run{3,4,5}.md`. Rayon stayed at 1.0-1.2x in all three. At four threads the pool streams weights at 29-46 GB/s, about the f32 row-dot's 35 GB/s, so scaling is now limited by memory bandwidth rather than hand-off cost. The one-thread time itself moved between 30 and 77 ms across runs on this VM, so use the interleaved table, not absolute milliseconds.
+
+**End to end is a different story** (`scripts/bitnet_eval.py`, Hugging Face `generate`, 64 tokens, tok/s, one run per cell, new `--kernel-threads` flag):
+
+| torch threads / kernel threads | rayon pool (before) | spin pool |
+|---|--:|--:|
+| 1 / 1 | 5.17 | 5.1 |
+| 4 / 4 | 5.96 | 4.8 (4.0-4.2 with a longer idle spin) |
+| 2 / 2 | - | 7.3-7.8 |
+| 1 / 4 | - | 6.7-7.1 |
+
+* Torch's own threads and a spinning pool compete for the same four cores, so the old default (both at 4) got **worse**: 4.8 against 5.96. Splitting the cores (2 + 2, or 1 + 4) gives 7.3-7.8 tok/s, +25-30% over the old best. I shortened the default idle spin (about 30 microseconds, then sleep) for this reason; `NTG_SPIN_ITERS` and `NTG_YIELD_ITERS` override it. The harness default is still `--kernel-threads = --threads`, so pass a split explicitly.
+* The linears are now about 20 ms of a roughly 130-140 ms token; the rest is attention, the 128256x2560 output matrix (66 ms in bf16 at one thread in torch) and Python. Faster matmuls cannot show up much end to end until those are replaced.
+* `bitnet.cpp` still decodes the whole model faster than this harness at the same thread count (12.1-12.6 tok/s at two threads, 20.9-21.7 at four against 7.3-7.8 here). The matmul scaling gap is closed; the whole-model gap is not.
+* One machine, shared VM, single end-to-end runs; not tatortot.
+
+## 2026-10-27: the output matrix to int8
+
+**Where the time goes.** A decode token in the Hugging Face harness with the ternary kernel
+(torch 2 threads / kernel 2 threads) measured 132-145 ms wall: about 60 ms in the ternary
+kernel's C ABI calls, about 11 ms in their Python wrappers, 35-37 ms in the output projection
+(`lm_head`, a 128256 x 2560 bf16 matrix, 0.66 GB read per token), and the rest attention, norms
+and Python. With torch 1 / kernel 4 the output projection took 62 ms because torch had one thread.
+
+**Change.** `ntg::storage::Int8Matrix` (PR #32): per-row symmetric int8 weights, int8
+activations, exact `i32` accumulation (VNNI / AVX2 / scalar), spinning-pool parallel. Opt-in via
+`scripts/bitnet_eval.py --int8-lm-head`. Unlike the ternary kernel this is lossy.
+
+**Speed** (shared 4-vCPU VM; wall ms per token, output-projection ms in brackets):
+
+| torch / kernel threads | bf16 head | int8 head |
+|---|--:|--:|
+| 2 / 2 | 145 (36), 135 (37) | 107 (17), 111 (17) |
+| 1 / 4 | 135 (62) | 88 (9); repeats under other idle-spin budgets 72, 77, 67 (8-9) |
+
+Greedy generation in the full harness (2 / 2): 8.0 tok/s against 7.3-7.8 before.
+
+**Accuracy** (wikitext-2, 8,176 tokens; ARC-Easy, 300 questions; 2 / 2 threads):
+
+| | perplexity | top-1 agreement with official | mean abs logprob diff | ARC-Easy acc / acc_norm |
+|---|--:|--:|--:|--:|
+| official bf16 | 22.066 | - | - | 76.00 / 76.00 |
+| ternary kernel, bf16 head | 22.032 | 96.65% | 0.059 | 75.33 / 74.33 (earlier run, 4 threads) |
+| ternary kernel + int8 head | 22.045 | 95.57% | 0.074 | 76.33 / 75.33 |
+
+The int8 output matrix costs about one point of top-1 agreement and 0.015 of mean logprob
+difference; perplexity and ARC-Easy are unchanged within noise (the two ARC runs pick the same
+answer on 97.7% of questions, 7 of 300 differ). Raw:
+`docs/results/bitnet_2b_4t/perplexity_bf16_int8_lm_head.json`, `arc_easy_300_int8_lm_head.json`.
+
+**What did not go well.**
+* The same configuration measured 88, 72, 77 and 67 ms per token across runs: treat the speed
+  rows as roughly +/-20%.
+* The ternary kernel's C ABI calls still cost 33-57 ms per token against 12-20 ms for the same
+  matmuls in `bitnet_decode`. It is not worker wake-up (a 64x longer idle spin changed it by
+  about 6 ms, within noise); the per-call activation quantiser, allocations and dequantisation
+  are the suspects and are unprofiled. This is now the largest single item in a decode token.
+* `bitnet.cpp` still decodes the whole model faster at equal thread counts
+  (`docs/results/bitnet_cpp/`).
+* Prefill is unchanged. One machine; not tatortot.

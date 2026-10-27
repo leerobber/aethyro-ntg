@@ -1,0 +1,22 @@
+{
+  "model": "microsoft/bitnet-b1.58-2B-4T",
+  "windows": 4,
+  "seqlen": 512,
+  "threads": 4,
+  "dtype": "float32",
+  "kernel": "avx512-vnni",
+  "official": {
+    "ppl": 19.80564347052181,
+    "eval_s": 31.821948896000322
+  },
+  "swapped_linears": 210,
+  "linear_weight_bytes_f32": 8336179200,
+  "linear_weight_bytes_packed": 521011200,
+  "kernel_path": {
+    "ppl": 19.79968516082899,
+    "eval_s": 33.93728637000004
+  },
+  "top1_agreement": 0.9750488996505737,
+  "mean_abs_logprob_diff": 0.046842847019433975,
+  "max_abs_logprob_diff": 0.7668900489807129
+}

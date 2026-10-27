@@ -1,5 +1,7 @@
 # Phase G: Real Genomic Workload Deployment
 
+> **Historical planning doc.** Any "7.5.x" labels below belong to a July 2026 hygiene pass, not project phases; the phase vocabulary is the 0-5 / 6.x / F table in [CLAUDE.md](../CLAUDE.md).
+
 **Status:** Near Complete (G.1-G.3 validated, G.4-G.5 deferred to Phase 8)  
 **Completion Date:** 2026-07-29 (accelerated)  
 **Owner:** Claude (Aethyro-NTG)

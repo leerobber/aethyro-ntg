@@ -1,0 +1,25 @@
+{
+  "model": "microsoft/bitnet-b1.58-2B-4T",
+  "windows": 0,
+  "seqlen": 512,
+  "threads": 2,
+  "kernel_threads": 2,
+  "int8_lm_head": true,
+  "dtype": "bfloat16",
+  "kernel": "avx512-vnni",
+  "official": {
+    "arc_easy_acc": 0.76,
+    "arc_easy_acc_norm": 0.76,
+    "arc_s": 641.9125392189999
+  },
+  "kernel_path": {
+    "arc_easy_acc": 0.7633333333333333,
+    "arc_easy_acc_norm": 0.7533333333333333,
+    "arc_s": 986.9803700820012
+  },
+  "swapped_linears": 210,
+  "int8_lm_head_bytes": 328335360,
+  "linear_weight_bytes_f32": 8336179200,
+  "linear_weight_bytes_packed": 521011200,
+  "arc_easy_same_pick_fraction": 0.9766666666666667
+}
