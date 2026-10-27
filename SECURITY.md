@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Last Updated:** 2026-07-29  
-**Status:** Active (Phase 7.5.7)
+**Status:** Active
 
 ---
 
@@ -209,9 +209,9 @@ Current dependency tree (kernel only):
 
 ## References
 
-- **ADR 0002:** Deterministic Replay & Audit Ledger ([docs/ADR_0002.md](docs/ADR_0002.md))
-- **ADR 0003:** Self-Modification Safety Rails ([docs/ADR_0003.md](docs/ADR_0003.md))
-- **Phase 7.5.7:** Security & Dependency Audit ([docs/PHASE_7_5_ROADMAP.md](docs/PHASE_7_5_ROADMAP.md))
+- **ADR 0002:** Safety rails for self-modification ([docs/architecture/0002-safety-rails-for-self-modification.md](docs/architecture/0002-safety-rails-for-self-modification.md))
+- **ADR 0004:** Tamper-evident ledger ([docs/architecture/0004-phase3-tamper-evident-ledger.md](docs/architecture/0004-phase3-tamper-evident-ledger.md))
+- **Dependency audit (July 2026 hygiene pass, label "7.5.7"):** [docs/PHASE_7_5_ROADMAP.md](docs/PHASE_7_5_ROADMAP.md)
 - **RustSec Advisory Database:** https://github.com/RustSec/advisory-db
 
 ---

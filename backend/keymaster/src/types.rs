@@ -1,6 +1,8 @@
 //! Wire types for the NanoKeymaster routing protocol.
 //!
-//! These must stay wire-compatible with the ureq POST in kernel_host.
+//! NOTE: these are NOT what kernel_host sends. kernel_host POSTs {"intent","payload"} to
+//! KEYMASTER_BACKEND_URL; this service wants a RouteRequest at /route (see
+//! docs/architecture/0012-keymaster-contract.md).
 //! Schema version is carried in every request so the backend can reject
 //! stale clients cleanly.
 
