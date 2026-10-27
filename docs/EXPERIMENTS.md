@@ -988,3 +988,59 @@ loop (ms per token; the matmul-only `bitnet_decode` figures are 12.6-14.8 at 4 t
   quantiser; a vectorised quantiser (AVX-512 round-to-even); a per-token "stay awake" mode (trades
   CPU stolen from torch).
 
+## 2026-10-27 (later): closing the C ABI gap
+
+**Host note.** This work ran on a different VM host than the BitNet results above: Xeon @ 2.80 GHz,
+4 vCPU, 33 MB L3, AVX-512 VNNI, **no AMX**. The `bitnet.cpp` binary built on the earlier host dies
+with "illegal instruction" here, so there is no new `bitnet.cpp` number; the earlier ones are
+not comparable. All before/after numbers below are old and new libraries run alternately on this
+host. Absolute milliseconds are not comparable with earlier entries.
+
+**Changes (PR "C ABI overhead").**
+1. The idle-spin budget is now a time (`NTG_SPIN_US`, default 200 us) instead of a count of
+   `spin_loop` hints. 1,024 hints turned out to be a few microseconds, so workers fell asleep in
+   the gap between two calls even with prewake; per-call p50 latency for a 2,560 x 2,560 product at
+   four threads was 122-149 us with the count and 60 us with the time budget.
+2. `SpinPool::prewake` wakes sleeping workers at the start of each C ABI call so the wake-up
+   overlaps the quantiser. `SpinPool::set_hold` / `ntg_ternary_hold(on)` keep workers awake across a
+   whole forward pass (`scripts/bitnet_eval.py --hold-pool`).
+3. The BitNet activation quantiser no longer calls `f32::round_ties_even` (a libm call on baseline
+   x86-64): max by integer bit patterns and rounding by the add-and-subtract-1.5*2^23 trick, compiled
+   for AVX2 when available. Output is bit-identical to the old quantiser on ties, NaN, infinities,
+   zero rows and the 1e-5 floor (unit test), and `bitnet_eval.py --check` gives identical
+   perplexity, top-1 agreement and logprob differences with the old and new libraries.
+
+**C ABI only, one token's 210 matmuls, no torch** (`scripts/bench_ffi_overhead.py`; median ms; three
+alternating rounds each):
+
+| kernel threads | old library | new library | matmul-only (`bitnet_decode`, same state) |
+|--:|--:|--:|--:|
+| 1 | 76.7, 78.1, 80.9 | 72.2, 73.5, 77.9 | 65.4 |
+| 2 | 50.0, 55.9, 58.2 | 41.2, 44.4, 44.1 | 38.9 |
+| 4 | 44.1, 51.3, 47.2 | 23.9, 26.4, 24.8 | 22.2 |
+
+Fixed cost of one call (tiny output): 13.3 -> 8.3 us (2,560 inputs), 34.0 -> 15.6 us (6,912).
+The C ABI now adds about 2-5 ms per token over the bare matmuls at two and four threads (about 7 ms
+at one), against 22-29 ms at four threads before. The quantiser fix alone was worth about 10-12%;
+the time-based spin was the large part.
+
+**Whole model** (Hugging Face loop, int8 output matrix; wall ms per token, two runs each, old and
+new libraries alternating):
+
+| torch / kernel threads | old library | new library | new + `--hold-pool` |
+|---|--:|--:|--:|
+| 1 / 4 | 110, 106 | 84, 90 | 77, 76 |
+| 2 / 2 | 121, 122 | - | 106, 102 |
+| 4 / 4 | - | 192 | 240 |
+
+* The hold helps when the held workers have cores to themselves: torch threads + kernel threads - 1
+  must not exceed the core count. With both at four it is **worse** (240 against 192 ms), because
+  the spinning workers take CPU from torch's own threads; leave it off there.
+* Roughly 30% off the whole token against the old library at 1 / 4 (106-110 -> 76-77 ms, about
+  13 tokens/s), 15% at 2 / 2. The linears are no longer the bulk of the token.
+
+**What did not go well / still open.** Single runs per cell for the whole-model rows. The hold keeps
+cores busy while torch runs its own ops, so it is opt-in. The `bitnet.cpp` comparison has not been
+repeated on this host. Quantisation, dequantisation and allocation still run on one thread per call
+(a few ms per token).
+

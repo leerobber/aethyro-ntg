@@ -9,7 +9,7 @@
 //! All functions return a negative value (or null) on invalid input and never unwind
 //! across the boundary.
 
-use crate::ntg::storage::spin_pool::{DEFAULT_SPIN_ITERS, DEFAULT_YIELD_ITERS};
+use crate::ntg::storage::spin_pool::DEFAULT_SPIN_MICROS;
 use crate::ntg::storage::{Int8Activations, Int8Matrix, PackedTernaryMatrix, SpinPool, TernaryI8Kernel};
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
@@ -27,8 +27,8 @@ pub extern "C" fn ntg_ternary_set_threads(threads: usize) -> i32 {
     let new_pool = if threads <= 1 {
         None
     } else {
-        let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
-        match SpinPool::with_budget(threads, env("NTG_SPIN_ITERS", DEFAULT_SPIN_ITERS), env("NTG_YIELD_ITERS", DEFAULT_YIELD_ITERS)) {
+        let micros = std::env::var("NTG_SPIN_US").ok().and_then(|v| v.parse().ok()).unwrap_or(DEFAULT_SPIN_MICROS);
+        match SpinPool::with_spin(threads, micros) {
             Ok(p) => Some(Arc::new(p)),
             Err(_) => return -1,
         }
@@ -40,6 +40,18 @@ pub extern "C" fn ntg_ternary_set_threads(threads: usize) -> i32 {
         }
         Err(_) => -1,
     }
+}
+
+/// Keep the worker threads awake (`on != 0`) or let them sleep when idle (`on == 0`). Hold them
+/// across a stretch of back-to-back calls with gaps longer than the spin budget, such as one model
+/// forward pass, and release afterwards: a held worker occupies a core. No effect without
+/// worker threads. Returns 0.
+#[no_mangle]
+pub extern "C" fn ntg_ternary_hold(on: i32) -> i32 {
+    if let Some(p) = pool() {
+        p.set_hold(on != 0);
+    }
+    0
 }
 
 /// Fastest kernel on this CPU: 0 = scalar, 1 = AVX2, 2 = AVX-512 VNNI.
@@ -113,10 +125,15 @@ pub unsafe extern "C" fn ntg_ternary_forward_f32(
     }
     let x = std::slice::from_raw_parts(x, batch * m.cols());
     let out = std::slice::from_raw_parts_mut(out, batch * m.rows());
+    // Wake sleeping workers before the (serial) quantiser so the wake-up overlaps it.
+    let pool = pool();
+    if let Some(p) = &pool {
+        p.prewake();
+    }
     let Ok(acts) = Int8Activations::quantize_f32_bitnet(x, batch, m.cols()) else { return -3 };
     let kernel = TernaryI8Kernel::best_available();
     let mut acc = vec![0i32; batch * m.rows()];
-    let ran = match pool() {
+    let ran = match pool {
         Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, &p),
         None => m.gemm_i8(&acts, &mut acc, kernel),
     };
@@ -185,10 +202,15 @@ pub unsafe extern "C" fn ntg_int8_forward_f32(m: *const c_void, x: *const f32, b
     }
     let x = std::slice::from_raw_parts(x, batch * m.cols());
     let out = std::slice::from_raw_parts_mut(out, batch * m.rows());
+    // Wake sleeping workers before the (serial) quantiser so the wake-up overlaps it.
+    let pool = pool();
+    if let Some(p) = &pool {
+        p.prewake();
+    }
     let Ok(acts) = Int8Activations::quantize_f32_bitnet(x, batch, m.cols()) else { return -3 };
     let kernel = TernaryI8Kernel::best_available();
     let mut acc = vec![0i32; batch * m.rows()];
-    let ran = match pool() {
+    let ran = match pool {
         Some(p) => m.gemm_i8_spin(&acts, &mut acc, kernel, &p),
         None => m.gemm_i8(&acts, &mut acc, kernel),
     };

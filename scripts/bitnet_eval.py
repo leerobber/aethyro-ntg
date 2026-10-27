@@ -25,6 +25,7 @@ import ctypes
 import json
 import math
 import pathlib
+import os
 import time
 
 import numpy as np
@@ -36,7 +37,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def load_lib():
-    path = ROOT / "target/release/libntg_kernel.so"
+    path = os.environ.get("NTG_KERNEL_LIB") or ROOT / "target/release/libntg_kernel.so"
     lib = ctypes.CDLL(str(path))
     lib.ntg_ternary_matrix_new.restype = ctypes.c_void_p
     lib.ntg_ternary_matrix_new.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_float]
@@ -48,6 +49,9 @@ def load_lib():
     lib.ntg_ternary_set_threads.restype = ctypes.c_int
     lib.ntg_ternary_set_threads.argtypes = [ctypes.c_size_t]
     lib.ntg_ternary_best_kernel.restype = ctypes.c_int
+    if hasattr(lib, "ntg_ternary_hold"):  # absent in libraries built before the hold API
+        lib.ntg_ternary_hold.restype = ctypes.c_int
+        lib.ntg_ternary_hold.argtypes = [ctypes.c_int]
     lib.ntg_int8_matrix_new_bf16.restype = ctypes.c_void_p
     lib.ntg_int8_matrix_new_bf16.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
     lib.ntg_int8_matrix_free.argtypes = [ctypes.c_void_p]
@@ -124,6 +128,19 @@ class KernelLMHead(torch.nn.Module):
             self.lib.ntg_int8_matrix_free(self.handle)
         except Exception:
             pass
+
+
+def hold_pool_during_forward(model, lib):
+    """Keep the kernel's worker threads awake for the whole of each forward pass (they spin
+    through the torch ops between matmuls), and let them sleep between passes."""
+    def hold(on):
+        def hook(*_):
+            lib.ntg_ternary_hold(on)  # a hook must return None, or torch replaces the inputs/outputs
+
+        return hook
+
+    model.register_forward_pre_hook(hold(1))
+    model.register_forward_hook(hold(0))
 
 
 def swap_linears(model, lib):
@@ -205,6 +222,8 @@ def main():
                     help="threads for the ternary kernel pool (default: --threads). Torch's own threads and a\n                    spinning kernel pool compete for cores; try --threads 1 --kernel-threads N")
     ap.add_argument("--gen-tokens", type=int, default=48)
     ap.add_argument("--check", action="store_true", help="one short window, no generation")
+    ap.add_argument("--hold-pool", action="store_true",
+                    help="keep the kernel threads spinning through each forward pass (use when torch threads + kernel threads - 1 <= cores)")
     ap.add_argument("--int8-lm-head", action="store_true",
                     help="also run the output projection through the int8 kernel (lossy; not ternary)")
     ap.add_argument("--arc", type=int, default=0, help="also run N zero-shot ARC-Easy questions")
@@ -282,6 +301,8 @@ def main():
 
     # ---- kernel path
     n_swapped, f32_bytes, packed = swap_linears(model, lib)
+    if args.hold_pool:
+        hold_pool_during_forward(model, lib)
     results["swapped_linears"] = n_swapped
     if args.int8_lm_head:
         head = KernelLMHead(lib, model.lm_head)

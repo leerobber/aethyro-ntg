@@ -20,3 +20,8 @@ The weak four-thread scaling noted above was fixed with a spinning pool: 1.2x wi
 ## Update: int8 output matrix
 
 The bf16 output projection can be quantised to int8 per row (`--int8-lm-head`): the decode token falls from 135-145 ms to 88-111 ms, perplexity 22.045 against 22.066, ARC-Easy 76.3 against 76.0, top-1 agreement 95.6%. See `docs/EXPERIMENTS.md` (2026-10-27), `perplexity_bf16_int8_lm_head.json`, `arc_easy_300_int8_lm_head.json`.
+
+## Update: C ABI overhead
+
+The gap between the matmul-only benchmark and the same matmuls through the C ABI is closed to 2-5 ms per token (from 22-29 ms at four threads): time-based worker spin, early wake-up, a faster activation quantiser, and an optional `--hold-pool`. See `docs/EXPERIMENTS.md` (2026-10-27, later). Measured on a different host (no AMX) than the results above.
+
